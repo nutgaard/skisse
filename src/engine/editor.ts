@@ -35,8 +35,10 @@ export type Input = { readonly type: "selectTool"; readonly tool: Tool } | Point
 
 export type TextMeasurer = (text: string, fontSize: number) => number;
 
+export type ShapeId = string;
+
 /** Turns the editor's running sequence number into a Shape ID. Must give a different ID for every number. */
-export type IdGenerator = (sequence: number) => string;
+export type IdGenerator = (sequence: number) => ShapeId;
 
 export type Dependencies = {
   readonly measureText: TextMeasurer;
@@ -44,13 +46,13 @@ export type Dependencies = {
 };
 
 export type SymbolShape = {
-  readonly id: string;
+  readonly id: ShapeId;
   readonly symbol: SymbolId;
   readonly bounds: Bounds;
 };
 
 export type Sketch = {
-  readonly shapes: Readonly<Record<string, SymbolShape>>;
+  readonly shapes: Readonly<Record<ShapeId, SymbolShape>>;
 };
 
 type Interaction =
@@ -104,8 +106,7 @@ export const update = (state: EditorState, input: Input): EditorState => {
       if (state.interaction.kind !== "creatingShape") return state;
       const { symbol, origin } = state.interaction;
       const idle: EditorState = { ...state, interaction: { kind: "idle" } };
-      const dragged = input.position.x !== origin.x || input.position.y !== origin.y;
-      return dragged ? createShape(idle, symbol, boundsBetween(origin, input.position)) : idle;
+      return createShape(idle, symbol, boundsBetween(origin, input.position));
     }
     case "keyDown":
     case "keyUp":

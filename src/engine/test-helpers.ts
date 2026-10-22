@@ -3,13 +3,14 @@ import {
   update,
   type EditorState,
   type Input,
+  type Modifiers,
   type Point,
   type PointerInput,
   type Tool,
 } from "./editor";
 import { fixedWidthTextMeasurer, sequentialIds } from "./fakes";
 
-const noModifiers = { shift: false, alt: false, ctrl: false, meta: false };
+const noModifiers: Modifiers = { shift: false, alt: false, ctrl: false, meta: false };
 
 export const newEditor = (): EditorState =>
   createEditor({ measureText: fixedWidthTextMeasurer, generateId: sequentialIds });

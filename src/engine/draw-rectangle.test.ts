@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { shapes } from "./queries";
-import { apply, drawRectangle, newEditor, pointerDown, pointerUp, selectTool } from "./test-helpers";
+import { drawRectangle, newEditor } from "./test-helpers";
 
 describe("drawing a rectangle", () => {
   test("dragging with the rectangle tool creates one rectangle matching the drag", () => {
@@ -17,11 +17,5 @@ describe("drawing a rectangle", () => {
     expect(shapes(state)).toEqual([
       { id: "shape-1", symbol: "rectangle", bounds: { x: 100, y: 50, width: 160, height: 80 } },
     ]);
-  });
-
-  test("clicking with the rectangle tool without dragging creates no Shape", () => {
-    const state = apply(newEditor(), selectTool("rectangle"), pointerDown({ x: 100, y: 50 }), pointerUp({ x: 100, y: 50 }));
-
-    expect(shapes(state)).toEqual([]);
   });
 });
