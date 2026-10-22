@@ -1,0 +1,9 @@
+name: mini-matrikkel
+version: 0.1.0
+description: Agent setup for the Mini-matrikkel AI workshop
+targets:
+  - copilot
+  - claude
+dependencies:
+  apm:
+    - mattpocock/skills#v1.3.1
