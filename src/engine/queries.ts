@@ -1,21 +1,12 @@
-import type { EditorState } from "./editor";
-
-export type Bounds = {
-  readonly x: number;
-  readonly y: number;
-  readonly width: number;
-  readonly height: number;
-};
+import type { Bounds, EditorState, SymbolId, Tool } from "./editor";
 
 export type ShapeView = {
   readonly id: string;
-  readonly symbol: string;
+  readonly symbol: SymbolId;
   readonly bounds: Bounds;
 };
 
 export const shapes = (state: EditorState): readonly ShapeView[] =>
-  Object.values(state.sketch.shapes).map(({ id, symbol, x, y, width, height }) => ({
-    id,
-    symbol,
-    bounds: { x, y, width, height },
-  }));
+  Object.values(state.sketch.shapes).map(({ id, symbol, bounds }) => ({ id, symbol, bounds }));
+
+export const activeTool = (state: EditorState): Tool => state.tool;
