@@ -46,6 +46,13 @@ body,
   stroke: none;
 }
 
+.shape-fill[data-placeholder] {
+  vector-effect: non-scaling-stroke;
+  stroke: #c4c4cc;
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
 .shape-lines {
   fill: none;
   stroke: #1e1e1e;

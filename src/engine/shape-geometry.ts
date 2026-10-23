@@ -29,18 +29,3 @@ export const shapeGeometry = (symbol: SymbolId, box: Bounds): ShapeGeometry => {
 /** Whether `point` hits a Shape of `symbol` filling `box`. Anywhere inside the outline counts, even with no fill. */
 export const hitsOutline = (symbol: SymbolId, box: Bounds, point: Point): boolean =>
   insidePath(symbolDefinition(symbol).outline(box), point);
-
-/** The picture for the Symbol's toolbar button, in a `size` square. */
-export const symbolIcon = (symbol: SymbolId, size: number): Path => {
-  const definition = symbolDefinition(symbol);
-  if (definition.icon) return definition.icon({ x: 0, y: 0, width: size, height: size });
-  const { width, height } = definition.defaultSize;
-  const scale = size / Math.max(width, height);
-  const box = {
-    x: (size - width * scale) / 2,
-    y: (size - height * scale) / 2,
-    width: width * scale,
-    height: height * scale,
-  };
-  return shapeGeometry(symbol, box).lines;
-};

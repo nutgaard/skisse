@@ -64,7 +64,10 @@ export const keyUp = keyboard("keyUp");
 export const drawRectangle = (state: EditorState, from: Point, to: Point): EditorState =>
   apply(state, selectTool("rectangle"), pointerDown(from), pointerMove(to), pointerUp(to));
 
-/** The Sketch point shown at the screen point `at`, found by clicking there with the rectangle tool, which centres the new Shape on it. */
+/**
+ * The Sketch point shown at the screen point `at`, found by clicking there with the rectangle tool, which centres the
+ * new Shape on it.
+ */
 export const sketchPointUnder = (state: EditorState, at: Point): Point => {
   const created = apply(state, selectTool("rectangle"), pointerDown(at), pointerUp(at));
   const [id] = selection(created);

@@ -26,7 +26,10 @@ const lidEdge = (box: Bounds): Path => {
   const rx = lidRadius(box);
   const ry = box.height / 2;
   const centerX = box.x + box.width - rx;
-  return [moveTo({ x: centerX, y: box.y }), ...arc({ x: centerX, y: box.y + ry }, rx, ry, -Math.PI / 2, -(3 * Math.PI) / 2)];
+  return [
+    moveTo({ x: centerX, y: box.y }),
+    ...arc({ x: centerX, y: box.y + ry }, rx, ry, -Math.PI / 2, -(3 * Math.PI) / 2),
+  ];
 };
 
 export const horizontalCylinder: SymbolDefinition = {

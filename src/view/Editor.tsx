@@ -129,12 +129,15 @@ const Grid = ({ viewport }: { readonly viewport: Viewport }) => {
   );
 };
 
-/** A Shape drawn from its Symbol's geometry: the outline as its fill, and the Symbol's lines on top. */
+/**
+ * A Shape drawn from its Symbol's geometry: the outline as its fill, and the Symbol's lines on top. A Symbol with no
+ * lines of its own, such as text, shows a faint outline instead, so the Shape can still be found.
+ */
 const SymbolShape = ({ symbol, bounds }: { readonly symbol: SymbolId; readonly bounds: Bounds }) => {
   const { outline, lines } = shapeGeometry(symbol, bounds);
   return (
     <g data-symbol={symbol} className="shape">
-      <path d={pathData(outline)} className="shape-fill" />
+      <path d={pathData(outline)} className="shape-fill" data-placeholder={lines.length === 0 || undefined} />
       <path d={pathData(lines)} className="shape-lines" />
     </g>
   );

@@ -1,6 +1,8 @@
 import type { Bounds, Point } from "./geometry";
 
-/** One step of a Path, in Sketch coordinates. A `move` starts a new piece, and `close` joins a piece back to its start. */
+/**
+ * One step of a Path, in Sketch coordinates. A `move` starts a new piece, and `close` joins a piece back to its start.
+ */
 export type PathCommand =
   | { readonly type: "move"; readonly to: Point }
   | { readonly type: "line"; readonly to: Point }
@@ -50,8 +52,8 @@ export const arc = (center: Point, rx: number, ry: number, from: number, to: num
   });
 };
 
-/** The point on the ellipse around `center` at `angle`, as for `arc`. */
-export const pointOnEllipse = (center: Point, rx: number, ry: number, angle: number): Point => ({
+// The point on the ellipse around `center` at `angle`, as for `arc`.
+const pointOnEllipse = (center: Point, rx: number, ry: number, angle: number): Point => ({
   x: center.x + rx * Math.cos(angle),
   y: center.y + ry * Math.sin(angle),
 });
@@ -72,8 +74,10 @@ export const pathData = (path: Path): string =>
           return `M ${command.to.x} ${command.to.y}`;
         case "line":
           return `L ${command.to.x} ${command.to.y}`;
-        case "cubic":
-          return `C ${command.control1.x} ${command.control1.y} ${command.control2.x} ${command.control2.y} ${command.to.x} ${command.to.y}`;
+        case "cubic": {
+          const { control1, control2, to } = command;
+          return `C ${control1.x} ${control1.y} ${control2.x} ${control2.y} ${to.x} ${to.y}`;
+        }
         case "close":
           return "Z";
       }

@@ -30,9 +30,9 @@ export {
   viewport,
 } from "./queries";
 export type { HandleView, InteractionView, ShapeView } from "./queries";
-export { shapeGeometry, symbolIcon } from "./shape-geometry";
+export { shapeGeometry } from "./shape-geometry";
 export type { ShapeGeometry } from "./shape-geometry";
-export type { LabelAlignment, SymbolId } from "./symbols";
-export { tools } from "./tools";
+export type { SymbolId } from "./symbols";
+export { symbolIcon, tools } from "./tools";
 export type { Tool, ToolInfo } from "./tools";
 export type { Size, Viewport } from "./viewport";

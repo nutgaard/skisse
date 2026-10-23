@@ -89,7 +89,12 @@ describe("drawing a rectangle", () => {
 
 describe("clicking instead of dragging", () => {
   test("while pressing without dragging, the default-size rectangle a click creates is shown", () => {
-    const state = apply(newEditor(), selectTool("rectangle"), pointerDown({ x: 100, y: 50 }), pointerMove({ x: 102, y: 51 }));
+    const state = apply(
+      newEditor(),
+      selectTool("rectangle"),
+      pointerDown({ x: 100, y: 50 }),
+      pointerMove({ x: 102, y: 51 }),
+    );
 
     expect(currentInteraction(state)).toEqual({
       kind: "creatingShape",
@@ -137,7 +142,12 @@ describe("minimum size when drawing", () => {
   });
 
   test("while dragging, the rectangle being created is shown at least at the minimum size", () => {
-    const state = apply(newEditor(), selectTool("rectangle"), pointerDown({ x: 100, y: 50 }), pointerMove({ x: 104, y: 52 }));
+    const state = apply(
+      newEditor(),
+      selectTool("rectangle"),
+      pointerDown({ x: 100, y: 50 }),
+      pointerMove({ x: 104, y: 52 }),
+    );
 
     expect(currentInteraction(state)).toEqual({
       kind: "creatingShape",

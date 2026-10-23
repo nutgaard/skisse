@@ -142,10 +142,13 @@ const drawnBounds = (origin: Point, current: Point, snap: (value: number) => num
   return boundsOfSpans(span(origin.x, current.x), span(origin.y, current.y));
 };
 
-// A click gives the Symbol's default size, centred on the click. When snapping, its top-left corner snaps to the grid.
+// A click gives the Symbol's default size, centred on the click. When snapping, both corners snap to the grid, as for
+// a drawn Shape.
 const clickedBounds = (symbol: SymbolId, at: Point, snap: (value: number) => number): Bounds => {
   const { width, height } = symbolDefinition(symbol).defaultSize;
-  return { x: snap(at.x - width / 2), y: snap(at.y - height / 2), width, height };
+  const span = (middle: number, size: number): Span =>
+    spanAtLeast(snap(middle - size / 2), snap(middle + size / 2), 1, minimumShapeSize);
+  return boundsOfSpans(span(at.x, width), span(at.y, height));
 };
 
 /** The Bounds of the Shape that releasing the pointer now would create. */
@@ -283,7 +286,7 @@ const selectionBlock = (sketch: Sketch, selection: readonly ShapeId[]): Bounds =
 type PointerState = Pick<PointerInput, "position" | "modifiers">;
 
 // The press with the pointer at `pointer`, noting whether it has now travelled past the drag threshold.
-const continueDrag = <P extends Press>(state: EditorState, drag: P, pointer: PointerState): P => {
+const continuePress = <P extends Press>(state: EditorState, drag: P, pointer: PointerState): P => {
   const travelled = Math.hypot(pointer.position.x - drag.origin.x, pointer.position.y - drag.origin.y);
   return {
     ...drag,
@@ -334,7 +337,7 @@ const dragTo = (
 ): EditorState => {
   switch (interaction.kind) {
     case "moving": {
-      const drag = continueDrag(state, interaction, pointer);
+      const drag = continuePress(state, interaction, pointer);
       return {
         ...state,
         sketch: moveShapes(drag.before, state.selection, dragOffset(state, drag, pointer)),
@@ -342,7 +345,7 @@ const dragTo = (
       };
     }
     case "resizing":
-      return resizeShape(state, continueDrag(state, interaction, pointer), pointer);
+      return resizeShape(state, continuePress(state, interaction, pointer), pointer);
   }
 };
 
@@ -380,7 +383,7 @@ const pointerMove = (state: EditorState, input: PointerInput): EditorState => {
     case "creatingShape":
       return {
         ...state,
-        interaction: { ...continueDrag(state, interaction, input), snaps: snapsToGrid(input.modifiers) },
+        interaction: { ...continuePress(state, interaction, input), snaps: snapsToGrid(input.modifiers) },
       };
     case "marqueeSelecting": {
       const inside = shapesInside(state.sketch, boundsBetween(interaction.origin, input.position));

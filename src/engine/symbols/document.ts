@@ -10,7 +10,10 @@ const waveHeight = (box: Bounds): number => Math.min(box.height * 0.1, box.width
 // again to the left.
 const outline = (box: Bounds): Path => {
   const wave = waveHeight(box);
-  const at = (fraction: number, height: number) => ({ x: box.x + box.width * fraction, y: box.y + box.height - height });
+  const at = (fraction: number, height: number) => ({
+    x: box.x + box.width * fraction,
+    y: box.y + box.height - height,
+  });
   return [
     moveTo({ x: box.x, y: box.y }),
     lineTo({ x: box.x + box.width, y: box.y }),
@@ -21,7 +24,8 @@ const outline = (box: Bounds): Path => {
   ];
 };
 
-export const document: SymbolDefinition = {
+// Not just `document`, which would hide the browser's global of that name.
+export const documentSymbol: SymbolDefinition = {
   name: "Document",
   shortcut: "f",
   defaultSize: { width: 120, height: 80 },

@@ -50,5 +50,5 @@ export const inset = (box: Bounds, margin: number): Bounds => {
   };
 };
 
-// The space kept between a Label and the lines around it.
+/** The space kept between a Label and the lines around it. */
 export const labelMargin = 8;

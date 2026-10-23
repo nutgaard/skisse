@@ -1,7 +1,7 @@
 import { cloud } from "./cloud";
 import { cylinder } from "./cylinder";
 import { diamond } from "./diamond";
-import { document } from "./document";
+import { documentSymbol } from "./document";
 import { ellipse } from "./ellipse";
 import { horizontalCylinder } from "./horizontal-cylinder";
 import { person } from "./person";
@@ -21,7 +21,7 @@ export const builtInSymbols = {
   diamond,
   cylinder,
   horizontalCylinder,
-  document,
+  document: documentSymbol,
   cloud,
   person,
   text,
@@ -34,4 +34,4 @@ export const symbolIds = Object.keys(builtInSymbols) as readonly SymbolId[];
 
 export const symbolDefinition = (id: SymbolId): SymbolDefinition => builtInSymbols[id];
 
-export type { LabelAlignment, SymbolDefinition } from "./symbol";
+export type { SymbolDefinition } from "./symbol";
