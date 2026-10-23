@@ -359,8 +359,8 @@ const addShape = (sketch: Sketch, shape: SymbolShape): Sketch => ({
   shapes: { ...sketch.shapes, [shape.id]: shape },
 });
 
-// The first sequence number, from `sequence` on, whose ID is not taken yet, since a loaded Sketch can already hold IDs
-// that the generator gives again.
+// The first sequence number, from `sequence` on, whose ID is not taken yet. A loaded Sketch can already hold IDs that
+// the generator gives again, such as when a Sketch is closed and opened again, which starts the sequence afresh.
 const freeIdSequence = (state: EditorState, sequence: number): number =>
   state.sketch.shapes[state.deps.generateId(sequence)] === undefined ? sequence : freeIdSequence(state, sequence + 1);
 

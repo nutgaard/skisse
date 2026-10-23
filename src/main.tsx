@@ -19,6 +19,6 @@ const store = browserSketchStore();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App deps={deps} store={store} opened={openOnStart(store)} />
+    <App deps={deps} store={store} openAtStart={openOnStart(store)} />
   </StrictMode>,
 );

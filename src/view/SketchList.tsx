@@ -17,6 +17,7 @@ const RenameField = ({
   onDone,
 }: {
   readonly entry: SketchEntry;
+  /** Gets the new name, or `undefined` when renaming was cancelled. */
   readonly onDone: (name: string | undefined) => void;
 }) => {
   const done = useRef(false);
@@ -25,9 +26,13 @@ const RenameField = ({
     done.current = true;
     onDone(name);
   };
-  const keep = (name: string) => finish(name.trim() === "" ? undefined : name.trim());
+  // A blank name keeps the old one.
+  const commit = (typed: string) => {
+    const name = typed.trim();
+    finish(name === "" ? undefined : name);
+  };
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === "Enter") keep(event.currentTarget.value);
+    if (event.key === "Enter") commit(event.currentTarget.value);
     if (event.key === "Escape") finish(undefined);
   };
   return (
@@ -37,7 +42,7 @@ const RenameField = ({
       autoFocus
       onFocus={(event) => event.currentTarget.select()}
       onKeyDown={onKeyDown}
-      onBlur={(event) => keep(event.currentTarget.value)}
+      onBlur={(event) => commit(event.currentTarget.value)}
     />
   );
 };

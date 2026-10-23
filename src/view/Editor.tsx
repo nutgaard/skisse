@@ -85,12 +85,12 @@ const useAutosave = (current: Sketch, save: (sketch: Sketch) => void) => {
 type EditorProps = {
   readonly deps: Dependencies;
   /** The Sketch to open. A different Sketch needs a new Editor, so its undo history starts afresh. */
-  readonly sketch: Sketch;
+  readonly initialSketch: Sketch;
   readonly onSave: (sketch: Sketch) => void;
 };
 
-export const Editor = ({ deps, sketch: opened, onSave }: EditorProps) => {
-  const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, opened));
+export const Editor = ({ deps, initialSketch, onSave }: EditorProps) => {
+  const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, initialSketch));
   const interaction = currentInteraction(state);
   const selected = new Set(selection(state));
 
@@ -102,9 +102,8 @@ export const Editor = ({ deps, sketch: opened, onSave }: EditorProps) => {
       if (isSelectAll(event)) event.preventDefault();
       dispatch(keyInput("keyDown", event));
     };
-    const onKeyUp = (event: KeyboardEvent) => {
-      if (!isTyping(event)) dispatch(keyInput("keyUp", event));
-    };
+    // Releases still reach the editor, so a modifier let go while typing doesn't stay held.
+    const onKeyUp = (event: KeyboardEvent) => dispatch(keyInput("keyUp", event));
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     return () => {
