@@ -461,7 +461,7 @@ const keyDown = (state: EditorState, input: KeyInput): EditorState => {
   if (input.key === "Escape") {
     return isIdle(state) ? { ...state, selection: [] } : cancelGesture(state);
   }
-  if (state.interaction.kind !== "idle") return updateDragModifiers(state, input.modifiers);
+  if (!isIdle(state)) return updateDragModifiers(state, input.modifiers);
   const command = input.modifiers.meta || input.modifiers.ctrl;
   if (command && input.key.toLowerCase() === "a") {
     return { ...state, selection: Object.keys(state.sketch.shapes) };
