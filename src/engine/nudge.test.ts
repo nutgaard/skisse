@@ -1,10 +1,9 @@
 import { describe, expect, test } from "vitest";
 import type { EditorState } from "./editor";
-import { shapes } from "./queries";
-import { click, drawRectangle, newEditor, press, twoRectangles } from "./test-helpers";
+import { boundsById, click, drawRectangle, newEditor, press, twoRectangles } from "./test-helpers";
 
 const positions = (state: EditorState) =>
-  Object.fromEntries(shapes(state).map(({ id, bounds }) => [id, { x: bounds.x, y: bounds.y }]));
+  Object.fromEntries(Object.entries(boundsById(state)).map(([id, { x, y }]) => [id, { x, y }]));
 
 describe("nudging the selection with the arrow keys", () => {
   test.each([

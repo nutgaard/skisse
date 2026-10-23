@@ -10,6 +10,7 @@ import {
   newEditor,
   pointerDown,
   pointerMove,
+  pointerUp,
   selectTool,
   twoRectangles,
 } from "./test-helpers";
@@ -66,6 +67,24 @@ describe("dragging Shapes", () => {
 
     expect(boundsById(state)["shape-1"]).toEqual({ x: 100, y: 100, width: 100, height: 80 });
     expect(currentInteraction(state)).toEqual({ kind: "idle" });
+  });
+
+  test("a drag brought back to where it started is still a drag, not a click", () => {
+    const bothSelected = click(click(twoRectangles(), { x: 150, y: 140 }), { x: 350, y: 140 }, { shift: true });
+
+    const state = apply(
+      bothSelected,
+      pointerDown({ x: 150, y: 140 }),
+      pointerMove({ x: 200, y: 200 }),
+      pointerMove({ x: 152, y: 141 }, { alt: true }),
+      pointerUp({ x: 152, y: 141 }, { alt: true }),
+    );
+
+    expect(selection(state)).toEqual(["shape-1", "shape-2"]);
+    expect(boundsById(state)).toEqual({
+      "shape-1": { x: 102, y: 101, width: 100, height: 80 },
+      "shape-2": { x: 302, y: 101, width: 100, height: 80 },
+    });
   });
 
   test("shift-clicking a selected Shape to remove it does not start a drag", () => {

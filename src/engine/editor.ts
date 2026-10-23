@@ -1,4 +1,5 @@
 import { boundsBetween, contains, containsBounds, enclosingBounds, translate, type Bounds, type Point } from "./geometry";
+import { gridSize, nextGridLine, snapToGrid } from "./grid";
 import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
 
 export type Modifiers = {
@@ -49,9 +50,10 @@ export type Sketch = {
   readonly shapes: Readonly<Record<ShapeId, SymbolShape>>;
 };
 
-// Where a drag on the Sketch started, and the Sketch at that moment. Each pointer move is applied to that Sketch
-// afresh, and cancelling restores it.
-type DragStart = { readonly origin: Point; readonly before: Sketch };
+// A drag on the Sketch: where it started, and the Sketch at that moment. Each pointer move is applied to that
+// Sketch afresh, and cancelling restores it. `dragged` is set once the pointer first travels past the drag
+// threshold, and stays set even if the pointer comes back.
+type Drag = { readonly origin: Point; readonly before: Sketch; readonly dragged: boolean };
 
 type Interaction =
   | { readonly kind: "idle" }
@@ -74,8 +76,8 @@ type Interaction =
       // A press on one of several selected Shapes keeps them all selected so they can be dragged together,
       // but a click there without dragging selects just that Shape.
       readonly selectsOnClick: ShapeId | undefined;
-    } & DragStart)
-  | ({ readonly kind: "resizing"; readonly shapeId: ShapeId; readonly handle: ResizeHandle } & DragStart);
+    } & Drag)
+  | ({ readonly kind: "resizing"; readonly shapeId: ShapeId; readonly handle: ResizeHandle } & Drag);
 
 export type EditorState = {
   readonly deps: Dependencies;
@@ -88,8 +90,6 @@ export type EditorState = {
 
 const idle: Interaction = { kind: "idle" };
 
-const gridSize = 10;
-
 // How far, in screen pixels, the pointer must travel before a press on a Shape or a resize handle becomes a drag,
 // so a click never snaps a Shape that is off the grid.
 const dragThreshold = 3;
@@ -99,13 +99,7 @@ const minimumShapeSize = 10;
 // How far, in screen pixels, from a resize handle's centre a press still grabs it.
 const handleReach = 6;
 
-const snapToGrid = (value: number): number => Math.round(value / gridSize) * gridSize;
-
 const snapsToGrid = (modifiers: Modifiers): boolean => !modifiers.alt;
-
-// The next grid line from `value` in `direction` (-1 or 1), skipping the line `value` is on.
-const nextGridLine = (value: number, direction: number): number =>
-  direction > 0 ? Math.floor(value / gridSize) * gridSize + gridSize : Math.ceil(value / gridSize) * gridSize - gridSize;
 
 export const createEditor = (deps: Dependencies): EditorState => ({
   deps,
@@ -175,6 +169,7 @@ const pressWithSelectTool = (state: EditorState, input: PointerInput): EditorSta
         handle: grabbedHandle.handle,
         origin: input.position,
         before: state.sketch,
+        dragged: false,
       },
     };
   }
@@ -191,6 +186,7 @@ const pressWithSelectTool = (state: EditorState, input: PointerInput): EditorSta
       selectsOnClick: shift ? undefined : hit.id,
       origin: input.position,
       before: state.sketch,
+      dragged: false,
     },
   };
 };
@@ -212,19 +208,18 @@ const moveShapes = (sketch: Sketch, ids: readonly ShapeId[], offset: Point): Ske
 const selectionBlock = (sketch: Sketch, selection: readonly ShapeId[]): Bounds =>
   enclosingBounds(selection.flatMap((id) => sketch.shapes[id]?.bounds ?? []));
 
-// Zero until the pointer has travelled past the drag threshold.
-const pointerOffset = (origin: Point, input: PointerInput): Point => {
-  const offset = { x: input.position.x - origin.x, y: input.position.y - origin.y };
-  return Math.hypot(offset.x, offset.y) < dragThreshold ? { x: 0, y: 0 } : offset;
-};
+const hasDragged = ({ origin, dragged }: Drag, input: PointerInput): boolean =>
+  dragged || Math.hypot(input.position.x - origin.x, input.position.y - origin.y) >= dragThreshold;
 
-const isZero = (offset: Point): boolean => offset.x === 0 && offset.y === 0;
+// Zero until the pointer has travelled past the drag threshold.
+const pointerOffset = (drag: Drag, input: PointerInput): Point =>
+  hasDragged(drag, input) ? { x: input.position.x - drag.origin.x, y: input.position.y - drag.origin.y } : { x: 0, y: 0 };
 
 // The block's top-left corner snaps to the grid, so the Shapes keep their distances.
-const dragOffset = (state: EditorState, { origin, before }: DragStart, input: PointerInput): Point => {
-  const offset = pointerOffset(origin, input);
-  if (isZero(offset) || !snapsToGrid(input.modifiers)) return offset;
-  const block = selectionBlock(before, state.selection);
+const dragOffset = (state: EditorState, drag: Drag, input: PointerInput): Point => {
+  const offset = pointerOffset(drag, input);
+  if (!hasDragged(drag, input) || !snapsToGrid(input.modifiers)) return offset;
+  const block = selectionBlock(drag.before, state.selection);
   return {
     x: snapToGrid(block.x + offset.x) - block.x,
     y: snapToGrid(block.y + offset.y) - block.y,
@@ -236,16 +231,19 @@ const resizeShape = (
   interaction: Extract<Interaction, { kind: "resizing" }>,
   input: PointerInput,
 ): EditorState => {
-  const { before, shapeId, handle, origin } = interaction;
+  const { before, shapeId, handle } = interaction;
   const shape = before.shapes[shapeId];
-  const offset = pointerOffset(origin, input);
-  if (!shape || isZero(offset)) return { ...state, sketch: before };
-  const bounds = resizeBounds(shape.bounds, handle, offset, {
+  if (!shape || !hasDragged(interaction, input)) return { ...state, sketch: before };
+  const bounds = resizeBounds(shape.bounds, handle, pointerOffset(interaction, input), {
     snap: snapsToGrid(input.modifiers) ? snapToGrid : (value) => value,
     keepAspectRatio: input.modifiers.shift,
     minimumSize: minimumShapeSize,
   });
-  return { ...state, sketch: { ...before, shapes: { ...before.shapes, [shapeId]: { ...shape, bounds } } } };
+  return {
+    ...state,
+    sketch: { ...before, shapes: { ...before.shapes, [shapeId]: { ...shape, bounds } } },
+    interaction: { ...interaction, dragged: true },
+  };
 };
 
 const pointerDown = (state: EditorState, input: PointerInput): EditorState =>
@@ -278,7 +276,11 @@ const pointerMove = (state: EditorState, input: PointerInput): EditorState => {
     }
     case "moving": {
       const offset = dragOffset(state, interaction, input);
-      return { ...state, sketch: moveShapes(interaction.before, state.selection, offset) };
+      return {
+        ...state,
+        sketch: moveShapes(interaction.before, state.selection, offset),
+        interaction: { ...interaction, dragged: hasDragged(interaction, input) },
+      };
     }
     case "resizing":
       return resizeShape(state, interaction, input);
@@ -303,7 +305,7 @@ const pointerUp = (state: EditorState, input: PointerInput): EditorState => {
     case "creatingShape":
       return createShape(finished, interaction.symbol, boundsBetween(interaction.origin, interaction.current));
     case "moving": {
-      const clicked = isZero(pointerOffset(interaction.origin, input)) ? interaction.selectsOnClick : undefined;
+      const clicked = interaction.dragged ? undefined : interaction.selectsOnClick;
       return clicked === undefined ? finished : { ...finished, selection: [clicked] };
     }
     case "idle":

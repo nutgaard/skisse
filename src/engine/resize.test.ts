@@ -77,6 +77,17 @@ describe("resizing a Shape", () => {
     expect(currentInteraction(state)).toEqual({ kind: "resizing", handle: "se" });
   });
 
+  test("a resize brought back to where it started still follows the pointer", () => {
+    const state = apply(
+      selectedRectangle(),
+      pointerDown({ x: 200, y: 180 }),
+      pointerMove({ x: 260, y: 260 }),
+      pointerMove({ x: 202, y: 181 }, { alt: true }),
+    );
+
+    expect(boundsOfOnlyShape(state)).toEqual({ x: 100, y: 100, width: 102, height: 81 });
+  });
+
   test("Escape cancels a resize and restores the Shape's size", () => {
     const state = apply(
       selectedRectangle(),

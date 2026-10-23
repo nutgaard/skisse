@@ -19,9 +19,9 @@ const handleDirections: Readonly<Record<ResizeHandle, { readonly x: Direction; r
 
 const handles: readonly ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
 
-export const handlePositions = (
-  bounds: Bounds,
-): readonly { readonly handle: ResizeHandle; readonly position: Point }[] =>
+export type HandlePosition = { readonly handle: ResizeHandle; readonly position: Point };
+
+export const handlePositions = (bounds: Bounds): readonly HandlePosition[] =>
   handles.map((handle) => ({
     handle,
     position: {

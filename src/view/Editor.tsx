@@ -63,19 +63,21 @@ export const Editor = ({ deps }: { readonly deps: Dependencies }) => {
     };
   }, []);
 
-  const onPointerDown = (event: PointerEvent<SVGSVGElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dispatch(pointerInput("pointerDown", event));
+  // Only the first finger or the mouse drives the editor, so a second touch can't take over a gesture.
+  const onPointer = (type: PointerInput["type"]) => (event: PointerEvent<SVGSVGElement>) => {
+    if (!event.isPrimary) return;
+    if (type === "pointerDown") event.currentTarget.setPointerCapture(event.pointerId);
+    dispatch(pointerInput(type, event));
   };
 
   return (
     <>
       <svg
         className="sketch"
-        onPointerDown={onPointerDown}
-        onPointerMove={(event) => dispatch(pointerInput("pointerMove", event))}
-        onPointerUp={(event) => dispatch(pointerInput("pointerUp", event))}
-        onPointerCancel={(event) => dispatch(pointerInput("pointerCancel", event))}
+        onPointerDown={onPointer("pointerDown")}
+        onPointerMove={onPointer("pointerMove")}
+        onPointerUp={onPointer("pointerUp")}
+        onPointerCancel={onPointer("pointerCancel")}
       >
         {shapes(state).map(({ id, symbol, bounds }) => (
           <rect key={id} data-symbol={symbol} {...bounds} className="shape" />
