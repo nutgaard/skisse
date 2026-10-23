@@ -86,10 +86,12 @@ const isTyping = (event: KeyboardEvent) => event.target instanceof HTMLInputElem
 
 const isSpace = (event: KeyboardEvent) => event.key === " ";
 
-// Space on a focused button outside the editor's toolbar, such as in the Sketch list, presses that button. Anywhere
-// else it pans, and must not also press the focused toolbar button or scroll the page.
-const spacePans = (event: KeyboardEvent, toolbar: HTMLElement | null) =>
-  !(event.target instanceof HTMLButtonElement) || (toolbar?.contains(event.target) ?? false);
+// Space presses a button outside the editor's toolbar, such as in the Sketch list, when the keyboard moved focus to it.
+// Otherwise it pans, even right after clicking such a button, and must not also press the button or scroll the page.
+const spacePans = (event: KeyboardEvent, toolbar: HTMLElement | null, keyboardFocused: EventTarget | null) =>
+  !(event.target instanceof HTMLButtonElement) ||
+  event.target !== keyboardFocused ||
+  (toolbar?.contains(event.target) ?? false);
 
 // Grid lines closer together than this, in screen pixels, are left out, leaving only every tenth line.
 const minimumGridSpacing = 8;
@@ -150,10 +152,17 @@ export const Editor = ({ deps, initialSketch, onSave }: EditorProps) => {
   };
 
   useEffect(() => {
+    // Whether focus came from the keyboard is only known as it arrives: once a key is pressed, a clicked button also
+    // counts as focused by keyboard.
+    let keyboardFocused: EventTarget | null = null;
+    const onFocusIn = (event: FocusEvent) => {
+      keyboardFocused = event.target instanceof Element && event.target.matches(":focus-visible") ? event.target : null;
+    };
+    const pans = (event: KeyboardEvent) => spacePans(event, toolbarRef.current, keyboardFocused);
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTyping(event)) return;
       if (isSpace(event)) {
-        if (!spacePans(event, toolbarRef.current)) return;
+        if (!pans(event)) return;
         event.preventDefault();
       }
       if (isSelectAll(event)) event.preventDefault();
@@ -161,15 +170,17 @@ export const Editor = ({ deps, initialSketch, onSave }: EditorProps) => {
     };
     // Releases still reach the editor, so a modifier let go while typing doesn't stay held.
     const onKeyUp = (event: KeyboardEvent) => {
-      if (isSpace(event) && !isTyping(event) && spacePans(event, toolbarRef.current)) event.preventDefault();
+      if (isSpace(event) && !isTyping(event) && pans(event)) event.preventDefault();
       dispatch(keyInput("keyUp", event));
     };
     // Keys let go while the window is in the background never reach it, so space must not stay held.
     const onBlur = () => dispatch(spaceReleased);
+    window.addEventListener("focusin", onFocusIn);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
     return () => {
+      window.removeEventListener("focusin", onFocusIn);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);

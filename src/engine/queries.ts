@@ -12,6 +12,8 @@ import * as history from "./history";
 import { handlePositions, type ResizeHandle } from "./resize";
 import type { Viewport } from "./viewport";
 
+export { pansOnPress } from "./editor";
+
 // What queries return about a Shape. Kept apart from the stored SymbolShape so the stored model can change
 // without changing what the view and the tests see.
 export type ShapeView = {
@@ -40,8 +42,6 @@ export const canUndo = (state: EditorState): boolean => history.canUndo(state.hi
 export const canRedo = (state: EditorState): boolean => history.canRedo(state.history);
 
 export const viewport = (state: EditorState): Viewport => state.viewport;
-
-export { pansOnPress } from "./editor";
 
 export const activeTool = (state: EditorState): Tool => state.tool;
 

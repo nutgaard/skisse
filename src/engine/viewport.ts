@@ -26,7 +26,10 @@ export const zoomAround = (viewport: Viewport, screen: Point, factor: number): V
   return { x: anchor.x - screen.x / zoom, y: anchor.y - screen.y / zoom, zoom };
 };
 
-/** Moves the view by `distance` screen pixels, so the Sketch moves the other way. */
+/**
+ * Moves the view by `distance` screen pixels, so the Sketch moves the other way: the Sketch point now shown at screen
+ * point `distance` becomes the top-left corner.
+ */
 export const panBy = (viewport: Viewport, distance: Point): Viewport => ({
   ...viewport,
   ...toSketch(viewport, distance),
