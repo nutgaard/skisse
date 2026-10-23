@@ -1,16 +1,32 @@
 import type { Bounds, Point } from "./geometry";
 
 /** A resize handle, named by compass direction: the corners and the middle of each side. */
-export type Handle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
+export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
 
-const handles: readonly Handle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+type Direction = -1 | 0 | 1;
 
-export const handlePositions = (bounds: Bounds): readonly { readonly handle: Handle; readonly position: Point }[] =>
+// Which edges each handle moves: -1 the left or top edge, 1 the right or bottom edge, 0 neither.
+const handleDirections: Readonly<Record<ResizeHandle, { readonly x: Direction; readonly y: Direction }>> = {
+  nw: { x: -1, y: -1 },
+  n: { x: 0, y: -1 },
+  ne: { x: 1, y: -1 },
+  e: { x: 1, y: 0 },
+  se: { x: 1, y: 1 },
+  s: { x: 0, y: 1 },
+  sw: { x: -1, y: 1 },
+  w: { x: -1, y: 0 },
+};
+
+const handles: readonly ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw", "w"];
+
+export const handlePositions = (
+  bounds: Bounds,
+): readonly { readonly handle: ResizeHandle; readonly position: Point }[] =>
   handles.map((handle) => ({
     handle,
     position: {
-      x: bounds.x + bounds.width * (handle.includes("w") ? 0 : handle.includes("e") ? 1 : 0.5),
-      y: bounds.y + bounds.height * (handle.includes("n") ? 0 : handle.includes("s") ? 1 : 0.5),
+      x: bounds.x + (bounds.width * (handleDirections[handle].x + 1)) / 2,
+      y: bounds.y + (bounds.height * (handleDirections[handle].y + 1)) / 2,
     },
   }));
 
@@ -23,16 +39,18 @@ export type ResizeOptions = {
 /**
  * The Bounds after dragging `handle` by `offset`. Only the handle's own edges move, each snapped on its own,
  * and they stop at the minimum size instead of crossing the opposite edge. Keeping the aspect ratio scales
- * by the larger change, holding the opposite edge, or the middle for an axis the handle doesn't move.
+ * by the larger change, holding the opposite edge, or the middle for an axis the handle doesn't move. Scaling
+ * happens after snapping, so with the aspect ratio kept the size can land off the grid.
  */
-export const resizeBounds = (bounds: Bounds, handle: Handle, offset: Point, options: ResizeOptions): Bounds => {
+export const resizeBounds = (bounds: Bounds, handle: ResizeHandle, offset: Point, options: ResizeOptions): Bounds => {
   const { snap, keepAspectRatio, minimumSize } = options;
   const right = bounds.x + bounds.width;
   const bottom = bounds.y + bounds.height;
-  const movesLeft = handle.includes("w");
-  const movesRight = handle.includes("e");
-  const movesTop = handle.includes("n");
-  const movesBottom = handle.includes("s");
+  const direction = handleDirections[handle];
+  const movesLeft = direction.x === -1;
+  const movesRight = direction.x === 1;
+  const movesTop = direction.y === -1;
+  const movesBottom = direction.y === 1;
 
   const newLeft = movesLeft ? Math.min(snap(bounds.x + offset.x), right - minimumSize) : bounds.x;
   const newRight = movesRight ? Math.max(snap(right + offset.x), bounds.x + minimumSize) : right;

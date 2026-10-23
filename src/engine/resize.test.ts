@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import type { EditorState } from "./editor";
 import { currentInteraction, resizeHandles, shapes } from "./queries";
 import {
   apply,
@@ -15,7 +16,7 @@ import {
 // shape-1 at (100,100)–(200,180): 100 wide, 80 high. Selected.
 const selectedRectangle = () => click(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 }), { x: 150, y: 140 });
 
-const boundsOfOnlyShape = (state: ReturnType<typeof newEditor>) => shapes(state)[0]?.bounds;
+const boundsOfOnlyShape = (state: EditorState) => shapes(state)[0]?.bounds;
 
 describe("resize handles", () => {
   test("a selected Shape has a handle at each corner and in the middle of each side", () => {

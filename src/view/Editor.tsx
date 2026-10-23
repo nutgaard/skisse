@@ -99,7 +99,7 @@ export const Editor = ({ deps }: { readonly deps: Dependencies }) => {
             className="resize-handle"
           />
         ))}
-        {interaction.kind === "selectingBox" && <rect {...interaction.bounds} className="selection-box" />}
+        {interaction.kind === "marqueeSelecting" && <rect {...interaction.bounds} className="selection-box" />}
       </svg>
       <div className="toolbar" role="toolbar">
         {tools.map(({ tool, label }) => (

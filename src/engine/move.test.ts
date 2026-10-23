@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { currentInteraction, selection, shapes } from "./queries";
+import { currentInteraction, selection } from "./queries";
 import {
   apply,
+  boundsById,
   click,
   drag,
   drawRectangle,
@@ -10,14 +11,8 @@ import {
   pointerDown,
   pointerMove,
   selectTool,
+  twoRectangles,
 } from "./test-helpers";
-
-// shape-1 at (100,100)–(200,180), shape-2 at (300,100)–(400,180). Both on the grid.
-const twoRectangles = () =>
-  drawRectangle(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 }), { x: 300, y: 100 }, { x: 400, y: 180 });
-
-const boundsById = (state: ReturnType<typeof newEditor>) =>
-  Object.fromEntries(shapes(state).map(({ id, bounds }) => [id, bounds]));
 
 describe("dragging Shapes", () => {
   test("dragging a Shape moves it by the drag", () => {

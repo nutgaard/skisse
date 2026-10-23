@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import type { EditorState } from "./editor";
 import { selection, shapes } from "./queries";
 import { click, drawRectangle, newEditor, press } from "./test-helpers";
 
@@ -9,7 +10,7 @@ const threeRectangles = () =>
     newEditor(),
   );
 
-const ids = (state: ReturnType<typeof newEditor>) => shapes(state).map(({ id }) => id);
+const ids = (state: EditorState) => shapes(state).map(({ id }) => id);
 
 describe("deleting the selection", () => {
   test.each(["Delete", "Backspace"])("%s removes the selected Shapes", (key) => {

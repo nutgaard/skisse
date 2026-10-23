@@ -13,6 +13,6 @@ export type {
   TextMeasurer,
   Tool,
 } from "./editor";
-export type { Handle } from "./resize";
+export type { ResizeHandle } from "./resize";
 export { activeTool, currentInteraction, resizeHandles, selection, shapes } from "./queries";
 export type { HandleView, InteractionView, ShapeView } from "./queries";

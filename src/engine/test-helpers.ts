@@ -9,6 +9,7 @@ import {
 } from "./editor";
 import type { Point } from "./geometry";
 import { fixedWidthTextMeasurer, sequentialIds } from "./fakes";
+import { shapes } from "./queries";
 
 const noModifiers: Modifiers = { shift: false, alt: false, ctrl: false, meta: false };
 
@@ -57,3 +58,9 @@ export const drag = (state: EditorState, from: Point, to: Point, modifiers: Part
 
 export const press = (state: EditorState, key: string, modifiers: Partial<Modifiers> = {}): EditorState =>
   apply(state, keyDown(key, modifiers));
+
+/** shape-1 at (100,100)–(200,180) and shape-2 at (300,100)–(400,180), both 100 wide, 80 high and on the grid. */
+export const twoRectangles = (): EditorState =>
+  drawRectangle(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 }), { x: 300, y: 100 }, { x: 400, y: 180 });
+
+export const boundsById = (state: EditorState) => Object.fromEntries(shapes(state).map(({ id, bounds }) => [id, bounds]));

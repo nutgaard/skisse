@@ -13,11 +13,8 @@ import {
   pointerUp,
   press,
   selectTool,
+  twoRectangles,
 } from "./test-helpers";
-
-// Two rectangles side by side: shape-1 at (100,100)–(200,180), shape-2 at (300,100)–(400,180).
-const twoRectangles = () =>
-  drawRectangle(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 }), { x: 300, y: 100 }, { x: 400, y: 180 });
 
 describe("selecting Shapes", () => {
   test("nothing is selected in a new editor", () => {
@@ -32,6 +29,22 @@ describe("selecting Shapes", () => {
     const state = click(click(twoRectangles(), { x: 150, y: 140 }), { x: 350, y: 140 });
 
     expect(selection(state)).toEqual(["shape-2"]);
+  });
+
+  test("clicking one of several selected Shapes selects only that Shape", () => {
+    const bothSelected = click(click(twoRectangles(), { x: 150, y: 140 }), { x: 350, y: 140 }, { shift: true });
+
+    expect(selection(click(bothSelected, { x: 150, y: 140 }))).toEqual(["shape-1"]);
+  });
+
+  test("shift-clicking a Shape to add it keeps the rest of the selection", () => {
+    const state = apply(
+      click(twoRectangles(), { x: 150, y: 140 }),
+      pointerDown({ x: 350, y: 140 }, { shift: true }),
+      pointerUp({ x: 350, y: 140 }),
+    );
+
+    expect(selection(state)).toEqual(["shape-1", "shape-2"]);
   });
 
   test("clicking empty space clears the selection", () => {
@@ -105,7 +118,7 @@ describe("selecting Shapes with a box", () => {
     );
 
     expect(currentInteraction(state)).toEqual({
-      kind: "selectingBox",
+      kind: "marqueeSelecting",
       bounds: { x: 250, y: 50, width: 200, height: 200 },
     });
     expect(selection(state)).toEqual(["shape-2"]);

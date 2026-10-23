@@ -1,12 +1,9 @@
 import { describe, expect, test } from "vitest";
+import type { EditorState } from "./editor";
 import { shapes } from "./queries";
-import { click, drawRectangle, newEditor, press } from "./test-helpers";
+import { click, drawRectangle, newEditor, press, twoRectangles } from "./test-helpers";
 
-// shape-1 at (100,100)–(200,180), shape-2 at (300,100)–(400,180).
-const twoRectangles = () =>
-  drawRectangle(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 }), { x: 300, y: 100 }, { x: 400, y: 180 });
-
-const positions = (state: ReturnType<typeof newEditor>) =>
+const positions = (state: EditorState) =>
   Object.fromEntries(shapes(state).map(({ id, bounds }) => [id, { x: bounds.x, y: bounds.y }]));
 
 describe("nudging the selection with the arrow keys", () => {
@@ -30,6 +27,25 @@ describe("nudging the selection with the arrow keys", () => {
     const state = press(click(twoRectangles(), { x: 150, y: 140 }), key, { shift: true });
 
     expect(positions(state)).toEqual({ "shape-1": expected, "shape-2": { x: 300, y: 100 } });
+  });
+
+  test.each([
+    ["ArrowLeft", { x: 100, y: 107 }],
+    ["ArrowRight", { x: 110, y: 107 }],
+    ["ArrowUp", { x: 103, y: 100 }],
+    ["ArrowDown", { x: 103, y: 110 }],
+  ])("shift + %s moves a Shape off the grid to the next grid line", (key, expected) => {
+    const offGrid = click(drawRectangle(newEditor(), { x: 103, y: 107 }, { x: 203, y: 187 }), { x: 150, y: 140 });
+
+    expect(positions(press(offGrid, key, { shift: true }))).toEqual({ "shape-1": expected });
+  });
+
+  test("holding Alt turns snapping off for shift + arrow nudges", () => {
+    const offGrid = click(drawRectangle(newEditor(), { x: 103, y: 107 }, { x: 203, y: 187 }), { x: 150, y: 140 });
+
+    expect(positions(press(offGrid, "ArrowRight", { shift: true, alt: true }))).toEqual({
+      "shape-1": { x: 113, y: 107 },
+    });
   });
 
   test("a nudge moves every selected Shape", () => {
