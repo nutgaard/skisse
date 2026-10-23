@@ -41,25 +41,6 @@ body,
   stroke: #e4e4ea;
 }
 
-.shape-fill {
-  fill: transparent;
-  stroke: none;
-}
-
-.shape-fill[data-placeholder] {
-  vector-effect: non-scaling-stroke;
-  stroke: #c4c4cc;
-  stroke-width: 1;
-  stroke-dasharray: 4 3;
-}
-
-.shape-lines {
-  fill: none;
-  stroke: #1e1e1e;
-  stroke-width: 2;
-  stroke-linejoin: round;
-}
-
 .selection-outline {
   vector-effect: non-scaling-stroke;
   fill: none;

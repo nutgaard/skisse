@@ -13,6 +13,7 @@ export type {
   TextMeasurer,
   WheelInput,
 } from "./editor";
+export { exportSvg } from "./export";
 export { gridSize } from "./grid";
 export { pathData } from "./path";
 export type { Path, PathCommand } from "./path";
@@ -22,6 +23,7 @@ export {
   canRedo,
   canUndo,
   currentInteraction,
+  drawing,
   pansOnPress,
   resizeHandles,
   selection,
@@ -30,8 +32,7 @@ export {
   viewport,
 } from "./queries";
 export type { HandleView, InteractionView, ShapeView } from "./queries";
-export { shapeGeometry } from "./shape-geometry";
-export type { ShapeGeometry } from "./shape-geometry";
+export type { SvgElement } from "./svg";
 export type { SymbolId } from "./symbols";
 export { symbolIcon, tools } from "./tools";
 export type { Tool, ToolInfo } from "./tools";

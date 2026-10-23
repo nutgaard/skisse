@@ -1,35 +1,36 @@
-import { useEffect, useId, useReducer, useRef, type PointerEvent } from "react";
+import { useEffect, useId, useMemo, useReducer, useRef, type PointerEvent } from "react";
 import {
   activeTool,
   canRedo,
   canUndo,
   createEditor,
   currentInteraction,
+  drawing,
+  exportSvg,
   gridSize,
   noModifiers,
   pansOnPress,
   pathData,
   resizeHandles,
   selection,
-  shapeGeometry,
   shapes,
   sketch,
   symbolIcon,
   tools,
   update,
   viewport,
-  type Bounds,
   type Dependencies,
   type KeyInput,
   type PointerInput,
   type Size,
   type Sketch,
-  type SymbolId,
   type ToolInfo,
   type Viewport,
   type WheelInput,
 } from "../engine";
 import { useAutosave } from "./autosave";
+import { downloadPng, downloadSvg } from "./download";
+import { SvgNode } from "./SvgNode";
 
 function modifiersOf(event: KeyboardEvent | PointerEvent | WheelEvent) {
   return {
@@ -144,20 +145,6 @@ function Grid({ viewport }: { readonly viewport: Viewport }) {
   );
 }
 
-/**
- * A Shape drawn from its Symbol's geometry: the outline as its fill, and the Symbol's lines on top. A Symbol with no
- * lines of its own, such as text, shows a faint outline instead, so the Shape can still be found.
- */
-function SymbolShape({ symbol, bounds }: { readonly symbol: SymbolId; readonly bounds: Bounds }) {
-  const { outline, lines } = shapeGeometry(symbol, bounds);
-  return (
-    <g data-symbol={symbol} className="shape">
-      <path d={pathData(outline)} className="shape-fill" data-placeholder={lines.length === 0 || undefined} />
-      <path d={pathData(lines)} className="shape-lines" />
-    </g>
-  );
-}
-
 // Size, in screen pixels, of a Symbol's picture on its toolbar button.
 const iconSize = 18;
 
@@ -185,20 +172,25 @@ function ToolButton({ info, active, onSelect }: ToolButtonProps) {
 
 type EditorProps = {
   readonly deps: Dependencies;
+  /** The open Sketch's name, which exports are named after. */
+  readonly name: string;
   /** The Sketch to open. A different Sketch needs a new Editor, so its undo history starts afresh. */
   readonly initialSketch: Sketch;
   readonly onSave: (sketch: Sketch) => void;
 };
 
-export function Editor({ deps, initialSketch, onSave }: EditorProps) {
+export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, initialSketch));
   const svgRef = useRef<SVGSVGElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const interaction = currentInteraction(state);
   const selected = new Set(selection(state));
   const view = viewport(state);
+  const saved = sketch(state);
+  // Only a finished change to the Sketch changes the export, not every pointer move.
+  const exported = useMemo(() => exportSvg(saved), [saved]);
 
-  useAutosave(sketch(state), onSave);
+  useAutosave(saved, onSave);
 
   const screenSize = (): Size => {
     const { width, height } = svgRef.current?.getBoundingClientRect() ?? { width: 0, height: 0 };
@@ -298,12 +290,7 @@ export function Editor({ deps, initialSketch, onSave }: EditorProps) {
       >
         <Grid viewport={view} />
         <g transform={`scale(${view.zoom}) translate(${-view.x} ${-view.y})`}>
-          {shapes(state).map(({ id, symbol, bounds }) => (
-            <SymbolShape key={id} symbol={symbol} bounds={bounds} />
-          ))}
-          {interaction.kind === "creatingShape" && (
-            <SymbolShape symbol={interaction.symbol} bounds={interaction.bounds} />
-          )}
+          <SvgNode element={drawing(state)} />
           {shapes(state)
             .filter(({ id }) => selected.has(id))
             .map(({ id, bounds }) => (
@@ -350,6 +337,13 @@ export function Editor({ deps, initialSketch, onSave }: EditorProps) {
           onClick={() => dispatch({ type: "resetZoom", screenSize: screenSize() })}
         >
           {Math.round(view.zoom * 100)}%
+        </button>
+        <span className="toolbar-separator" />
+        <button type="button" disabled={!exported} onClick={() => exported && downloadSvg(exported, name)}>
+          Export SVG
+        </button>
+        <button type="button" disabled={!exported} onClick={() => exported && void downloadPng(exported, name)}>
+          Export PNG
         </button>
       </div>
     </>

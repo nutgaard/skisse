@@ -15,6 +15,7 @@ export function App({ deps, store, openAtStart }: AppProps) {
   const [current, setCurrent] = useState(openAtStart);
   const [entries, setEntries] = useState(store.list);
   const openId = current.id;
+  const openName = entries.find(({ id }) => id === openId)?.name ?? "Sketch";
 
   // Shows `next` and the Sketch list as the store now has it.
   const show = (next: OpenSketch) => {
@@ -26,7 +27,7 @@ export function App({ deps, store, openAtStart }: AppProps) {
 
   return (
     <>
-      <Editor key={openId} deps={deps} initialSketch={current.sketch} onSave={onSave} />
+      <Editor key={openId} deps={deps} name={openName} initialSketch={current.sketch} onSave={onSave} />
       <SketchList
         entries={entries}
         openId={openId}
