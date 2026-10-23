@@ -5,9 +5,9 @@ import {
   type ShapeId,
   type Sketch,
 } from "./editor";
-import { drawShape, drawSketch, onScreen } from "./drawing";
 import { boundsBetween, type Bounds, type Point } from "./geometry";
 import * as history from "./history";
+import { onScreen, renderShape, renderSketch } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
 import { svgElement, type SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
@@ -92,13 +92,13 @@ export function currentInteraction(state: EditorState): InteractionView {
 }
 
 /**
- * The Sketch as drawn on screen, in Sketch coordinates, including a Shape being drawn. The selection and resize handles
- * are not part of it.
+ * The Sketch as rendered on screen, in Sketch coordinates, including a Shape being drawn. The selection and resize
+ * handles are not part of it.
  */
-export function drawing(state: EditorState): SvgElement {
-  const shown = drawSketch(state.sketch, onScreen);
+export function rendering(state: EditorState): SvgElement {
+  const shown = renderSketch(state.sketch, onScreen);
   const interaction = currentInteraction(state);
   return interaction.kind === "creatingShape"
-    ? svgElement(shown.tag, shown.attributes, [...shown.children, drawShape(interaction, onScreen)])
+    ? svgElement(shown.tag, shown.attributes, [...shown.children, renderShape(interaction, onScreen)])
     : shown;
 }

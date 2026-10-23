@@ -1,16 +1,16 @@
 import { describe, expect, test } from "vitest";
 import type { EditorState } from "./editor";
 import { exportSvg } from "./export";
-import { drawing, sketch } from "./queries";
+import { rendering, sketch } from "./queries";
 import { svgText } from "./svg";
 import {
   apply,
   drag,
   drawRectangle,
+  drawSymbol,
   newEditor,
   pointerDown,
   pointerMove,
-  pointerUp,
   press,
   selectTool,
   twoRectangles,
@@ -51,21 +51,15 @@ function exported(state: EditorState): Element {
   return parse(svg);
 }
 
-function onScreen(state: EditorState): Element {
-  return parse(svgText(drawing(state)));
+function renderedOnScreen(state: EditorState): Element {
+  return parse(svgText(rendering(state)));
 }
 
 function textShape(): EditorState {
-  return apply(
-    newEditor(),
-    selectTool("text"),
-    pointerDown({ x: 100, y: 100 }),
-    pointerMove({ x: 220, y: 140 }),
-    pointerUp({ x: 220, y: 140 }),
-  );
+  return drawSymbol(newEditor(), "text", { x: 100, y: 100 }, { x: 220, y: 140 });
 }
 
-function strokedPaths(element: Element): readonly Element[] {
+function strokedElements(element: Element): readonly Element[] {
   return descendants(element).filter(({ attributes }) => (attributes.stroke ?? "none") !== "none");
 }
 
@@ -83,13 +77,7 @@ describe("SVG export", () => {
   });
 
   test("has one element per Shape, with its Symbol", () => {
-    const state = apply(
-      twoRectangles(),
-      selectTool("ellipse"),
-      pointerDown({ x: 100, y: 300 }),
-      pointerMove({ x: 220, y: 380 }),
-      pointerUp({ x: 220, y: 380 }),
-    );
+    const state = drawSymbol(twoRectangles(), "ellipse", { x: 100, y: 300 }, { x: 220, y: 380 });
 
     expect(shapeElements(exported(state)).map(({ attributes }) => attributes)).toEqual([
       expect.objectContaining({ "data-shape": "shape-1", "data-symbol": "rectangle" }),
@@ -143,7 +131,7 @@ describe("SVG export", () => {
     const [text] = shapeElements(exported(textShape()));
 
     expect(text?.attributes["data-symbol"]).toBe("text");
-    expect(strokedPaths(text!)).toEqual([]);
+    expect(strokedElements(text!)).toEqual([]);
   });
 
   test("styles each Shape inline, so the file needs no stylesheet", () => {
@@ -160,17 +148,11 @@ describe("SVG export", () => {
   });
 });
 
-describe("the drawing on screen", () => {
-  test("draws the Shapes just as the export does", () => {
-    const state = apply(
-      twoRectangles(),
-      selectTool("cloud"),
-      pointerDown({ x: 100, y: 300 }),
-      pointerMove({ x: 260, y: 400 }),
-      pointerUp({ x: 260, y: 400 }),
-    );
+describe("the rendering on screen", () => {
+  test("renders the Shapes just as the export does", () => {
+    const state = drawSymbol(twoRectangles(), "cloud", { x: 100, y: 300 }, { x: 260, y: 400 });
 
-    expect(onScreen(state)).toEqual(exported(state).children[0]);
+    expect(renderedOnScreen(state)).toEqual(exported(state).children[0]);
   });
 
   test("includes a Shape while it is being drawn", () => {
@@ -181,7 +163,7 @@ describe("the drawing on screen", () => {
       pointerMove({ x: 220, y: 380 }),
     );
 
-    expect(onScreen(state).children.map(({ attributes }) => attributes["data-symbol"])).toEqual([
+    expect(renderedOnScreen(state).children.map(({ attributes }) => attributes["data-symbol"])).toEqual([
       "rectangle",
       "rectangle",
       "ellipse",
@@ -189,8 +171,8 @@ describe("the drawing on screen", () => {
   });
 
   test("shows a placeholder outline for a text Shape, so it can still be found", () => {
-    const [text] = shapeElements(onScreen(textShape()));
+    const [text] = shapeElements(renderedOnScreen(textShape()));
 
-    expect(strokedPaths(text!)).toHaveLength(1);
+    expect(strokedElements(text!)).toHaveLength(1);
   });
 });

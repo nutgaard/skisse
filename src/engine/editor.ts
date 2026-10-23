@@ -1,4 +1,3 @@
-import { contentBounds } from "./drawing";
 import {
   boundsBetween,
   boundsOfSpans,
@@ -594,6 +593,12 @@ function wheel(state: EditorState, input: WheelInput): EditorState {
   return input.modifiers.ctrl || input.modifiers.meta
     ? { ...state, viewport: viewport.zoomAround(state.viewport, input.position, zoomFactorOfScroll(input.delta.y)) }
     : { ...state, viewport: viewport.panBy(state.viewport, input.delta) };
+}
+
+/** The smallest Bounds around everything on the Sketch, or `undefined` when it is empty. */
+export function contentBounds(sketch: Sketch): Bounds | undefined {
+  const all = Object.values(sketch.shapes).map(({ bounds }) => bounds);
+  return all.length === 0 ? undefined : enclosingBounds(all);
 }
 
 // An empty Sketch has nothing to frame, so it goes back to 100% instead.

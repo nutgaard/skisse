@@ -8,7 +8,7 @@ function reactName(name: string) {
     : name.replace(/-(\w)/g, (_, letter: string) => letter.toUpperCase());
 }
 
-/** An element the engine drew, shown as React SVG. */
+/** An element the engine rendered, shown as React SVG. */
 export function SvgNode({ element }: { readonly element: SvgElement }) {
   const { tag, attributes, children } = element;
   return createElement(

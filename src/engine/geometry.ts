@@ -45,6 +45,16 @@ export function enclosingBounds(all: readonly Bounds[]): Bounds {
   );
 }
 
+/** `bounds` grown by `margin` on every side. */
+export function expandBounds({ x, y, width, height }: Bounds, margin: number): Bounds {
+  return {
+    x: x - margin,
+    y: y - margin,
+    width: width + margin * 2,
+    height: height + margin * 2,
+  };
+}
+
 /** A stretch along one axis, such as a Shape's left edge and width. */
 export type Span = { readonly start: number; readonly size: number };
 

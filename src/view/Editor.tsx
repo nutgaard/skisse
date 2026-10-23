@@ -5,12 +5,12 @@ import {
   canUndo,
   createEditor,
   currentInteraction,
-  drawing,
   exportSvg,
   gridSize,
   noModifiers,
   pansOnPress,
   pathData,
+  rendering,
   resizeHandles,
   selection,
   shapes,
@@ -186,11 +186,11 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const interaction = currentInteraction(state);
   const selected = new Set(selection(state));
   const view = viewport(state);
-  const saved = sketch(state);
+  const finished = sketch(state);
   // Only a finished change to the Sketch changes the export, not every pointer move.
-  const exported = useMemo(() => exportSvg(saved), [saved]);
+  const exportedSvg = useMemo(() => exportSvg(finished), [finished]);
 
-  useAutosave(saved, onSave);
+  useAutosave(finished, onSave);
 
   const screenSize = (): Size => {
     const { width, height } = svgRef.current?.getBoundingClientRect() ?? { width: 0, height: 0 };
@@ -290,7 +290,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
       >
         <Grid viewport={view} />
         <g transform={`scale(${view.zoom}) translate(${-view.x} ${-view.y})`}>
-          <SvgNode element={drawing(state)} />
+          <SvgNode element={rendering(state)} />
           {shapes(state)
             .filter(({ id }) => selected.has(id))
             .map(({ id, bounds }) => (
@@ -339,10 +339,14 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
           {Math.round(view.zoom * 100)}%
         </button>
         <span className="toolbar-separator" />
-        <button type="button" disabled={!exported} onClick={() => exported && downloadSvg(exported, name)}>
+        <button type="button" disabled={!exportedSvg} onClick={() => exportedSvg && downloadSvg(exportedSvg, name)}>
           Export SVG
         </button>
-        <button type="button" disabled={!exported} onClick={() => exported && void downloadPng(exported, name)}>
+        <button
+          type="button"
+          disabled={!exportedSvg}
+          onClick={() => exportedSvg && void downloadPng(exportedSvg, name)}
+        >
           Export PNG
         </button>
       </div>
