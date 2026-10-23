@@ -3,6 +3,8 @@ import {
   activeTool,
   createEditor,
   currentInteraction,
+  resizeHandles,
+  selection,
   shapes,
   update,
   type Dependencies,
@@ -36,12 +38,22 @@ const keyInput = (type: KeyInput["type"], event: KeyboardEvent): KeyInput => ({
   modifiers: modifiersOf(event),
 });
 
+// Size, in screen pixels, of the square drawn for each resize handle.
+const handleSize = 8;
+
+// Cmd/Ctrl+A is select all in the editor, so the browser must not also select the page's text.
+const isSelectAll = (event: KeyboardEvent) => (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a";
+
 export const Editor = ({ deps }: { readonly deps: Dependencies }) => {
   const [state, dispatch] = useReducer(update, deps, createEditor);
   const interaction = currentInteraction(state);
+  const selected = new Set(selection(state));
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => dispatch(keyInput("keyDown", event));
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isSelectAll(event)) event.preventDefault();
+      dispatch(keyInput("keyDown", event));
+    };
     const onKeyUp = (event: KeyboardEvent) => dispatch(keyInput("keyUp", event));
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
@@ -51,18 +63,21 @@ export const Editor = ({ deps }: { readonly deps: Dependencies }) => {
     };
   }, []);
 
-  const onPointerDown = (event: PointerEvent<SVGSVGElement>) => {
-    event.currentTarget.setPointerCapture(event.pointerId);
-    dispatch(pointerInput("pointerDown", event));
+  // Only the first finger or the mouse drives the editor, so a second touch can't take over a gesture.
+  const onPointer = (type: PointerInput["type"]) => (event: PointerEvent<SVGSVGElement>) => {
+    if (!event.isPrimary) return;
+    if (type === "pointerDown") event.currentTarget.setPointerCapture(event.pointerId);
+    dispatch(pointerInput(type, event));
   };
 
   return (
     <>
       <svg
         className="sketch"
-        onPointerDown={onPointerDown}
-        onPointerMove={(event) => dispatch(pointerInput("pointerMove", event))}
-        onPointerUp={(event) => dispatch(pointerInput("pointerUp", event))}
+        onPointerDown={onPointer("pointerDown")}
+        onPointerMove={onPointer("pointerMove")}
+        onPointerUp={onPointer("pointerUp")}
+        onPointerCancel={onPointer("pointerCancel")}
       >
         {shapes(state).map(({ id, symbol, bounds }) => (
           <rect key={id} data-symbol={symbol} {...bounds} className="shape" />
@@ -70,6 +85,23 @@ export const Editor = ({ deps }: { readonly deps: Dependencies }) => {
         {interaction.kind === "creatingShape" && (
           <rect data-symbol={interaction.symbol} {...interaction.bounds} className="shape" />
         )}
+        {shapes(state)
+          .filter(({ id }) => selected.has(id))
+          .map(({ id, bounds }) => (
+            <rect key={id} data-selected={id} {...bounds} className="selection-outline" />
+          ))}
+        {resizeHandles(state).map(({ handle, position }) => (
+          <rect
+            key={handle}
+            data-handle={handle}
+            x={position.x - handleSize / 2}
+            y={position.y - handleSize / 2}
+            width={handleSize}
+            height={handleSize}
+            className="resize-handle"
+          />
+        ))}
+        {interaction.kind === "marqueeSelecting" && <rect {...interaction.bounds} className="selection-box" />}
       </svg>
       <div className="toolbar" role="toolbar">
         {tools.map(({ tool, label }) => (
