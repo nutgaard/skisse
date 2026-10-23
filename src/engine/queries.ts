@@ -1,4 +1,4 @@
-import { resizableShape, type EditorState, type ShapeId, type SymbolId, type Tool } from "./editor";
+import { drawnBounds, resizableShape, type EditorState, type ShapeId, type SymbolId, type Tool } from "./editor";
 import { boundsBetween, type Bounds, type Point } from "./geometry";
 import { handlePositions, type ResizeHandle } from "./resize";
 
@@ -40,7 +40,7 @@ export const currentInteraction = (state: EditorState): InteractionView => {
       return {
         kind: "creatingShape",
         symbol: interaction.symbol,
-        bounds: boundsBetween(interaction.origin, interaction.current),
+        bounds: drawnBounds(interaction.origin, interaction.current),
       };
     case "marqueeSelecting":
       return { kind: "marqueeSelecting", bounds: boundsBetween(interaction.origin, interaction.current) };

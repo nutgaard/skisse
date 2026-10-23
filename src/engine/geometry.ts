@@ -35,3 +35,28 @@ export const enclosingBounds = (all: readonly Bounds[]): Bounds =>
     { x: Math.min(...all.map((b) => b.x)), y: Math.min(...all.map((b) => b.y)) },
     { x: Math.max(...all.map((b) => b.x + b.width)), y: Math.max(...all.map((b) => b.y + b.height)) },
   );
+
+/** A stretch along one axis, such as a Shape's left edge and width. */
+export type Span = { readonly start: number; readonly size: number };
+
+/**
+ * The span from `anchor` towards `target`, at least `minimum` long. It flips to the other side of the anchor when
+ * the target is there, and a target on the anchor spans in `fallbackDirection`.
+ */
+export const spanFrom = (
+  anchor: number,
+  target: number,
+  minimum: number,
+  fallbackDirection: -1 | 1 = 1,
+): Span => {
+  const direction = target === anchor ? fallbackDirection : Math.sign(target - anchor);
+  const size = Math.max(Math.abs(target - anchor), minimum);
+  return { start: direction > 0 ? anchor : anchor - size, size };
+};
+
+/** The Bounds from `anchor` towards `target`, at least `minimum` wide and high. */
+export const boundsFrom = (anchor: Point, target: Point, minimum: number): Bounds => {
+  const horizontal = spanFrom(anchor.x, target.x, minimum);
+  const vertical = spanFrom(anchor.y, target.y, minimum);
+  return { x: horizontal.start, y: vertical.start, width: horizontal.size, height: vertical.size };
+};

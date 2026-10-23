@@ -1,4 +1,13 @@
-import { boundsBetween, contains, containsBounds, enclosingBounds, translate, type Bounds, type Point } from "./geometry";
+import {
+  boundsBetween,
+  boundsFrom,
+  contains,
+  containsBounds,
+  enclosingBounds,
+  translate,
+  type Bounds,
+  type Point,
+} from "./geometry";
 import { gridSize, nextGridLine, snapToGrid } from "./grid";
 import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
 
@@ -91,15 +100,19 @@ export type EditorState = {
 const idle: Interaction = { kind: "idle" };
 
 // How far, in screen pixels, the pointer must travel before a press on a Shape or a resize handle becomes a drag,
-// so a click never snaps a Shape that is off the grid.
+// so a click never nudges or snaps a Shape by accident.
 const dragThreshold = 3;
 
 const minimumShapeSize = 10;
 
+/** The Bounds of a Shape drawn by dragging from `origin` to `current`, never smaller than the minimum size. */
+export const drawnBounds = (origin: Point, current: Point): Bounds => boundsFrom(origin, current, minimumShapeSize);
+
 // How far, in screen pixels, from a resize handle's centre a press still grabs it.
 const handleReach = 6;
 
-const snapsToGrid = (modifiers: Modifiers): boolean => !modifiers.alt;
+// Snapping to the grid is off by default. Holding Alt turns it on, for drags, resizes and arrow keys alike.
+const snapsToGrid = (modifiers: Modifiers): boolean => modifiers.alt;
 
 export const createEditor = (deps: Dependencies): EditorState => ({
   deps,
@@ -307,7 +320,7 @@ const pointerUp = (state: EditorState, input: PointerInput): EditorState => {
   const finished: EditorState = { ...moved, interaction: idle };
   switch (interaction.kind) {
     case "creatingShape":
-      return createShape(finished, interaction.symbol, boundsBetween(interaction.origin, interaction.current));
+      return createShape(finished, interaction.symbol, drawnBounds(interaction.origin, interaction.current));
     case "moving": {
       const clicked = interaction.dragged ? undefined : interaction.selectsOnClick;
       return clicked === undefined ? finished : { ...finished, selection: [clicked] };
@@ -341,11 +354,13 @@ const nudgeDirections: Readonly<Record<string, Point>> = {
   ArrowDown: { x: 0, y: 1 },
 };
 
-// A plain nudge moves by one unit and is never snapped, so a Shape can be placed between grid lines. A shift
-// nudge moves the selection's top-left corner to the next grid line, unless snapping is turned off.
+// A nudge moves by one unit, or by one grid step with shift. With snapping on, it moves the selection's top-left
+// corner to the next grid line instead.
 const nudgeOffset = (state: EditorState, direction: Point, modifiers: Modifiers): Point => {
-  if (!modifiers.shift) return direction;
-  if (!snapsToGrid(modifiers)) return { x: direction.x * gridSize, y: direction.y * gridSize };
+  if (!snapsToGrid(modifiers)) {
+    const step = modifiers.shift ? gridSize : 1;
+    return { x: direction.x * step, y: direction.y * step };
+  }
   const block = selectionBlock(state.sketch, state.selection);
   return {
     x: direction.x === 0 ? 0 : nextGridLine(block.x, direction.x) - block.x,

@@ -76,8 +76,8 @@ describe("dragging Shapes", () => {
       bothSelected,
       pointerDown({ x: 150, y: 140 }),
       pointerMove({ x: 200, y: 200 }),
-      pointerMove({ x: 152, y: 141 }, { alt: true }),
-      pointerUp({ x: 152, y: 141 }, { alt: true }),
+      pointerMove({ x: 152, y: 141 }),
+      pointerUp({ x: 152, y: 141 }),
     );
 
     expect(selection(state)).toEqual(["shape-1", "shape-2"]);
@@ -103,23 +103,29 @@ describe("grid snapping while dragging", () => {
   // shape-1 at (103,107)–(203,187), off the grid.
   const offGrid = () => drawRectangle(newEditor(), { x: 103, y: 107 }, { x: 203, y: 187 });
 
-  test("a drag snaps the moved Shape to the grid", () => {
+  test("a drag follows the pointer freely, without snapping", () => {
     const state = drag(twoRectangles(), { x: 150, y: 140 }, { x: 173, y: 157 });
+
+    expect(boundsById(state)["shape-1"]).toEqual({ x: 123, y: 117, width: 100, height: 80 });
+  });
+
+  test("holding Alt snaps the moved Shape to the grid", () => {
+    const state = drag(twoRectangles(), { x: 150, y: 140 }, { x: 173, y: 157 }, { alt: true });
 
     expect(boundsById(state)["shape-1"]).toEqual({ x: 120, y: 120, width: 100, height: 80 });
   });
 
-  test("a Shape off the grid lands on the grid when dragged", () => {
-    const state = drag(offGrid(), { x: 150, y: 140 }, { x: 170, y: 160 });
+  test("with Alt held, a Shape off the grid lands on the grid", () => {
+    const state = drag(offGrid(), { x: 150, y: 140 }, { x: 170, y: 160 }, { alt: true });
 
     expect(boundsById(state)["shape-1"]).toEqual({ x: 120, y: 130, width: 100, height: 80 });
   });
 
-  test("several Shapes snap together and keep their distance to each other", () => {
+  test("with Alt held, several Shapes snap together and keep their distance to each other", () => {
     const withSecond = drawRectangle(offGrid(), { x: 305, y: 100 }, { x: 405, y: 180 });
     const bothSelected = click(click(withSecond, { x: 150, y: 140 }), { x: 350, y: 140 }, { shift: true });
 
-    const state = drag(bothSelected, { x: 150, y: 140 }, { x: 170, y: 160 });
+    const state = drag(bothSelected, { x: 150, y: 140 }, { x: 170, y: 160 }, { alt: true });
 
     expect(boundsById(state)).toEqual({
       "shape-1": { x: 120, y: 127, width: 100, height: 80 },
@@ -127,15 +133,14 @@ describe("grid snapping while dragging", () => {
     });
   });
 
-  test("clicking a Shape off the grid does not move it", () => {
-    const state = apply(offGrid(), selectTool("select"), pointerDown({ x: 150, y: 140 }), pointerMove({ x: 151, y: 141 }));
+  test("with Alt held, clicking a Shape off the grid does not move it", () => {
+    const state = apply(
+      offGrid(),
+      selectTool("select"),
+      pointerDown({ x: 150, y: 140 }, { alt: true }),
+      pointerMove({ x: 151, y: 141 }, { alt: true }),
+    );
 
     expect(boundsById(state)["shape-1"]).toEqual({ x: 103, y: 107, width: 100, height: 80 });
-  });
-
-  test("holding Alt turns snapping off during the drag", () => {
-    const state = drag(twoRectangles(), { x: 150, y: 140 }, { x: 173, y: 157 }, { alt: true });
-
-    expect(boundsById(state)["shape-1"]).toEqual({ x: 123, y: 117, width: 100, height: 80 });
   });
 });

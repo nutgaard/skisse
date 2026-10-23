@@ -33,18 +33,22 @@ describe("nudging the selection with the arrow keys", () => {
     ["ArrowRight", { x: 110, y: 107 }],
     ["ArrowUp", { x: 103, y: 100 }],
     ["ArrowDown", { x: 103, y: 110 }],
-  ])("shift + %s moves a Shape off the grid to the next grid line", (key, expected) => {
+  ])("Alt + %s moves a Shape off the grid to the next grid line", (key, expected) => {
     const offGrid = click(drawRectangle(newEditor(), { x: 103, y: 107 }, { x: 203, y: 187 }), { x: 150, y: 140 });
 
-    expect(positions(press(offGrid, key, { shift: true }))).toEqual({ "shape-1": expected });
+    expect(positions(press(offGrid, key, { alt: true }))).toEqual({ "shape-1": expected });
   });
 
-  test("holding Alt turns snapping off for shift + arrow nudges", () => {
+  test("Alt + arrow moves a Shape on the grid by one grid step", () => {
+    const state = press(click(twoRectangles(), { x: 150, y: 140 }), "ArrowRight", { alt: true });
+
+    expect(positions(state)["shape-1"]).toEqual({ x: 110, y: 100 });
+  });
+
+  test("shift + arrow does not snap a Shape off the grid", () => {
     const offGrid = click(drawRectangle(newEditor(), { x: 103, y: 107 }, { x: 203, y: 187 }), { x: 150, y: 140 });
 
-    expect(positions(press(offGrid, "ArrowRight", { shift: true, alt: true }))).toEqual({
-      "shape-1": { x: 113, y: 107 },
-    });
+    expect(positions(press(offGrid, "ArrowRight", { shift: true }))).toEqual({ "shape-1": { x: 113, y: 107 } });
   });
 
   test("a nudge moves every selected Shape", () => {

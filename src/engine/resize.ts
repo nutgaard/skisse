@@ -1,4 +1,4 @@
-import type { Bounds, Point } from "./geometry";
+import { spanFrom, type Bounds, type Point, type Span } from "./geometry";
 
 /** A resize handle, named by compass direction: the corners and the middle of each side. */
 export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
@@ -36,43 +36,46 @@ export type ResizeOptions = {
   readonly minimumSize: number;
 };
 
+// Along one axis the handle moves: where the opposite edge stays, and where the handle's edge is dragged to.
+type EdgeDrag = { readonly anchor: number; readonly target: number; readonly towards: -1 | 1 };
+
+const dragEdge = (span: Span, towards: -1 | 1, delta: number, snap: (value: number) => number): EdgeDrag => {
+  const anchor = towards > 0 ? span.start : span.start + span.size;
+  return { anchor, target: snap(anchor + towards * span.size + delta), towards };
+};
+
+const dragRatio = (edge: EdgeDrag, size: number): number => Math.abs(edge.target - edge.anchor) / size;
+
 /**
- * The Bounds after dragging `handle` by `offset`. Only the handle's own edges move, each snapped on its own,
- * and they stop at the minimum size instead of crossing the opposite edge. Keeping the aspect ratio scales
- * by the larger change, holding the opposite edge, or the middle for an axis the handle doesn't move. Scaling
- * happens after snapping, so with the aspect ratio kept the size can land off the grid.
+ * The Bounds after dragging `handle` by `offset`. Along each axis the handle moves, the opposite edge stays put and
+ * the handle's edge follows the pointer, snapped, flipping past the opposite edge if the pointer crosses it, and
+ * never closer to it than the minimum size. Keeping the aspect ratio scales by the larger change, holding the
+ * opposite edge, or the middle for an axis the handle doesn't move. Scaling happens after snapping, so with the
+ * aspect ratio kept the size can land off the grid.
  */
 export const resizeBounds = (bounds: Bounds, handle: ResizeHandle, offset: Point, options: ResizeOptions): Bounds => {
   const { snap, keepAspectRatio, minimumSize } = options;
-  const right = bounds.x + bounds.width;
-  const bottom = bounds.y + bounds.height;
   const direction = handleDirections[handle];
-  const movesLeft = direction.x === -1;
-  const movesRight = direction.x === 1;
-  const movesTop = direction.y === -1;
-  const movesBottom = direction.y === 1;
+  const horizontalSpan = { start: bounds.x, size: bounds.width };
+  const verticalSpan = { start: bounds.y, size: bounds.height };
+  const horizontal = direction.x === 0 ? undefined : dragEdge(horizontalSpan, direction.x, offset.x, snap);
+  const vertical = direction.y === 0 ? undefined : dragEdge(verticalSpan, direction.y, offset.y, snap);
 
-  const newLeft = movesLeft ? Math.min(snap(bounds.x + offset.x), right - minimumSize) : bounds.x;
-  const newRight = movesRight ? Math.max(snap(right + offset.x), bounds.x + minimumSize) : right;
-  const newTop = movesTop ? Math.min(snap(bounds.y + offset.y), bottom - minimumSize) : bounds.y;
-  const newBottom = movesBottom ? Math.max(snap(bottom + offset.y), bounds.y + minimumSize) : bottom;
+  const keepsRatio = keepAspectRatio && bounds.width > 0 && bounds.height > 0;
+  const scale = keepsRatio
+    ? Math.max(
+        ...(horizontal ? [dragRatio(horizontal, bounds.width)] : []),
+        ...(vertical ? [dragRatio(vertical, bounds.height)] : []),
+        minimumSize / bounds.width,
+        minimumSize / bounds.height,
+      )
+    : 1;
 
-  if (!keepAspectRatio || bounds.width === 0 || bounds.height === 0) {
-    return { x: newLeft, y: newTop, width: newRight - newLeft, height: newBottom - newTop };
-  }
-
-  const scale = Math.max(
-    ...(movesLeft || movesRight ? [(newRight - newLeft) / bounds.width] : []),
-    ...(movesTop || movesBottom ? [(newBottom - newTop) / bounds.height] : []),
-    minimumSize / bounds.width,
-    minimumSize / bounds.height,
-  );
-  const width = bounds.width * scale;
-  const height = bounds.height * scale;
-  return {
-    x: movesLeft ? right - width : movesRight ? bounds.x : bounds.x + (bounds.width - width) / 2,
-    y: movesTop ? bottom - height : movesBottom ? bounds.y : bounds.y + (bounds.height - height) / 2,
-    width,
-    height,
+  const resize = (span: Span, edge: EdgeDrag | undefined): Span => {
+    if (edge) return spanFrom(edge.anchor, edge.target, keepsRatio ? span.size * scale : minimumSize, edge.towards);
+    return { start: span.start + (span.size - span.size * scale) / 2, size: span.size * scale };
   };
+  const x = resize(horizontalSpan, horizontal);
+  const y = resize(verticalSpan, vertical);
+  return { x: x.start, y: y.start, width: x.size, height: y.size };
 };

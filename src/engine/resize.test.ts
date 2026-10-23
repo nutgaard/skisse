@@ -82,7 +82,7 @@ describe("resizing a Shape", () => {
       selectedRectangle(),
       pointerDown({ x: 200, y: 180 }),
       pointerMove({ x: 260, y: 260 }),
-      pointerMove({ x: 202, y: 181 }, { alt: true }),
+      pointerMove({ x: 202, y: 181 }),
     );
 
     expect(boundsOfOnlyShape(state)).toEqual({ x: 100, y: 100, width: 102, height: 81 });
@@ -103,22 +103,22 @@ describe("resizing a Shape", () => {
 });
 
 describe("grid snapping while resizing", () => {
-  test("the moved edges snap to the grid", () => {
+  test("the moved edges follow the pointer freely, without snapping", () => {
     const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 223, y: 197 });
-
-    expect(boundsOfOnlyShape(state)).toEqual({ x: 100, y: 100, width: 120, height: 100 });
-  });
-
-  test("holding Alt turns snapping off during the resize", () => {
-    const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 223, y: 197 }, { alt: true });
 
     expect(boundsOfOnlyShape(state)).toEqual({ x: 100, y: 100, width: 123, height: 97 });
   });
 
-  test("grabbing a handle of a Shape off the grid without dragging does not resize it", () => {
+  test("holding Alt snaps the moved edges to the grid", () => {
+    const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 223, y: 197 }, { alt: true });
+
+    expect(boundsOfOnlyShape(state)).toEqual({ x: 100, y: 100, width: 120, height: 100 });
+  });
+
+  test("with Alt held, grabbing a handle of a Shape off the grid without dragging does not resize it", () => {
     const offGrid = click(drawRectangle(newEditor(), { x: 103, y: 107 }, { x: 203, y: 187 }), { x: 150, y: 140 });
 
-    const state = apply(offGrid, pointerDown({ x: 203, y: 187 }), pointerMove({ x: 204, y: 188 }));
+    const state = apply(offGrid, pointerDown({ x: 203, y: 187 }, { alt: true }), pointerMove({ x: 204, y: 188 }, { alt: true }));
 
     expect(boundsOfOnlyShape(state)).toEqual({ x: 103, y: 107, width: 100, height: 80 });
   });
@@ -144,21 +144,47 @@ describe("keeping the aspect ratio with shift", () => {
   });
 });
 
-describe("minimum size", () => {
-  test("dragging a handle past the opposite side stops at the minimum size", () => {
+describe("flipping", () => {
+  test("dragging a corner handle past the opposite corner flips the Shape", () => {
     const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 50, y: 50 });
+
+    expect(boundsOfOnlyShape(state)).toEqual({ x: 50, y: 50, width: 50, height: 50 });
+  });
+
+  test("dragging the top-left handle past the bottom-right corner flips the Shape", () => {
+    const state = drag(selectedRectangle(), { x: 100, y: 100 }, { x: 300, y: 300 });
+
+    expect(boundsOfOnlyShape(state)).toEqual({ x: 200, y: 180, width: 100, height: 120 });
+  });
+
+  test("dragging a side handle past the opposite side flips only that way", () => {
+    const state = drag(selectedRectangle(), { x: 200, y: 140 }, { x: 60, y: 140 });
+
+    expect(boundsOfOnlyShape(state)).toEqual({ x: 60, y: 100, width: 40, height: 80 });
+  });
+
+  test("keeping the aspect ratio, a flipped Shape keeps its proportions", () => {
+    const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 0, y: 180 }, { shift: true });
+
+    expect(boundsOfOnlyShape(state)).toEqual({ x: 0, y: 100, width: 100, height: 80 });
+  });
+});
+
+describe("minimum size", () => {
+  test("a Shape resized smaller than the minimum keeps the minimum size", () => {
+    const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 103, y: 104 });
 
     expect(boundsOfOnlyShape(state)).toEqual({ x: 100, y: 100, width: 10, height: 10 });
   });
 
-  test("the minimum size holds from the top-left handle too", () => {
-    const state = drag(selectedRectangle(), { x: 100, y: 100 }, { x: 300, y: 300 });
+  test("a flipped Shape keeps the minimum size on the side the pointer is on", () => {
+    const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 97, y: 96 });
 
-    expect(boundsOfOnlyShape(state)).toEqual({ x: 190, y: 170, width: 10, height: 10 });
+    expect(boundsOfOnlyShape(state)).toEqual({ x: 90, y: 90, width: 10, height: 10 });
   });
 
   test("keeping the aspect ratio, the shorter side stops at the minimum size", () => {
-    const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 50, y: 50 }, { shift: true });
+    const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 103, y: 103 }, { shift: true });
 
     expect(boundsOfOnlyShape(state)).toEqual({ x: 100, y: 100, width: 12.5, height: 10 });
   });
