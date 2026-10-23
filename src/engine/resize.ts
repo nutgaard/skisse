@@ -2,6 +2,7 @@ import {
   boundsOfSpans,
   horizontalSpan,
   sideOf,
+  spanAtLeast,
   spanTowards,
   verticalSpan,
   type Bounds,
@@ -77,7 +78,7 @@ export const resizeBounds = (bounds: Bounds, handle: ResizeHandle, offset: Point
 
   if (!keepAspectRatio || bounds.width === 0 || bounds.height === 0) {
     const resize = (span: Span, edge: EdgeDrag | undefined): Span =>
-      edge ? spanTowards(edge.anchor, edge.side, Math.max(Math.abs(edge.target - edge.anchor), minimumSize)) : span;
+      edge ? spanAtLeast(edge.anchor, edge.target, edge.side, minimumSize) : span;
     return boundsOfSpans(resize(horizontal, horizontalEdge), resize(vertical, verticalEdge));
   }
 

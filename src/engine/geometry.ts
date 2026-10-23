@@ -59,3 +59,7 @@ export const spanTowards = (anchor: number, side: -1 | 1, size: number): Span =>
   start: side > 0 ? anchor : anchor - size,
   size,
 });
+
+/** The span from `anchor` to `target` on the given `side` of the anchor, at least `minimum` long. */
+export const spanAtLeast = (anchor: number, target: number, side: -1 | 1, minimum: number): Span =>
+  spanTowards(anchor, side, Math.max(Math.abs(target - anchor), minimum));

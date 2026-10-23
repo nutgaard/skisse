@@ -5,7 +5,7 @@ import {
   containsBounds,
   enclosingBounds,
   sideOf,
-  spanTowards,
+  spanAtLeast,
   translate,
   type Bounds,
   type Point,
@@ -114,9 +114,9 @@ const minimumShapeSize = 10;
  * snapping, both corners snap to the grid, but the Shape still grows the way the pointer went from where it started.
  */
 export const drawnBounds = (origin: Point, current: Point, snaps: boolean): Bounds => {
-  const snap = (value: number) => (snaps ? snapToGrid(value) : value);
+  const snap = snapperFor(snaps);
   const span = (from: number, to: number): Span =>
-    spanTowards(snap(from), sideOf(from, to, 1), Math.max(Math.abs(snap(to) - snap(from)), minimumShapeSize));
+    spanAtLeast(snap(from), snap(to), sideOf(from, to, 1), minimumShapeSize);
   return boundsOfSpans(span(origin.x, current.x), span(origin.y, current.y));
 };
 
@@ -125,6 +125,8 @@ const handleReach = 6;
 
 // Snapping to the grid is off by default. Holding Alt turns it on, for drags, resizes and arrow keys alike.
 const snapsToGrid = (modifiers: Modifiers): boolean => modifiers.alt;
+
+const snapperFor = (snaps: boolean): ((value: number) => number) => (snaps ? snapToGrid : (value) => value);
 
 export const createEditor = (deps: Dependencies): EditorState => ({
   deps,
@@ -271,7 +273,7 @@ const resizeShape = (
   const shape = before.shapes[shapeId];
   if (!shape || !interaction.dragged) return { ...state, sketch: before, interaction };
   const bounds = resizeBounds(shape.bounds, handle, pointerOffset(interaction, pointer), {
-    snap: snapsToGrid(pointer.modifiers) ? snapToGrid : (value) => value,
+    snap: snapperFor(snapsToGrid(pointer.modifiers)),
     keepAspectRatio: pointer.modifiers.shift,
     minimumSize: minimumShapeSize,
   });
