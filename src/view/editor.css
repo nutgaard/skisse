@@ -16,7 +16,7 @@ body,
 }
 
 .shape {
-  fill: #fff;
+  fill: transparent;
   stroke: #1e1e1e;
   stroke-width: 2;
 }
