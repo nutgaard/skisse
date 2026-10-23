@@ -10,6 +10,9 @@ import {
 import { boundsBetween, type Bounds, type Point } from "./geometry";
 import * as history from "./history";
 import { handlePositions, type ResizeHandle } from "./resize";
+import type { Viewport } from "./viewport";
+
+export { pansOnPress } from "./editor";
 
 // What queries return about a Shape. Kept apart from the stored SymbolShape so the stored model can change
 // without changing what the view and the tests see.
@@ -38,6 +41,8 @@ export const canUndo = (state: EditorState): boolean => history.canUndo(state.hi
 
 export const canRedo = (state: EditorState): boolean => history.canRedo(state.history);
 
+export const viewport = (state: EditorState): Viewport => state.viewport;
+
 export const activeTool = (state: EditorState): Tool => state.tool;
 
 export type InteractionView =
@@ -45,7 +50,8 @@ export type InteractionView =
   | { readonly kind: "creatingShape"; readonly symbol: SymbolId; readonly bounds: Bounds }
   | { readonly kind: "marqueeSelecting"; readonly bounds: Bounds }
   | { readonly kind: "moving" }
-  | { readonly kind: "resizing"; readonly handle: ResizeHandle };
+  | { readonly kind: "resizing"; readonly handle: ResizeHandle }
+  | { readonly kind: "panning" };
 
 export const currentInteraction = (state: EditorState): InteractionView => {
   const { interaction } = state;
@@ -64,5 +70,7 @@ export const currentInteraction = (state: EditorState): InteractionView => {
       return { kind: "moving" };
     case "resizing":
       return { kind: "resizing", handle: interaction.handle };
+    case "panning":
+      return { kind: "panning" };
   }
 };

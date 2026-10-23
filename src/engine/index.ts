@@ -1,4 +1,4 @@
-export { createEditor, emptySketch, update } from "./editor";
+export { createEditor, emptySketch, noModifiers, update } from "./editor";
 export type { Bounds, Point } from "./geometry";
 export type {
   Dependencies,
@@ -13,7 +13,21 @@ export type {
   SymbolId,
   TextMeasurer,
   Tool,
+  WheelInput,
 } from "./editor";
+export { gridSize } from "./grid";
 export type { ResizeHandle } from "./resize";
-export { activeTool, canRedo, canUndo, currentInteraction, resizeHandles, selection, shapes, sketch } from "./queries";
+export {
+  activeTool,
+  canRedo,
+  canUndo,
+  currentInteraction,
+  pansOnPress,
+  resizeHandles,
+  selection,
+  shapes,
+  sketch,
+  viewport,
+} from "./queries";
 export type { HandleView, InteractionView, ShapeView } from "./queries";
+export type { Size, Viewport } from "./viewport";

@@ -6,18 +6,23 @@ import {
   drag,
   drawRectangle,
   keyDown,
+  keyUp,
   newEditor,
+  pinch,
   pointerDown,
   pointerMove,
   pointerUp,
   press,
   redoInput,
+  resetZoom,
   selectTool,
   twoRectangles,
   undoInput,
+  wheel,
+  zoomToFit,
 } from "./test-helpers";
 import type { EditorState } from "./editor";
-import { canRedo, canUndo, selection } from "./queries";
+import { canRedo, canUndo, selection, viewport } from "./queries";
 
 const undo = (state: EditorState) => press(state, "z", { meta: true });
 const redo = (state: EditorState) => press(state, "z", { meta: true, shift: true });
@@ -158,5 +163,39 @@ describe("undo and redo", () => {
     const state = apply(midDrag, keyDown("z", { meta: true }), undoInput, pointerUp({ x: 200, y: 170 }));
 
     expect(boundsById(state)).toEqual({ "shape-1": { x: 150, y: 130, width: 100, height: 80 } });
+  });
+});
+
+describe("viewport changes and undo", () => {
+  const changeViewport = (state: EditorState): EditorState =>
+    apply(
+      state,
+      pinch({ x: 300, y: 200 }, 2),
+      wheel({ x: 300, y: 200 }, { x: 0, y: -10 }, { ctrl: true }),
+      wheel({ x: 300, y: 200 }, { x: 40, y: 20 }),
+      keyDown(" "),
+      pointerDown({ x: 100, y: 100 }),
+      pointerMove({ x: 150, y: 100 }),
+      pointerUp({ x: 150, y: 100 }),
+      keyUp(" "),
+      selectTool("pan"),
+      pointerDown({ x: 100, y: 100 }),
+      pointerMove({ x: 150, y: 100 }),
+      pointerUp({ x: 150, y: 100 }),
+      zoomToFit({ width: 800, height: 600 }),
+      resetZoom({ width: 800, height: 600 }),
+    );
+
+  test("zooming and panning add no undo step", () => {
+    expect(canUndo(changeViewport(newEditor()))).toBe(false);
+  });
+
+  test("undo after zooming and panning undoes the last change to the Sketch and leaves the viewport", () => {
+    const changed = changeViewport(twoRectangles());
+
+    const undone = apply(changed, undoInput);
+
+    expect(Object.keys(boundsById(undone))).toEqual(["shape-1"]);
+    expect(viewport(undone)).toEqual(viewport(changed));
   });
 });

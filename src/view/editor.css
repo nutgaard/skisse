@@ -15,6 +15,32 @@ body,
   touch-action: none;
 }
 
+.sketch[data-pans] {
+  cursor: grab;
+}
+
+.sketch[data-panning] {
+  cursor: grabbing;
+}
+
+.grid {
+  pointer-events: none;
+}
+
+.grid-minor path,
+.grid-major path {
+  fill: none;
+  stroke-width: 1;
+}
+
+.grid-minor path {
+  stroke: #f1f1f4;
+}
+
+.grid-major path {
+  stroke: #e4e4ea;
+}
+
 .shape {
   fill: transparent;
   stroke: #1e1e1e;
@@ -22,6 +48,7 @@ body,
 }
 
 .selection-outline {
+  vector-effect: non-scaling-stroke;
   fill: none;
   stroke: #4f46e5;
   stroke-width: 1;
@@ -29,6 +56,7 @@ body,
 }
 
 .resize-handle {
+  vector-effect: non-scaling-stroke;
   fill: #fff;
   stroke: #4f46e5;
   stroke-width: 1;
@@ -55,6 +83,7 @@ body,
 }
 
 .selection-box {
+  vector-effect: non-scaling-stroke;
   fill: rgb(79 70 229 / 0.08);
   stroke: #4f46e5;
   stroke-width: 1;
