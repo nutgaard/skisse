@@ -8,11 +8,11 @@ import {
   type Modifiers,
   type PointerInput,
   type Sketch,
-  type Tool,
 } from "./editor";
 import type { Point } from "./geometry";
 import { fixedWidthTextMeasurer, sequentialIds } from "./fakes";
 import { selection, shapes } from "./queries";
+import type { Tool } from "./tools";
 import type { Size } from "./viewport";
 
 export const newEditor = (sketch?: Sketch): EditorState =>
@@ -64,13 +64,13 @@ export const keyUp = keyboard("keyUp");
 export const drawRectangle = (state: EditorState, from: Point, to: Point): EditorState =>
   apply(state, selectTool("rectangle"), pointerDown(from), pointerMove(to), pointerUp(to));
 
-/** The Sketch point shown at the screen point `at`, found by clicking there with the rectangle tool. */
+/** The Sketch point shown at the screen point `at`, found by clicking there with the rectangle tool, which centres the new Shape on it. */
 export const sketchPointUnder = (state: EditorState, at: Point): Point => {
   const created = apply(state, selectTool("rectangle"), pointerDown(at), pointerUp(at));
   const [id] = selection(created);
   const shape = shapes(created).find((candidate) => candidate.id === id);
   if (!shape) throw new Error("clicking with the rectangle tool created no Shape");
-  return { x: shape.bounds.x, y: shape.bounds.y };
+  return { x: shape.bounds.x + shape.bounds.width / 2, y: shape.bounds.y + shape.bounds.height / 2 };
 };
 
 export const click = (state: EditorState, at: Point, modifiers: Partial<Modifiers> = {}): EditorState =>

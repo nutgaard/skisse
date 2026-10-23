@@ -1,7 +1,6 @@
 import {
   boundsBetween,
   boundsOfSpans,
-  contains,
   containsBounds,
   enclosingBounds,
   sideOf,
@@ -14,6 +13,9 @@ import {
 import { gridSize, nextGridLine, snapToGrid } from "./grid";
 import * as history from "./history";
 import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
+import { hitsOutline } from "./shape-geometry";
+import { symbolDefinition, type SymbolId } from "./symbols";
+import { toolOfShortcut, type Tool } from "./tools";
 import * as viewport from "./viewport";
 
 export type Modifiers = {
@@ -24,10 +26,6 @@ export type Modifiers = {
 };
 
 export const noModifiers: Modifiers = { shift: false, alt: false, ctrl: false, meta: false };
-
-export type SymbolId = "rectangle";
-
-export type Tool = "select" | "pan" | SymbolId;
 
 export type PointerInput = {
   readonly type: "pointerDown" | "pointerMove" | "pointerUp" | "pointerCancel";
@@ -81,20 +79,19 @@ export type Sketch = {
   readonly shapes: Readonly<Record<ShapeId, SymbolShape>>;
 };
 
-// A drag on the Sketch: where it started, where the pointer is now, and the Sketch at the start. Each pointer move
-// is applied to that Sketch afresh, and cancelling restores it. `dragged` is set once the pointer first travels
-// past the drag threshold, and stays set even if the pointer comes back.
-type Drag = { readonly origin: Point; readonly current: Point; readonly before: Sketch; readonly dragged: boolean };
+// A press that may become a drag: where it started and where the pointer is now. `dragged` is set once the pointer
+// first travels past the drag threshold, and stays set even if the pointer comes back.
+type Press = { readonly origin: Point; readonly current: Point; readonly dragged: boolean };
+
+// A drag that changes the Sketch, and the Sketch at its start. Each pointer move is applied to that Sketch afresh, and
+// cancelling restores it.
+type Drag = Press & { readonly before: Sketch };
+
+type Creation = { readonly kind: "creatingShape"; readonly symbol: SymbolId; readonly snaps: boolean } & Press;
 
 type Interaction =
   | { readonly kind: "idle" }
-  | {
-      readonly kind: "creatingShape";
-      readonly symbol: SymbolId;
-      readonly origin: Point;
-      readonly current: Point;
-      readonly snaps: boolean;
-    }
+  | Creation
   | {
       readonly kind: "marqueeSelecting";
       readonly origin: Point;
@@ -137,16 +134,23 @@ const dragThreshold = 3;
 
 const minimumShapeSize = 10;
 
-/**
- * The Bounds of a Shape drawn by dragging from `origin` to `current`, never smaller than the minimum size. When
- * snapping, both corners snap to the grid, but the Shape still grows the way the pointer went from where it started.
- */
-export const drawnBounds = (origin: Point, current: Point, snaps: boolean): Bounds => {
-  const snap = snapperFor(snaps);
+// The Bounds of a Shape drawn by dragging from `origin` to `current`, never smaller than the minimum size. When
+// snapping, both corners snap to the grid, but the Shape still grows the way the pointer went from where it started.
+const drawnBounds = (origin: Point, current: Point, snap: (value: number) => number): Bounds => {
   const span = (from: number, to: number): Span =>
     spanAtLeast(snap(from), snap(to), sideOf(from, to, 1), minimumShapeSize);
   return boundsOfSpans(span(origin.x, current.x), span(origin.y, current.y));
 };
+
+// A click gives the Symbol's default size, centred on the click. When snapping, its top-left corner snaps to the grid.
+const clickedBounds = (symbol: SymbolId, at: Point, snap: (value: number) => number): Bounds => {
+  const { width, height } = symbolDefinition(symbol).defaultSize;
+  return { x: snap(at.x - width / 2), y: snap(at.y - height / 2), width, height };
+};
+
+/** The Bounds of the Shape that releasing the pointer now would create. */
+export const creationBounds = ({ symbol, origin, current, dragged, snaps }: Creation): Bounds =>
+  dragged ? drawnBounds(origin, current, snapperFor(snaps)) : clickedBounds(symbol, origin, snapperFor(snaps));
 
 // How far, in screen pixels, from a resize handle's centre a press still grabs it.
 const handleReach = 6;
@@ -171,9 +175,9 @@ export const createEditor = (deps: Dependencies, sketch: Sketch = emptySketch): 
   history: history.startHistory(sketch),
 });
 
-// Shapes are hit-tested as if filled, even with a transparent fill. The topmost Shape wins.
+// Shapes are hit-tested by their Symbol's outline, as if filled, even with a transparent fill. The topmost Shape wins.
 const shapeAt = (sketch: Sketch, point: Point): SymbolShape | undefined =>
-  Object.values(sketch.shapes).findLast((shape) => contains(shape.bounds, point));
+  Object.values(sketch.shapes).findLast((shape) => hitsOutline(shape.symbol, shape.bounds, point));
 
 const shapesInside = (sketch: Sketch, box: Bounds): readonly ShapeId[] =>
   Object.values(sketch.shapes)
@@ -278,8 +282,8 @@ const selectionBlock = (sketch: Sketch, selection: readonly ShapeId[]): Bounds =
 // Where the pointer is and which modifiers are held: all a drag needs, whether from a pointer move or a key press.
 type PointerState = Pick<PointerInput, "position" | "modifiers">;
 
-// The drag with the pointer at `pointer`, noting whether it has now travelled past the drag threshold.
-const continueDrag = <D extends Drag>(state: EditorState, drag: D, pointer: PointerState): D => {
+// The press with the pointer at `pointer`, noting whether it has now travelled past the drag threshold.
+const continueDrag = <P extends Press>(state: EditorState, drag: P, pointer: PointerState): P => {
   const travelled = Math.hypot(pointer.position.x - drag.origin.x, pointer.position.y - drag.origin.y);
   return {
     ...drag,
@@ -361,6 +365,7 @@ const pointerDown = (state: EditorState, input: PointerInput): EditorState => {
           symbol: state.tool,
           origin: input.position,
           current: input.position,
+          dragged: false,
           snaps: snapsToGrid(input.modifiers),
         },
       };
@@ -375,7 +380,7 @@ const pointerMove = (state: EditorState, input: PointerInput): EditorState => {
     case "creatingShape":
       return {
         ...state,
-        interaction: { ...interaction, current: input.position, snaps: snapsToGrid(input.modifiers) },
+        interaction: { ...continueDrag(state, interaction, input), snaps: snapsToGrid(input.modifiers) },
       };
     case "marqueeSelecting": {
       const inside = shapesInside(state.sketch, boundsBetween(interaction.origin, input.position));
@@ -421,11 +426,7 @@ const pointerUp = (state: EditorState, input: PointerInput): EditorState => {
   const finished: EditorState = { ...moved, interaction: idle };
   switch (interaction.kind) {
     case "creatingShape":
-      return createShape(
-        finished,
-        interaction.symbol,
-        drawnBounds(interaction.origin, interaction.current, interaction.snaps),
-      );
+      return { ...createShape(finished, interaction.symbol, creationBounds(interaction)), tool: "select" };
     case "moving": {
       const clicked = interaction.dragged ? undefined : interaction.selectsOnClick;
       return clicked === undefined ? finished : { ...finished, selection: [clicked] };
@@ -523,6 +524,8 @@ const keyDown = (state: EditorState, input: KeyInput): EditorState => {
   if (input.key === "Delete" || input.key === "Backspace") return deleteSelection(state);
   const direction = nudgeDirections[input.key];
   if (direction) return nudge(state, direction, input.modifiers);
+  const tool = command || input.modifiers.alt ? undefined : toolOfShortcut(input.key);
+  if (tool) return { ...state, tool };
   return state;
 };
 

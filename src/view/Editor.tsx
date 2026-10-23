@@ -8,28 +8,28 @@ import {
   gridSize,
   noModifiers,
   pansOnPress,
+  pathData,
   resizeHandles,
   selection,
+  shapeGeometry,
   shapes,
   sketch,
+  symbolIcon,
+  tools,
   update,
   viewport,
+  type Bounds,
   type Dependencies,
   type KeyInput,
   type PointerInput,
   type Size,
   type Sketch,
-  type Tool,
+  type SymbolId,
+  type ToolInfo,
   type Viewport,
   type WheelInput,
 } from "../engine";
 import { useAutosave } from "./autosave";
-
-const tools: readonly { readonly tool: Tool; readonly label: string }[] = [
-  { tool: "select", label: "Select" },
-  { tool: "pan", label: "Pan" },
-  { tool: "rectangle", label: "Rectangle" },
-];
 
 const modifiersOf = (event: KeyboardEvent | PointerEvent | WheelEvent) => ({
   shift: event.shiftKey,
@@ -128,6 +128,40 @@ const Grid = ({ viewport }: { readonly viewport: Viewport }) => {
     </>
   );
 };
+
+/** A Shape drawn from its Symbol's geometry: the outline as its fill, and the Symbol's lines on top. */
+const SymbolShape = ({ symbol, bounds }: { readonly symbol: SymbolId; readonly bounds: Bounds }) => {
+  const { outline, lines } = shapeGeometry(symbol, bounds);
+  return (
+    <g data-symbol={symbol} className="shape">
+      <path d={pathData(outline)} className="shape-fill" />
+      <path d={pathData(lines)} className="shape-lines" />
+    </g>
+  );
+};
+
+// Size, in screen pixels, of a Symbol's picture on its toolbar button.
+const iconSize = 18;
+
+type ToolButtonProps = { readonly info: ToolInfo; readonly active: boolean; readonly onSelect: () => void };
+
+const ToolButton = ({ info, active, onSelect }: ToolButtonProps) => (
+  <button
+    type="button"
+    aria-pressed={active}
+    aria-label={info.symbol ? info.name : undefined}
+    title={`${info.name} (${info.shortcut.toUpperCase()})`}
+    onClick={onSelect}
+  >
+    {info.symbol ? (
+      <svg className="tool-icon" width={iconSize} height={iconSize} aria-hidden="true">
+        <path d={pathData(symbolIcon(info.symbol, iconSize - 2))} transform="translate(1 1)" />
+      </svg>
+    ) : (
+      info.name
+    )}
+  </button>
+);
 
 type EditorProps = {
   readonly deps: Dependencies;
@@ -245,10 +279,10 @@ export const Editor = ({ deps, initialSketch, onSave }: EditorProps) => {
         <Grid viewport={view} />
         <g transform={`scale(${view.zoom}) translate(${-view.x} ${-view.y})`}>
           {shapes(state).map(({ id, symbol, bounds }) => (
-            <rect key={id} data-symbol={symbol} {...bounds} className="shape" />
+            <SymbolShape key={id} symbol={symbol} bounds={bounds} />
           ))}
           {interaction.kind === "creatingShape" && (
-            <rect data-symbol={interaction.symbol} {...interaction.bounds} className="shape" />
+            <SymbolShape symbol={interaction.symbol} bounds={interaction.bounds} />
           )}
           {shapes(state)
             .filter(({ id }) => selected.has(id))
@@ -270,15 +304,13 @@ export const Editor = ({ deps, initialSketch, onSave }: EditorProps) => {
         </g>
       </svg>
       <div ref={toolbarRef} className="toolbar" role="toolbar">
-        {tools.map(({ tool, label }) => (
-          <button
-            key={tool}
-            type="button"
-            aria-pressed={activeTool(state) === tool}
-            onClick={() => dispatch({ type: "selectTool", tool })}
-          >
-            {label}
-          </button>
+        {tools.map((info) => (
+          <ToolButton
+            key={info.tool}
+            info={info}
+            active={activeTool(state) === info.tool}
+            onSelect={() => dispatch({ type: "selectTool", tool: info.tool })}
+          />
         ))}
         <span className="toolbar-separator" />
         <button type="button" disabled={!canUndo(state)} onClick={() => dispatch({ type: "undo" })}>

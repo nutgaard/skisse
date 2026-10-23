@@ -1,15 +1,15 @@
 import {
-  drawnBounds,
+  creationBounds,
   resizableShape,
   type EditorState,
   type ShapeId,
   type Sketch,
-  type SymbolId,
-  type Tool,
 } from "./editor";
 import { boundsBetween, type Bounds, type Point } from "./geometry";
 import * as history from "./history";
 import { handlePositions, type ResizeHandle } from "./resize";
+import type { SymbolId } from "./symbols";
+import type { Tool } from "./tools";
 import type { Viewport } from "./viewport";
 
 export { pansOnPress } from "./editor";
@@ -59,11 +59,7 @@ export const currentInteraction = (state: EditorState): InteractionView => {
     case "idle":
       return { kind: "idle" };
     case "creatingShape":
-      return {
-        kind: "creatingShape",
-        symbol: interaction.symbol,
-        bounds: drawnBounds(interaction.origin, interaction.current, interaction.snaps),
-      };
+      return { kind: "creatingShape", symbol: interaction.symbol, bounds: creationBounds(interaction) };
     case "marqueeSelecting":
       return { kind: "marqueeSelecting", bounds: boundsBetween(interaction.origin, interaction.current) };
     case "moving":

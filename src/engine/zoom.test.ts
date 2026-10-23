@@ -155,7 +155,7 @@ describe("zoom to fit and reset zoom", () => {
       newEditor(),
       selectTool("rectangle"),
       pointerDown({ x: 500, y: 500 }),
-      pointerUp({ x: 500, y: 500 }),
+      pointerUp({ x: 504, y: 504 }),
     );
 
     const state = apply(oneSmallShape, zoomToFit({ width: 700, height: 600 }));
