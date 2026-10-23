@@ -187,6 +187,14 @@ describe("flipping with snapping on", () => {
 
     expect(boundsOfOnlyShape(state)).toEqual({ x: 90, y: 100, width: 10, height: 90 });
   });
+
+  test("a pointer just inside an opposite edge off the grid does not flip the Shape, even when it snaps past that edge", () => {
+    const offGrid = click(drawRectangle(newEditor(), { x: 103, y: 107 }, { x: 203, y: 187 }), { x: 150, y: 140 });
+
+    const state = drag(offGrid, { x: 203, y: 187 }, { x: 104, y: 188 }, { alt: true });
+
+    expect(boundsOfOnlyShape(state)).toEqual({ x: 103, y: 107, width: 10, height: 83 });
+  });
 });
 
 describe("minimum size", () => {

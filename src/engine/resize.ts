@@ -2,7 +2,6 @@ import {
   boundsOfSpans,
   horizontalSpan,
   sideOf,
-  spanFrom,
   spanTowards,
   verticalSpan,
   type Bounds,
@@ -50,8 +49,8 @@ export type ResizeOptions = {
 // side of the opposite edge the pointer is on.
 type EdgeDrag = { readonly anchor: number; readonly target: number; readonly side: -1 | 1 };
 
-// Drags the edge of `span` on the `towards` side by `delta`, snapping where it lands. The side comes from the
-// unsnapped pointer, so a pointer just past the opposite edge flips the Shape even if it snaps onto that edge.
+// Drags the edge of `span` on the `towards` side by `delta`, snapping where it lands. The side the Shape ends up on
+// comes from the unsnapped pointer, because snapping can carry the edge onto or across the opposite edge.
 const dragEdge = (span: Span, towards: -1 | 1, delta: number, snap: (value: number) => number): EdgeDrag => {
   const anchor = towards > 0 ? span.start : span.start + span.size;
   const dragged = anchor + towards * span.size + delta;
@@ -78,7 +77,7 @@ export const resizeBounds = (bounds: Bounds, handle: ResizeHandle, offset: Point
 
   if (!keepAspectRatio || bounds.width === 0 || bounds.height === 0) {
     const resize = (span: Span, edge: EdgeDrag | undefined): Span =>
-      edge ? spanFrom(edge.anchor, edge.target, minimumSize, edge.side) : span;
+      edge ? spanTowards(edge.anchor, edge.side, Math.max(Math.abs(edge.target - edge.anchor), minimumSize)) : span;
     return boundsOfSpans(resize(horizontal, horizontalEdge), resize(vertical, verticalEdge));
   }
 
@@ -92,7 +91,7 @@ export const resizeBounds = (bounds: Bounds, handle: ResizeHandle, offset: Point
   const scaleSpan = (span: Span, edge: EdgeDrag | undefined): Span => {
     const size = span.size * scale;
     return edge
-      ? spanTowards(edge.anchor, sideOf(edge.anchor, edge.target, edge.side), size)
+      ? spanTowards(edge.anchor, edge.side, size)
       : { start: span.start + (span.size - size) / 2, size };
   };
   return boundsOfSpans(scaleSpan(horizontal, horizontalEdge), scaleSpan(vertical, verticalEdge));

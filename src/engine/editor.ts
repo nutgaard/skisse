@@ -224,21 +224,25 @@ const selectionBlock = (sketch: Sketch, selection: readonly ShapeId[]): Bounds =
   enclosingBounds(selection.flatMap((id) => sketch.shapes[id]?.bounds ?? []));
 
 // The drag with the pointer at `input`, noting whether it has now travelled past the drag threshold.
-const continueDrag = <D extends Drag>(drag: D, input: PointerInput): D => ({
+// Where the pointer is and which modifiers are held: all a drag needs, whether from a pointer move or a key press.
+type PointerState = Pick<PointerInput, "position" | "modifiers">;
+
+const continueDrag = <D extends Drag>(drag: D, pointer: PointerState): D => ({
   ...drag,
-  current: input.position,
+  current: pointer.position,
   dragged:
-    drag.dragged || Math.hypot(input.position.x - drag.origin.x, input.position.y - drag.origin.y) >= dragThreshold,
+    drag.dragged ||
+    Math.hypot(pointer.position.x - drag.origin.x, pointer.position.y - drag.origin.y) >= dragThreshold,
 });
 
 // Zero until the pointer has travelled past the drag threshold.
-const pointerOffset = (drag: Drag, input: PointerInput): Point =>
-  drag.dragged ? { x: input.position.x - drag.origin.x, y: input.position.y - drag.origin.y } : { x: 0, y: 0 };
+const pointerOffset = (drag: Drag, pointer: PointerState): Point =>
+  drag.dragged ? { x: pointer.position.x - drag.origin.x, y: pointer.position.y - drag.origin.y } : { x: 0, y: 0 };
 
 // The block's top-left corner snaps to the grid, so the Shapes keep their distances.
-const dragOffset = (state: EditorState, drag: Drag, input: PointerInput): Point => {
-  const offset = pointerOffset(drag, input);
-  if (!drag.dragged || !snapsToGrid(input.modifiers)) return offset;
+const dragOffset = (state: EditorState, drag: Drag, pointer: PointerState): Point => {
+  const offset = pointerOffset(drag, pointer);
+  if (!drag.dragged || !snapsToGrid(pointer.modifiers)) return offset;
   const block = selectionBlock(drag.before, state.selection);
   return {
     x: snapToGrid(block.x + offset.x) - block.x,
@@ -249,14 +253,14 @@ const dragOffset = (state: EditorState, drag: Drag, input: PointerInput): Point 
 const resizeShape = (
   state: EditorState,
   interaction: Extract<Interaction, { kind: "resizing" }>,
-  input: PointerInput,
+  pointer: PointerState,
 ): EditorState => {
   const { before, shapeId, handle } = interaction;
   const shape = before.shapes[shapeId];
   if (!shape || !interaction.dragged) return { ...state, sketch: before, interaction };
-  const bounds = resizeBounds(shape.bounds, handle, pointerOffset(interaction, input), {
-    snap: snapsToGrid(input.modifiers) ? snapToGrid : (value) => value,
-    keepAspectRatio: input.modifiers.shift,
+  const bounds = resizeBounds(shape.bounds, handle, pointerOffset(interaction, pointer), {
+    snap: snapsToGrid(pointer.modifiers) ? snapToGrid : (value) => value,
+    keepAspectRatio: pointer.modifiers.shift,
     minimumSize: minimumShapeSize,
   });
   return {
@@ -264,6 +268,25 @@ const resizeShape = (
     sketch: { ...before, shapes: { ...before.shapes, [shapeId]: { ...shape, bounds } } },
     interaction,
   };
+};
+
+const dragTo = (
+  state: EditorState,
+  interaction: Extract<Interaction, { kind: "moving" | "resizing" }>,
+  pointer: PointerState,
+): EditorState => {
+  switch (interaction.kind) {
+    case "moving": {
+      const drag = continueDrag(interaction, pointer);
+      return {
+        ...state,
+        sketch: moveShapes(drag.before, state.selection, dragOffset(state, drag, pointer)),
+        interaction: drag,
+      };
+    }
+    case "resizing":
+      return resizeShape(state, continueDrag(interaction, pointer), pointer);
+  }
 };
 
 const pointerDown = (state: EditorState, input: PointerInput): EditorState =>
@@ -294,16 +317,9 @@ const pointerMove = (state: EditorState, input: PointerInput): EditorState => {
         interaction: { ...interaction, current: input.position },
       };
     }
-    case "moving": {
-      const drag = continueDrag(interaction, input);
-      return {
-        ...state,
-        sketch: moveShapes(drag.before, state.selection, dragOffset(state, drag, input)),
-        interaction: drag,
-      };
-    }
+    case "moving":
     case "resizing":
-      return resizeShape(state, continueDrag(interaction, input), input);
+      return dragTo(state, interaction, input);
   }
 };
 
@@ -390,7 +406,7 @@ const deleteSelection = (state: EditorState): EditorState => ({
 const updateDragModifiers = (state: EditorState, modifiers: Modifiers): EditorState => {
   const { interaction } = state;
   return interaction.kind === "moving" || interaction.kind === "resizing"
-    ? pointerMove(state, { type: "pointerMove", position: interaction.current, button: 0, modifiers })
+    ? dragTo(state, interaction, { position: interaction.current, modifiers })
     : state;
 };
 
