@@ -47,6 +47,9 @@ export const activeTool = (state: EditorState): Tool => state.tool;
 
 export type InteractionView =
   | { readonly kind: "idle" }
+  // Pressed with a Symbol tool, but not dragged yet. Releasing places a default-size Shape, but nothing is shown until
+  // then, as the press may still become a drag.
+  | { readonly kind: "placingShape"; readonly symbol: SymbolId }
   | { readonly kind: "creatingShape"; readonly symbol: SymbolId; readonly bounds: Bounds }
   | { readonly kind: "marqueeSelecting"; readonly bounds: Bounds }
   | { readonly kind: "moving" }
@@ -59,7 +62,9 @@ export const currentInteraction = (state: EditorState): InteractionView => {
     case "idle":
       return { kind: "idle" };
     case "creatingShape":
-      return { kind: "creatingShape", symbol: interaction.symbol, bounds: creationBounds(interaction) };
+      return interaction.dragged
+        ? { kind: "creatingShape", symbol: interaction.symbol, bounds: creationBounds(interaction) }
+        : { kind: "placingShape", symbol: interaction.symbol };
     case "marqueeSelecting":
       return { kind: "marqueeSelecting", bounds: boundsBetween(interaction.origin, interaction.current) };
     case "moving":

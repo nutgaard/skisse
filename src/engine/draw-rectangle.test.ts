@@ -88,7 +88,7 @@ describe("drawing a rectangle", () => {
 });
 
 describe("clicking instead of dragging", () => {
-  test("while pressing without dragging, the default-size rectangle a click creates is shown", () => {
+  test("while pressing without dragging, no rectangle is shown yet, as it may still become a drag", () => {
     const state = apply(
       newEditor(),
       selectTool("rectangle"),
@@ -96,11 +96,7 @@ describe("clicking instead of dragging", () => {
       pointerMove({ x: 102, y: 51 }),
     );
 
-    expect(currentInteraction(state)).toEqual({
-      kind: "creatingShape",
-      symbol: "rectangle",
-      bounds: { x: 20, y: 10, width: 160, height: 80 },
-    });
+    expect(currentInteraction(state)).toEqual({ kind: "placingShape", symbol: "rectangle" });
   });
 
   test("a press that travels past the drag threshold and back still draws a minimum-size rectangle", () => {
