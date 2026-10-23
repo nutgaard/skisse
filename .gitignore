@@ -1,3 +1,9 @@
 
 # APM dependencies
 apm_modules/
+
+node_modules/
+dist/
+test-results/
+playwright-report/
+.idea/
