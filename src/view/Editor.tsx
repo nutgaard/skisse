@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef, type PointerEvent } from "react";
+import { useEffect, useReducer, type PointerEvent } from "react";
 import {
   activeTool,
   canRedo,
@@ -16,6 +16,7 @@ import {
   type Sketch,
   type Tool,
 } from "../engine";
+import { useAutosave } from "./autosave";
 
 const tools: readonly { readonly tool: Tool; readonly label: string }[] = [
   { tool: "select", label: "Select" },
@@ -50,37 +51,6 @@ const isSelectAll = (event: KeyboardEvent) => (event.metaKey || event.ctrlKey) &
 
 // Keys typed into a text field, such as when renaming a Sketch, are not editor shortcuts.
 const isTyping = (event: KeyboardEvent) => event.target instanceof HTMLInputElement;
-
-// How long, in milliseconds, the Sketch must stay unchanged before it is saved.
-const autosaveDelay = 300;
-
-// Saves the Sketch shortly after each change, and straight away when the Editor closes or the page is left, so a
-// change made just before is never lost.
-const useAutosave = (current: Sketch, save: (sketch: Sketch) => void) => {
-  const saved = useRef(current);
-  const unsaved = useRef<Sketch | undefined>(undefined);
-
-  const flush = useCallback(() => {
-    if (unsaved.current === undefined) return;
-    save(unsaved.current);
-    saved.current = unsaved.current;
-    unsaved.current = undefined;
-  }, [save]);
-
-  useEffect(() => {
-    unsaved.current = current === saved.current ? undefined : current;
-    const timer = setTimeout(flush, autosaveDelay);
-    return () => clearTimeout(timer);
-  }, [current, flush]);
-
-  useEffect(() => {
-    window.addEventListener("pagehide", flush);
-    return () => {
-      window.removeEventListener("pagehide", flush);
-      flush();
-    };
-  }, [flush]);
-};
 
 type EditorProps = {
   readonly deps: Dependencies;

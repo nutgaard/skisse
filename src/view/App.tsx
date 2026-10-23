@@ -36,7 +36,7 @@ export const App = ({ deps, store, openAtStart }: AppProps) => {
         }}
         onRename={(id, name) => {
           store.rename(id, name);
-          show(current);
+          setEntries(store.list());
         }}
         // The store ignores the closing Editor's last save, so that can't bring a deleted open Sketch back.
         onDelete={(id) => show(deleteSketch(store, id, current))}
