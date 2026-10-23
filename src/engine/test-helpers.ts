@@ -3,6 +3,7 @@ import {
   update,
   type EditorState,
   type Input,
+  type KeyInput,
   type Modifiers,
   type PointerInput,
   type Tool,
@@ -35,11 +36,12 @@ export const pointerMove = pointer("pointerMove");
 export const pointerUp = pointer("pointerUp");
 export const pointerCancel = pointer("pointerCancel");
 
-export const keyDown = (key: string, modifiers: Partial<Modifiers> = {}): Input => ({
-  type: "keyDown",
-  key,
-  modifiers: { ...noModifiers, ...modifiers },
-});
+const keyboard =
+  (type: KeyInput["type"]) =>
+  (key: string, modifiers: Partial<Modifiers> = {}): Input => ({ type, key, modifiers: { ...noModifiers, ...modifiers } });
+
+export const keyDown = keyboard("keyDown");
+export const keyUp = keyboard("keyUp");
 
 export const drawRectangle = (state: EditorState, from: Point, to: Point): EditorState =>
   apply(state, selectTool("rectangle"), pointerDown(from), pointerMove(to), pointerUp(to));

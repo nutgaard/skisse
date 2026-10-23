@@ -7,6 +7,7 @@ import {
   drag,
   drawRectangle,
   keyDown,
+  keyUp,
   newEditor,
   pointerDown,
   pointerMove,
@@ -131,6 +132,16 @@ describe("grid snapping while dragging", () => {
       "shape-1": { x: 120, y: 127, width: 100, height: 80 },
       "shape-2": { x: 322, y: 120, width: 100, height: 80 },
     });
+  });
+
+  test("pressing and releasing Alt mid-drag turns snapping on and off without moving the pointer", () => {
+    const dragging = apply(twoRectangles(), selectTool("select"), pointerDown({ x: 150, y: 140 }), pointerMove({ x: 173, y: 157 }));
+
+    const snapped = apply(dragging, keyDown("Alt", { alt: true }));
+    const released = apply(snapped, keyUp("Alt"));
+
+    expect(boundsById(snapped)["shape-1"]).toEqual({ x: 120, y: 120, width: 100, height: 80 });
+    expect(boundsById(released)["shape-1"]).toEqual({ x: 123, y: 117, width: 100, height: 80 });
   });
 
   test("with Alt held, clicking a Shape off the grid does not move it", () => {

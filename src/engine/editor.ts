@@ -59,10 +59,10 @@ export type Sketch = {
   readonly shapes: Readonly<Record<ShapeId, SymbolShape>>;
 };
 
-// A drag on the Sketch: where it started, and the Sketch at that moment. Each pointer move is applied to that
-// Sketch afresh, and cancelling restores it. `dragged` is set once the pointer first travels past the drag
-// threshold, and stays set even if the pointer comes back.
-type Drag = { readonly origin: Point; readonly before: Sketch; readonly dragged: boolean };
+// A drag on the Sketch: where it started, where the pointer is now, and the Sketch at the start. Each pointer move
+// is applied to that Sketch afresh, and cancelling restores it. `dragged` is set once the pointer first travels
+// past the drag threshold, and stays set even if the pointer comes back.
+type Drag = { readonly origin: Point; readonly current: Point; readonly before: Sketch; readonly dragged: boolean };
 
 type Interaction =
   | { readonly kind: "idle" }
@@ -181,6 +181,7 @@ const pressWithSelectTool = (state: EditorState, input: PointerInput): EditorSta
         shapeId: grabbedHandle.shape.id,
         handle: grabbedHandle.handle,
         origin: input.position,
+        current: input.position,
         before: state.sketch,
         dragged: false,
       },
@@ -198,6 +199,7 @@ const pressWithSelectTool = (state: EditorState, input: PointerInput): EditorSta
       kind: "moving",
       selectsOnClick: shift ? undefined : hit.id,
       origin: input.position,
+      current: input.position,
       before: state.sketch,
       dragged: false,
     },
@@ -224,6 +226,7 @@ const selectionBlock = (sketch: Sketch, selection: readonly ShapeId[]): Bounds =
 // The drag with the pointer at `input`, noting whether it has now travelled past the drag threshold.
 const continueDrag = <D extends Drag>(drag: D, input: PointerInput): D => ({
   ...drag,
+  current: input.position,
   dragged:
     drag.dragged || Math.hypot(input.position.x - drag.origin.x, input.position.y - drag.origin.y) >= dragThreshold,
 });
@@ -382,11 +385,20 @@ const deleteSelection = (state: EditorState): EditorState => ({
   selection: [],
 });
 
+// Pressing or releasing a modifier mid-drag, such as Alt for snapping, applies to the drag straight away,
+// without waiting for the pointer to move.
+const updateDragModifiers = (state: EditorState, modifiers: Modifiers): EditorState => {
+  const { interaction } = state;
+  return interaction.kind === "moving" || interaction.kind === "resizing"
+    ? pointerMove(state, { type: "pointerMove", position: interaction.current, button: 0, modifiers })
+    : state;
+};
+
 const keyDown = (state: EditorState, input: KeyInput): EditorState => {
   if (input.key === "Escape") {
     return state.interaction.kind === "idle" ? { ...state, selection: [] } : cancelGesture(state);
   }
-  if (state.interaction.kind !== "idle") return state;
+  if (state.interaction.kind !== "idle") return updateDragModifiers(state, input.modifiers);
   const command = input.modifiers.meta || input.modifiers.ctrl;
   if (command && input.key.toLowerCase() === "a") {
     return { ...state, selection: Object.keys(state.sketch.shapes) };
@@ -412,6 +424,6 @@ export const update = (state: EditorState, input: Input): EditorState => {
     case "keyDown":
       return keyDown(state, input);
     case "keyUp":
-      return state;
+      return updateDragModifiers(state, input.modifiers);
   }
 };

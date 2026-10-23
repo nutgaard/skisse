@@ -115,6 +115,17 @@ describe("grid snapping while resizing", () => {
     expect(boundsOfOnlyShape(state)).toEqual({ x: 100, y: 100, width: 120, height: 100 });
   });
 
+  test("pressing Alt mid-resize snaps the moved edges without moving the pointer", () => {
+    const state = apply(
+      selectedRectangle(),
+      pointerDown({ x: 200, y: 180 }),
+      pointerMove({ x: 223, y: 197 }),
+      keyDown("Alt", { alt: true }),
+    );
+
+    expect(boundsOfOnlyShape(state)).toEqual({ x: 100, y: 100, width: 120, height: 100 });
+  });
+
   test("with Alt held, grabbing a handle of a Shape off the grid without dragging does not resize it", () => {
     const offGrid = click(drawRectangle(newEditor(), { x: 103, y: 107 }, { x: 203, y: 187 }), { x: 150, y: 140 });
 
@@ -167,6 +178,14 @@ describe("flipping", () => {
     const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 0, y: 180 }, { shift: true });
 
     expect(boundsOfOnlyShape(state)).toEqual({ x: 0, y: 100, width: 100, height: 80 });
+  });
+});
+
+describe("flipping with snapping on", () => {
+  test("a pointer just past the opposite edge flips the Shape even when it snaps onto that edge", () => {
+    const state = drag(selectedRectangle(), { x: 200, y: 180 }, { x: 97, y: 186 }, { alt: true });
+
+    expect(boundsOfOnlyShape(state)).toEqual({ x: 90, y: 100, width: 10, height: 90 });
   });
 });
 

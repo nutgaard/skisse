@@ -46,13 +46,16 @@ export type ResizeOptions = {
   readonly minimumSize: number;
 };
 
-// Along one axis the handle moves: where the opposite edge stays, and where the handle's edge is dragged to.
-type EdgeDrag = { readonly anchor: number; readonly target: number; readonly towards: -1 | 1 };
+// Along one axis the handle moves: where the opposite edge stays, where the handle's edge is dragged to, and which
+// side of the opposite edge the pointer is on.
+type EdgeDrag = { readonly anchor: number; readonly target: number; readonly side: -1 | 1 };
 
-// Drags the edge of `span` on the `towards` side by `delta`, snapping where it lands.
+// Drags the edge of `span` on the `towards` side by `delta`, snapping where it lands. The side comes from the
+// unsnapped pointer, so a pointer just past the opposite edge flips the Shape even if it snaps onto that edge.
 const dragEdge = (span: Span, towards: -1 | 1, delta: number, snap: (value: number) => number): EdgeDrag => {
   const anchor = towards > 0 ? span.start : span.start + span.size;
-  return { anchor, target: snap(anchor + towards * span.size + delta), towards };
+  const dragged = anchor + towards * span.size + delta;
+  return { anchor, target: snap(dragged), side: sideOf(anchor, dragged, towards) };
 };
 
 // How much the drag scales a span of `size` along its axis.
@@ -75,7 +78,7 @@ export const resizeBounds = (bounds: Bounds, handle: ResizeHandle, offset: Point
 
   if (!keepAspectRatio || bounds.width === 0 || bounds.height === 0) {
     const resize = (span: Span, edge: EdgeDrag | undefined): Span =>
-      edge ? spanFrom(edge.anchor, edge.target, minimumSize, edge.towards) : span;
+      edge ? spanFrom(edge.anchor, edge.target, minimumSize, edge.side) : span;
     return boundsOfSpans(resize(horizontal, horizontalEdge), resize(vertical, verticalEdge));
   }
 
@@ -89,7 +92,7 @@ export const resizeBounds = (bounds: Bounds, handle: ResizeHandle, offset: Point
   const scaleSpan = (span: Span, edge: EdgeDrag | undefined): Span => {
     const size = span.size * scale;
     return edge
-      ? spanTowards(edge.anchor, sideOf(edge.anchor, edge.target, edge.towards), size)
+      ? spanTowards(edge.anchor, sideOf(edge.anchor, edge.target, edge.side), size)
       : { start: span.start + (span.size - size) / 2, size };
   };
   return boundsOfSpans(scaleSpan(horizontal, horizontalEdge), scaleSpan(vertical, verticalEdge));
