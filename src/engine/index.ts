@@ -10,12 +10,12 @@ export type {
   PointerInput,
   ShapeId,
   Sketch,
-  SymbolId,
   TextMeasurer,
-  Tool,
   WheelInput,
 } from "./editor";
 export { gridSize } from "./grid";
+export { pathData } from "./path";
+export type { Path, PathCommand } from "./path";
 export type { ResizeHandle } from "./resize";
 export {
   activeTool,
@@ -30,4 +30,9 @@ export {
   viewport,
 } from "./queries";
 export type { HandleView, InteractionView, ShapeView } from "./queries";
+export { shapeGeometry } from "./shape-geometry";
+export type { ShapeGeometry } from "./shape-geometry";
+export type { SymbolId } from "./symbols";
+export { symbolIcon, tools } from "./tools";
+export type { Tool, ToolInfo } from "./tools";
 export type { Size, Viewport } from "./viewport";

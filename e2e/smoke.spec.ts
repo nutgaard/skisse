@@ -6,7 +6,7 @@ test("drawing a rectangle shows it on the Sketch, also while dragging, and it is
   await page.goto("./");
   const rectangle = page.locator('[data-symbol="rectangle"]');
 
-  await page.getByRole("button", { name: "Rectangle" }).click();
+  await page.getByRole("button", { name: "Rectangle", exact: true }).click();
   await page.mouse.move(200, 150);
   await page.mouse.down();
   await page.mouse.move(300, 200, { steps: 5 });
@@ -22,8 +22,6 @@ test("drawing a rectangle shows it on the Sketch, also while dragging, and it is
   await page.reload();
 
   await expect(rectangle).toHaveCount(1);
-  await expect(rectangle).toHaveAttribute("x", "200");
-  await expect(rectangle).toHaveAttribute("y", "150");
-  await expect(rectangle).toHaveAttribute("width", "100");
-  await expect(rectangle).toHaveAttribute("height", "50");
+  // The fill has no stroke, so its box is exactly the Shape's.
+  expect(await rectangle.locator(".shape-fill").boundingBox()).toEqual({ x: 200, y: 150, width: 100, height: 50 });
 });

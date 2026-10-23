@@ -44,7 +44,13 @@ describe("drawing a rectangle", () => {
   test("cancelling a rectangle with Escape keeps the selection from before", () => {
     const first = drawRectangle(newEditor(), { x: 100, y: 50 }, { x: 260, y: 130 });
 
-    const state = apply(first, pointerDown({ x: 300, y: 50 }), pointerMove({ x: 400, y: 130 }), keyDown("Escape"));
+    const state = apply(
+      first,
+      selectTool("rectangle"),
+      pointerDown({ x: 300, y: 50 }),
+      pointerMove({ x: 400, y: 130 }),
+      keyDown("Escape"),
+    );
 
     expect(selection(state)).toEqual(["shape-1"]);
   });
@@ -54,6 +60,7 @@ describe("drawing a rectangle", () => {
 
     const state = apply(
       first,
+      selectTool("rectangle"),
       pointerDown({ x: 300, y: 50 }),
       pointerMove({ x: 400, y: 130 }),
       pointerCancel({ x: 400, y: 130 }),
@@ -80,9 +87,34 @@ describe("drawing a rectangle", () => {
   });
 });
 
+describe("clicking instead of dragging", () => {
+  test("while pressing without dragging, no rectangle is shown yet, as it may still become a drag", () => {
+    const state = apply(
+      newEditor(),
+      selectTool("rectangle"),
+      pointerDown({ x: 100, y: 50 }),
+      pointerMove({ x: 102, y: 51 }),
+    );
+
+    expect(currentInteraction(state)).toEqual({ kind: "placingShape", symbol: "rectangle" });
+  });
+
+  test("a press that travels past the drag threshold and back still draws a minimum-size rectangle", () => {
+    const state = apply(
+      newEditor(),
+      selectTool("rectangle"),
+      pointerDown({ x: 100, y: 50 }),
+      pointerMove({ x: 120, y: 70 }),
+      pointerUp({ x: 100, y: 50 }),
+    );
+
+    expect(shapes(state)[0]?.bounds).toEqual({ x: 100, y: 50, width: 10, height: 10 });
+  });
+});
+
 describe("minimum size when drawing", () => {
-  test("a click with the rectangle tool creates a rectangle of the minimum size", () => {
-    const state = drawRectangle(newEditor(), { x: 100, y: 50 }, { x: 100, y: 50 });
+  test("a drag smaller than the minimum creates a rectangle of the minimum size", () => {
+    const state = drawRectangle(newEditor(), { x: 100, y: 50 }, { x: 104, y: 53 });
 
     expect(shapes(state)).toEqual([
       { id: "shape-1", symbol: "rectangle", bounds: { x: 100, y: 50, width: 10, height: 10 } },
@@ -106,7 +138,12 @@ describe("minimum size when drawing", () => {
   });
 
   test("while dragging, the rectangle being created is shown at least at the minimum size", () => {
-    const state = apply(newEditor(), selectTool("rectangle"), pointerDown({ x: 100, y: 50 }), pointerMove({ x: 102, y: 51 }));
+    const state = apply(
+      newEditor(),
+      selectTool("rectangle"),
+      pointerDown({ x: 100, y: 50 }),
+      pointerMove({ x: 104, y: 52 }),
+    );
 
     expect(currentInteraction(state)).toEqual({
       kind: "creatingShape",
@@ -135,7 +172,7 @@ describe("grid snapping when drawing", () => {
     expect(shapes(state)[0]?.bounds).toEqual({ x: 100, y: 110, width: 100, height: 70 });
   });
 
-  test("with Alt held, a click creates a minimum-size rectangle on the grid", () => {
+  test("with Alt held, a click creates a default-size rectangle on the grid", () => {
     const state = apply(
       newEditor(),
       selectTool("rectangle"),
@@ -143,7 +180,7 @@ describe("grid snapping when drawing", () => {
       pointerUp({ x: 103, y: 107 }, { alt: true }),
     );
 
-    expect(shapes(state)[0]?.bounds).toEqual({ x: 100, y: 110, width: 10, height: 10 });
+    expect(shapes(state)[0]?.bounds).toEqual({ x: 20, y: 70, width: 160, height: 80 });
   });
 
   test("with Alt held, a tiny drag still grows the way the pointer went", () => {
