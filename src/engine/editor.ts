@@ -14,6 +14,7 @@ import {
 import { gridSize, nextGridLine, snapToGrid } from "./grid";
 import * as history from "./history";
 import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
+import * as viewport from "./viewport";
 
 export type Modifiers = {
   readonly shift: boolean;
@@ -24,7 +25,7 @@ export type Modifiers = {
 
 export type SymbolId = "rectangle";
 
-export type Tool = "select" | SymbolId;
+export type Tool = "select" | "pan" | SymbolId;
 
 export type PointerInput = {
   readonly type: "pointerDown" | "pointerMove" | "pointerUp" | "pointerCancel";
@@ -39,10 +40,21 @@ export type KeyInput = {
   readonly modifiers: Modifiers;
 };
 
+/** A scroll of `delta` screen pixels, from a mouse wheel or a two-finger trackpad swipe. */
+export type WheelInput = {
+  readonly type: "wheel";
+  readonly position: Point;
+  readonly delta: Point;
+  readonly modifiers: Modifiers;
+};
+
 export type Input =
   | { readonly type: "selectTool"; readonly tool: Tool }
   | PointerInput
   | KeyInput
+  | WheelInput
+  | { readonly type: "pinch"; readonly position: Point; readonly scale: number }
+  | { readonly type: "zoomToFit" | "resetZoom"; readonly screenSize: viewport.Size }
   | { readonly type: "undo" | "redo" };
 
 export type TextMeasurer = (text: string, fontSize: number) => number;
@@ -95,7 +107,9 @@ type Interaction =
       // but a click there without dragging selects just that Shape.
       readonly selectsOnClick: ShapeId | undefined;
     } & Drag)
-  | ({ readonly kind: "resizing"; readonly shapeId: ShapeId; readonly handle: ResizeHandle } & Drag);
+  | ({ readonly kind: "resizing"; readonly shapeId: ShapeId; readonly handle: ResizeHandle } & Drag)
+  // The viewport follows the pointer so that the Sketch point it grabbed stays under it.
+  | { readonly kind: "panning"; readonly grabbed: Point };
 
 export type EditorState = {
   readonly deps: Dependencies;
@@ -103,6 +117,9 @@ export type EditorState = {
   readonly tool: Tool;
   readonly selection: readonly ShapeId[];
   readonly interaction: Interaction;
+  readonly viewport: viewport.Viewport;
+  // While space is held, a press pans instead of using the active tool.
+  readonly spaceHeld: boolean;
   readonly nextIdSequence: number;
   // Earlier and undone Sketches. Only changes to the Sketch are recorded, one step per finished gesture or command.
   readonly history: history.History<Sketch>;
@@ -146,6 +163,8 @@ export const createEditor = (deps: Dependencies, sketch: Sketch = emptySketch): 
   tool: "select",
   selection: [],
   interaction: idle,
+  viewport: viewport.initialViewport,
+  spaceHeld: false,
   nextIdSequence: 1,
   history: history.startHistory(sketch),
 });
@@ -188,11 +207,15 @@ export const resizableShape = (state: EditorState): SymbolShape | undefined => {
   return id !== undefined && others.length === 0 ? state.sketch.shapes[id] : undefined;
 };
 
+// A distance in screen pixels, such as the drag threshold, as a distance on the Sketch at the current zoom.
+const onSketch = (state: EditorState, screenDistance: number): number => screenDistance / state.viewport.zoom;
+
 const handleAt = (state: EditorState, point: Point): { shape: SymbolShape; handle: ResizeHandle } | undefined => {
   const shape = resizableShape(state);
+  const reach = onSketch(state, handleReach);
   const nearby = shape
     ? handlePositions(shape.bounds).find(
-        ({ position }) => Math.abs(position.x - point.x) <= handleReach && Math.abs(position.y - point.y) <= handleReach,
+        ({ position }) => Math.abs(position.x - point.x) <= reach && Math.abs(position.y - point.y) <= reach,
       )
     : undefined;
   return shape && nearby ? { shape, handle: nearby.handle } : undefined;
@@ -254,12 +277,12 @@ const selectionBlock = (sketch: Sketch, selection: readonly ShapeId[]): Bounds =
 type PointerState = Pick<PointerInput, "position" | "modifiers">;
 
 // The drag with the pointer at `pointer`, noting whether it has now travelled past the drag threshold.
-const continueDrag = <D extends Drag>(drag: D, pointer: PointerState): D => ({
+const continueDrag = <D extends Drag>(state: EditorState, drag: D, pointer: PointerState): D => ({
   ...drag,
   current: pointer.position,
   dragged:
     drag.dragged ||
-    Math.hypot(pointer.position.x - drag.origin.x, pointer.position.y - drag.origin.y) >= dragThreshold,
+    Math.hypot(pointer.position.x - drag.origin.x, pointer.position.y - drag.origin.y) >= onSketch(state, dragThreshold),
 });
 
 // Zero until the pointer has travelled past the drag threshold.
@@ -304,7 +327,7 @@ const dragTo = (
 ): EditorState => {
   switch (interaction.kind) {
     case "moving": {
-      const drag = continueDrag(interaction, pointer);
+      const drag = continueDrag(state, interaction, pointer);
       return {
         ...state,
         sketch: moveShapes(drag.before, state.selection, dragOffset(state, drag, pointer)),
@@ -312,12 +335,18 @@ const dragTo = (
       };
     }
     case "resizing":
-      return resizeShape(state, continueDrag(interaction, pointer), pointer);
+      return resizeShape(state, continueDrag(state, interaction, pointer), pointer);
   }
 };
 
-const pointerDown = (state: EditorState, input: PointerInput): EditorState =>
-  state.tool === "select"
+/** Whether a press on the Sketch would pan: with the pan tool, or while space is held. */
+export const pressPans = (state: EditorState): boolean => state.tool === "pan" || state.spaceHeld;
+
+const pointerDown = (state: EditorState, input: PointerInput): EditorState => {
+  if (state.tool === "pan" || state.spaceHeld) {
+    return { ...state, interaction: { kind: "panning", grabbed: input.position } };
+  }
+  return state.tool === "select"
     ? pressWithSelectTool(state, input)
     : {
         ...state,
@@ -329,6 +358,17 @@ const pointerDown = (state: EditorState, input: PointerInput): EditorState =>
           snaps: snapsToGrid(input.modifiers),
         },
       };
+};
+
+// `pointer` is where the grabbed Sketch point is now on screen, in the Sketch coordinates of the current viewport.
+const panTo = (state: EditorState, grabbed: Point, pointer: Point): EditorState => ({
+  ...state,
+  viewport: {
+    ...state.viewport,
+    x: state.viewport.x + grabbed.x - pointer.x,
+    y: state.viewport.y + grabbed.y - pointer.y,
+  },
+});
 
 const pointerMove = (state: EditorState, input: PointerInput): EditorState => {
   const { interaction } = state;
@@ -351,6 +391,8 @@ const pointerMove = (state: EditorState, input: PointerInput): EditorState => {
     case "moving":
     case "resizing":
       return dragTo(state, interaction, input);
+    case "panning":
+      return panTo(state, interaction.grabbed, input.position);
   }
 };
 
@@ -394,6 +436,7 @@ const pointerUp = (state: EditorState, input: PointerInput): EditorState => {
     case "idle":
     case "marqueeSelecting":
     case "resizing":
+    case "panning":
       return finished;
   }
 };
@@ -404,6 +447,7 @@ const cancelGesture = (state: EditorState): EditorState => {
   switch (interaction.kind) {
     case "idle":
     case "creatingShape":
+    case "panning":
       return cancelled;
     case "marqueeSelecting":
       return { ...cancelled, selection: interaction.previousSelection };
@@ -460,11 +504,15 @@ const updateDragModifiers = (state: EditorState, modifiers: Modifiers): EditorSt
       return dragTo(state, interaction, { position: interaction.current, modifiers });
     case "idle":
     case "marqueeSelecting":
+    case "panning":
       return state;
   }
 };
 
-const keyDown = (state: EditorState, input: KeyInput): EditorState => {
+const keyDown = (state: EditorState, input: KeyInput): EditorState =>
+  input.key === " " ? { ...state, spaceHeld: true } : shortcut(state, input);
+
+const shortcut = (state: EditorState, input: KeyInput): EditorState => {
   if (input.key === "Escape") {
     return isIdle(state) ? { ...state, selection: [] } : cancelGesture(state);
   }
@@ -492,22 +540,51 @@ const undo = (state: EditorState): EditorState => restore(state, history.undo(st
 
 const redo = (state: EditorState): EditorState => restore(state, history.redo(state.history));
 
+// Scrolling 100 pixels zooms by 2×. A mouse wheel scrolls about 100 pixels a notch, which would zoom too far at a
+// time, so a single scroll counts for at most half that. A trackpad scrolls a few pixels at a time.
+const zoomFactorOfScroll = (deltaY: number): number => 2 ** (-Math.max(-50, Math.min(50, deltaY)) / 100);
+
+const scroll = (state: EditorState, input: WheelInput): EditorState =>
+  input.modifiers.ctrl || input.modifiers.meta
+    ? { ...state, viewport: viewport.zoomAround(state.viewport, input.position, zoomFactorOfScroll(input.delta.y)) }
+    : { ...state, viewport: viewport.panBy(state.viewport, input.delta) };
+
+// An empty Sketch has nothing to frame, so it goes back to 100% instead.
+const zoomToFit = (state: EditorState, screenSize: viewport.Size): viewport.Viewport => {
+  const all = Object.values(state.sketch.shapes).map(({ bounds }) => bounds);
+  return all.length === 0 ? viewport.resetZoom(state.viewport, screenSize) : viewport.fit(screenSize, enclosingBounds(all));
+};
+
+// Pointer positions arrive in screen pixels. Gestures on the Sketch work in Sketch coordinates.
+const inSketch = (state: EditorState, input: PointerInput): PointerInput => ({
+  ...input,
+  position: viewport.toSketch(state.viewport, input.position),
+});
+
 const applyInput = (state: EditorState, input: Input): EditorState => {
   switch (input.type) {
     case "selectTool":
       return { ...state, tool: input.tool };
     case "pointerDown":
-      return pointerDown(state, input);
+      return pointerDown(state, inSketch(state, input));
     case "pointerMove":
-      return pointerMove(state, input);
+      return pointerMove(state, inSketch(state, input));
     case "pointerUp":
-      return pointerUp(state, input);
+      return pointerUp(state, inSketch(state, input));
     case "pointerCancel":
       return cancelGesture(state);
     case "keyDown":
       return keyDown(state, input);
     case "keyUp":
-      return updateDragModifiers(state, input.modifiers);
+      return input.key === " " ? { ...state, spaceHeld: false } : updateDragModifiers(state, input.modifiers);
+    case "wheel":
+      return scroll(state, input);
+    case "pinch":
+      return { ...state, viewport: viewport.zoomAround(state.viewport, input.position, input.scale) };
+    case "zoomToFit":
+      return { ...state, viewport: zoomToFit(state, input.screenSize) };
+    case "resetZoom":
+      return { ...state, viewport: viewport.resetZoom(state.viewport, input.screenSize) };
     case "undo":
       return isIdle(state) ? undo(state) : state;
     case "redo":

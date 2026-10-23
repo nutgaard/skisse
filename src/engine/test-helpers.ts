@@ -11,7 +11,8 @@ import {
 } from "./editor";
 import type { Point } from "./geometry";
 import { fixedWidthTextMeasurer, sequentialIds } from "./fakes";
-import { shapes } from "./queries";
+import { selection, shapes } from "./queries";
+import type { Size } from "./viewport";
 
 const noModifiers: Modifiers = { shift: false, alt: false, ctrl: false, meta: false };
 
@@ -36,6 +37,19 @@ const pointer =
     modifiers: { ...noModifiers, ...modifiers },
   });
 
+export const wheel = (position: Point, delta: Point, modifiers: Partial<Modifiers> = {}): Input => ({
+  type: "wheel",
+  position,
+  delta,
+  modifiers: { ...noModifiers, ...modifiers },
+});
+
+export const zoomToFit = (screenSize: Size): Input => ({ type: "zoomToFit", screenSize });
+
+export const resetZoom = (screenSize: Size): Input => ({ type: "resetZoom", screenSize });
+
+export const pinch = (position: Point, scale: number): Input => ({ type: "pinch", position, scale });
+
 export const pointerDown = pointer("pointerDown");
 export const pointerMove = pointer("pointerMove");
 export const pointerUp = pointer("pointerUp");
@@ -50,6 +64,15 @@ export const keyUp = keyboard("keyUp");
 
 export const drawRectangle = (state: EditorState, from: Point, to: Point): EditorState =>
   apply(state, selectTool("rectangle"), pointerDown(from), pointerMove(to), pointerUp(to));
+
+/** The Sketch point shown at the screen point `at`, found by clicking there with the rectangle tool. */
+export const sketchPointUnder = (state: EditorState, at: Point): Point => {
+  const created = apply(state, selectTool("rectangle"), pointerDown(at), pointerUp(at));
+  const [id] = selection(created);
+  const shape = shapes(created).find((candidate) => candidate.id === id);
+  if (!shape) throw new Error("clicking with the rectangle tool created no Shape");
+  return { x: shape.bounds.x, y: shape.bounds.y };
+};
 
 export const click = (state: EditorState, at: Point, modifiers: Partial<Modifiers> = {}): EditorState =>
   apply(state, selectTool("select"), pointerDown(at, modifiers), pointerUp(at, modifiers));
