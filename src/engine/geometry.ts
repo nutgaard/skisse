@@ -7,12 +7,7 @@ export type Bounds = {
   readonly height: number;
 };
 
-export const boundsBetween = (a: Point, b: Point): Bounds => ({
-  x: Math.min(a.x, b.x),
-  y: Math.min(a.y, b.y),
-  width: Math.abs(b.x - a.x),
-  height: Math.abs(b.y - a.y),
-});
+export const boundsBetween = (a: Point, b: Point): Bounds => boundsFrom(a, b, 0);
 
 export const contains = (bounds: Bounds, point: Point): boolean =>
   point.x >= bounds.x &&
@@ -39,24 +34,34 @@ export const enclosingBounds = (all: readonly Bounds[]): Bounds =>
 /** A stretch along one axis, such as a Shape's left edge and width. */
 export type Span = { readonly start: number; readonly size: number };
 
+export const horizontalSpan = (bounds: Bounds): Span => ({ start: bounds.x, size: bounds.width });
+
+export const verticalSpan = (bounds: Bounds): Span => ({ start: bounds.y, size: bounds.height });
+
+export const boundsOfSpans = (horizontal: Span, vertical: Span): Bounds => ({
+  x: horizontal.start,
+  y: vertical.start,
+  width: horizontal.size,
+  height: vertical.size,
+});
+
+/** Which side of `anchor` the `target` is on, or `fallback` when it is on the anchor. */
+export const sideOf = (anchor: number, target: number, fallback: -1 | 1): -1 | 1 =>
+  target === anchor ? fallback : target > anchor ? 1 : -1;
+
+/** The span of `size` starting at `anchor` and running towards `side`. */
+export const spanTowards = (anchor: number, side: -1 | 1, size: number): Span => ({
+  start: side > 0 ? anchor : anchor - size,
+  size,
+});
+
 /**
  * The span from `anchor` towards `target`, at least `minimum` long. It flips to the other side of the anchor when
  * the target is there, and a target on the anchor spans in `fallbackDirection`.
  */
-export const spanFrom = (
-  anchor: number,
-  target: number,
-  minimum: number,
-  fallbackDirection: -1 | 1 = 1,
-): Span => {
-  const direction = target === anchor ? fallbackDirection : Math.sign(target - anchor);
-  const size = Math.max(Math.abs(target - anchor), minimum);
-  return { start: direction > 0 ? anchor : anchor - size, size };
-};
+export const spanFrom = (anchor: number, target: number, minimum: number, fallbackDirection: -1 | 1 = 1): Span =>
+  spanTowards(anchor, sideOf(anchor, target, fallbackDirection), Math.max(Math.abs(target - anchor), minimum));
 
 /** The Bounds from `anchor` towards `target`, at least `minimum` wide and high. */
-export const boundsFrom = (anchor: Point, target: Point, minimum: number): Bounds => {
-  const horizontal = spanFrom(anchor.x, target.x, minimum);
-  const vertical = spanFrom(anchor.y, target.y, minimum);
-  return { x: horizontal.start, y: vertical.start, width: horizontal.size, height: vertical.size };
-};
+export const boundsFrom = (anchor: Point, target: Point, minimum: number): Bounds =>
+  boundsOfSpans(spanFrom(anchor.x, target.x, minimum), spanFrom(anchor.y, target.y, minimum));

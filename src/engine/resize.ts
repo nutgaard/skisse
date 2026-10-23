@@ -1,4 +1,14 @@
-import { spanFrom, type Bounds, type Point, type Span } from "./geometry";
+import {
+  boundsOfSpans,
+  horizontalSpan,
+  sideOf,
+  spanFrom,
+  spanTowards,
+  verticalSpan,
+  type Bounds,
+  type Point,
+  type Span,
+} from "./geometry";
 
 /** A resize handle, named by compass direction: the corners and the middle of each side. */
 export type ResizeHandle = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w";
@@ -39,12 +49,14 @@ export type ResizeOptions = {
 // Along one axis the handle moves: where the opposite edge stays, and where the handle's edge is dragged to.
 type EdgeDrag = { readonly anchor: number; readonly target: number; readonly towards: -1 | 1 };
 
+// Drags the edge of `span` on the `towards` side by `delta`, snapping where it lands.
 const dragEdge = (span: Span, towards: -1 | 1, delta: number, snap: (value: number) => number): EdgeDrag => {
   const anchor = towards > 0 ? span.start : span.start + span.size;
   return { anchor, target: snap(anchor + towards * span.size + delta), towards };
 };
 
-const dragRatio = (edge: EdgeDrag, size: number): number => Math.abs(edge.target - edge.anchor) / size;
+// How much the drag scales a span of `size` along its axis.
+const axisScale = (edge: EdgeDrag, size: number): number => Math.abs(edge.target - edge.anchor) / size;
 
 /**
  * The Bounds after dragging `handle` by `offset`. Along each axis the handle moves, the opposite edge stays put and
@@ -56,26 +68,29 @@ const dragRatio = (edge: EdgeDrag, size: number): number => Math.abs(edge.target
 export const resizeBounds = (bounds: Bounds, handle: ResizeHandle, offset: Point, options: ResizeOptions): Bounds => {
   const { snap, keepAspectRatio, minimumSize } = options;
   const direction = handleDirections[handle];
-  const horizontalSpan = { start: bounds.x, size: bounds.width };
-  const verticalSpan = { start: bounds.y, size: bounds.height };
-  const horizontal = direction.x === 0 ? undefined : dragEdge(horizontalSpan, direction.x, offset.x, snap);
-  const vertical = direction.y === 0 ? undefined : dragEdge(verticalSpan, direction.y, offset.y, snap);
+  const horizontal = horizontalSpan(bounds);
+  const vertical = verticalSpan(bounds);
+  const horizontalEdge = direction.x === 0 ? undefined : dragEdge(horizontal, direction.x, offset.x, snap);
+  const verticalEdge = direction.y === 0 ? undefined : dragEdge(vertical, direction.y, offset.y, snap);
 
-  const keepsRatio = keepAspectRatio && bounds.width > 0 && bounds.height > 0;
-  const scale = keepsRatio
-    ? Math.max(
-        ...(horizontal ? [dragRatio(horizontal, bounds.width)] : []),
-        ...(vertical ? [dragRatio(vertical, bounds.height)] : []),
-        minimumSize / bounds.width,
-        minimumSize / bounds.height,
-      )
-    : 1;
+  if (!keepAspectRatio || bounds.width === 0 || bounds.height === 0) {
+    const resize = (span: Span, edge: EdgeDrag | undefined): Span =>
+      edge ? spanFrom(edge.anchor, edge.target, minimumSize, edge.towards) : span;
+    return boundsOfSpans(resize(horizontal, horizontalEdge), resize(vertical, verticalEdge));
+  }
 
-  const resize = (span: Span, edge: EdgeDrag | undefined): Span => {
-    if (edge) return spanFrom(edge.anchor, edge.target, keepsRatio ? span.size * scale : minimumSize, edge.towards);
-    return { start: span.start + (span.size - span.size * scale) / 2, size: span.size * scale };
+  const scale = Math.max(
+    ...(horizontalEdge ? [axisScale(horizontalEdge, bounds.width)] : []),
+    ...(verticalEdge ? [axisScale(verticalEdge, bounds.height)] : []),
+    minimumSize / bounds.width,
+    minimumSize / bounds.height,
+  );
+  // The scale sets the size. The pointer only decides which side of the opposite edge the Shape is on.
+  const scaleSpan = (span: Span, edge: EdgeDrag | undefined): Span => {
+    const size = span.size * scale;
+    return edge
+      ? spanTowards(edge.anchor, sideOf(edge.anchor, edge.target, edge.towards), size)
+      : { start: span.start + (span.size - size) / 2, size };
   };
-  const x = resize(horizontalSpan, horizontal);
-  const y = resize(verticalSpan, vertical);
-  return { x: x.start, y: y.start, width: x.size, height: y.size };
+  return boundsOfSpans(scaleSpan(horizontal, horizontalEdge), scaleSpan(vertical, verticalEdge));
 };
