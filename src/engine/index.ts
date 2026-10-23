@@ -14,5 +14,5 @@ export type {
   Tool,
 } from "./editor";
 export type { ResizeHandle } from "./resize";
-export { activeTool, currentInteraction, resizeHandles, selection, shapes } from "./queries";
+export { activeTool, canRedo, canUndo, currentInteraction, resizeHandles, selection, shapes } from "./queries";
 export type { HandleView, InteractionView, ShapeView } from "./queries";

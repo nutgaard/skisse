@@ -1,6 +1,8 @@
 import { useEffect, useReducer, type PointerEvent } from "react";
 import {
   activeTool,
+  canRedo,
+  canUndo,
   createEditor,
   currentInteraction,
   resizeHandles,
@@ -114,6 +116,13 @@ export const Editor = ({ deps }: { readonly deps: Dependencies }) => {
             {label}
           </button>
         ))}
+        <span className="toolbar-separator" />
+        <button type="button" disabled={!canUndo(state)} onClick={() => dispatch({ type: "undo" })}>
+          Undo
+        </button>
+        <button type="button" disabled={!canRedo(state)} onClick={() => dispatch({ type: "redo" })}>
+          Redo
+        </button>
       </div>
     </>
   );

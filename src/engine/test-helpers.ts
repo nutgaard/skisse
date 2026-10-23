@@ -22,6 +22,10 @@ export const apply = (state: EditorState, ...inputs: readonly Input[]): EditorSt
 
 export const selectTool = (tool: Tool): Input => ({ type: "selectTool", tool });
 
+export const undoInput: Input = { type: "undo" };
+
+export const redoInput: Input = { type: "redo" };
+
 const pointer =
   (type: PointerInput["type"]) =>
   (position: Point, modifiers: Partial<Modifiers> = {}): Input => ({
