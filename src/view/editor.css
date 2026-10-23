@@ -85,3 +85,14 @@ body,
 .toolbar button[aria-pressed="true"] {
   background: #e0e7ff;
 }
+
+.toolbar button:disabled {
+  color: #aaa;
+  cursor: default;
+}
+
+.toolbar-separator {
+  width: 1px;
+  margin: 4px 2px;
+  background: #ddd;
+}

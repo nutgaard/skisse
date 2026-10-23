@@ -1,5 +1,6 @@
 import { drawnBounds, resizableShape, type EditorState, type ShapeId, type SymbolId, type Tool } from "./editor";
 import { boundsBetween, type Bounds, type Point } from "./geometry";
+import * as history from "./history";
 import { handlePositions, type ResizeHandle } from "./resize";
 
 // What queries return about a Shape. Kept apart from the stored SymbolShape so the stored model can change
@@ -21,6 +22,10 @@ export const resizeHandles = (state: EditorState): readonly HandleView[] => {
   const shape = resizableShape(state);
   return shape ? handlePositions(shape.bounds) : [];
 };
+
+export const canUndo = (state: EditorState): boolean => history.canUndo(state.history);
+
+export const canRedo = (state: EditorState): boolean => history.canRedo(state.history);
 
 export const activeTool = (state: EditorState): Tool => state.tool;
 

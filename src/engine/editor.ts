@@ -12,6 +12,7 @@ import {
   type Span,
 } from "./geometry";
 import { gridSize, nextGridLine, snapToGrid } from "./grid";
+import * as history from "./history";
 import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
 
 export type Modifiers = {
@@ -38,7 +39,11 @@ export type KeyInput = {
   readonly modifiers: Modifiers;
 };
 
-export type Input = { readonly type: "selectTool"; readonly tool: Tool } | PointerInput | KeyInput;
+export type Input =
+  | { readonly type: "selectTool"; readonly tool: Tool }
+  | PointerInput
+  | KeyInput
+  | { readonly type: "undo" | "redo" };
 
 export type TextMeasurer = (text: string, fontSize: number) => number;
 
@@ -99,6 +104,8 @@ export type EditorState = {
   readonly selection: readonly ShapeId[];
   readonly interaction: Interaction;
   readonly nextIdSequence: number;
+  // Earlier and undone Sketches. Only changes to the Sketch are recorded, one step per finished gesture or command.
+  readonly history: history.History<Sketch>;
 };
 
 const idle: Interaction = { kind: "idle" };
@@ -128,13 +135,16 @@ const snapsToGrid = (modifiers: Modifiers): boolean => modifiers.alt;
 
 const snapperFor = (snaps: boolean): ((value: number) => number) => (snaps ? snapToGrid : (value) => value);
 
+const emptySketch: Sketch = { shapes: {} };
+
 export const createEditor = (deps: Dependencies): EditorState => ({
   deps,
-  sketch: { shapes: {} },
+  sketch: emptySketch,
   tool: "select",
   selection: [],
   interaction: idle,
   nextIdSequence: 1,
+  history: history.startHistory(emptySketch),
 });
 
 // Shapes are hit-tested as if filled, even with a transparent fill. The topmost Shape wins.
@@ -454,13 +464,26 @@ const keyDown = (state: EditorState, input: KeyInput): EditorState => {
   if (command && input.key.toLowerCase() === "a") {
     return { ...state, selection: Object.keys(state.sketch.shapes) };
   }
+  if (command && input.key.toLowerCase() === "z") return input.modifiers.shift ? redo(state) : undo(state);
   if (input.key === "Delete" || input.key === "Backspace") return deleteSelection(state);
   const direction = nudgeDirections[input.key];
   if (direction) return nudge(state, direction, input.modifiers);
   return state;
 };
 
-export const update = (state: EditorState, input: Input): EditorState => {
+// Puts back the Sketch the history now holds. Shapes that no longer exist drop out of the selection.
+const restore = (state: EditorState, restored: history.History<Sketch>): EditorState => ({
+  ...state,
+  sketch: restored.present,
+  selection: state.selection.filter((id) => restored.present.shapes[id] !== undefined),
+  history: restored,
+});
+
+const undo = (state: EditorState): EditorState => restore(state, history.undo(state.history));
+
+const redo = (state: EditorState): EditorState => restore(state, history.redo(state.history));
+
+const step = (state: EditorState, input: Input): EditorState => {
   switch (input.type) {
     case "selectTool":
       return { ...state, tool: input.tool };
@@ -476,5 +499,16 @@ export const update = (state: EditorState, input: Input): EditorState => {
       return keyDown(state, input);
     case "keyUp":
       return updateDragModifiers(state, input.modifiers);
+    case "undo":
+      return state.interaction.kind === "idle" ? undo(state) : state;
+    case "redo":
+      return state.interaction.kind === "idle" ? redo(state) : state;
   }
+};
+
+// A change to the Sketch is recorded once the editor is idle again, so a whole gesture is one step and a cancelled
+// one, which puts the Sketch back, records nothing.
+export const update = (state: EditorState, input: Input): EditorState => {
+  const next = step(state, input);
+  return next.interaction.kind === "idle" ? { ...next, history: history.record(next.history, next.sketch) } : next;
 };
