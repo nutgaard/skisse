@@ -57,10 +57,10 @@ export const spanTowards = (anchor: number, side: -1 | 1, size: number): Span =>
 
 /**
  * The span from `anchor` towards `target`, at least `minimum` long. It flips to the other side of the anchor when
- * the target is there, and a target on the anchor spans in `fallbackDirection`.
+ * the target is there, and a target on the anchor spans forwards.
  */
-export const spanFrom = (anchor: number, target: number, minimum: number, fallbackDirection: -1 | 1 = 1): Span =>
-  spanTowards(anchor, sideOf(anchor, target, fallbackDirection), Math.max(Math.abs(target - anchor), minimum));
+export const spanFrom = (anchor: number, target: number, minimum: number): Span =>
+  spanTowards(anchor, sideOf(anchor, target, 1), Math.max(Math.abs(target - anchor), minimum));
 
 /** The Bounds from `anchor` towards `target`, at least `minimum` wide and high. */
 export const boundsFrom = (anchor: Point, target: Point, minimum: number): Bounds =>

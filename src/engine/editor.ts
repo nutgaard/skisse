@@ -223,10 +223,10 @@ const moveShapes = (sketch: Sketch, ids: readonly ShapeId[], offset: Point): Ske
 const selectionBlock = (sketch: Sketch, selection: readonly ShapeId[]): Bounds =>
   enclosingBounds(selection.flatMap((id) => sketch.shapes[id]?.bounds ?? []));
 
-// The drag with the pointer at `input`, noting whether it has now travelled past the drag threshold.
 // Where the pointer is and which modifiers are held: all a drag needs, whether from a pointer move or a key press.
 type PointerState = Pick<PointerInput, "position" | "modifiers">;
 
+// The drag with the pointer at `pointer`, noting whether it has now travelled past the drag threshold.
 const continueDrag = <D extends Drag>(drag: D, pointer: PointerState): D => ({
   ...drag,
   current: pointer.position,
