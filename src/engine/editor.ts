@@ -137,16 +137,17 @@ const snapsToGrid = (modifiers: Modifiers): boolean => modifiers.alt;
 
 const snapperFor = (snaps: boolean): ((value: number) => number) => (snaps ? snapToGrid : (value) => value);
 
-const emptySketch: Sketch = { shapes: {} };
+export const emptySketch: Sketch = { shapes: {} };
 
-export const createEditor = (deps: Dependencies): EditorState => ({
+/** A fresh editor on `sketch`, a new empty one by default. Nothing is selected and there is nothing to undo. */
+export const createEditor = (deps: Dependencies, sketch: Sketch = emptySketch): EditorState => ({
   deps,
-  sketch: emptySketch,
+  sketch,
   tool: "select",
   selection: [],
   interaction: idle,
   nextIdSequence: 1,
-  history: history.startHistory(emptySketch),
+  history: history.startHistory(sketch),
 });
 
 // Shapes are hit-tested as if filled, even with a transparent fill. The topmost Shape wins.
@@ -358,14 +359,20 @@ const addShape = (sketch: Sketch, shape: SymbolShape): Sketch => ({
   shapes: { ...sketch.shapes, [shape.id]: shape },
 });
 
+// The first sequence number, from `sequence` on, whose ID is not taken yet. A loaded Sketch can already hold IDs that
+// the generator gives again, such as when a Sketch is closed and opened again, which starts the sequence afresh.
+const freeIdSequence = (state: EditorState, sequence: number): number =>
+  state.sketch.shapes[state.deps.generateId(sequence)] === undefined ? sequence : freeIdSequence(state, sequence + 1);
+
 // A new Shape becomes the selection, so it can be adjusted straight away.
 const createShape = (state: EditorState, symbol: SymbolId, bounds: Bounds): EditorState => {
-  const shape: SymbolShape = { id: state.deps.generateId(state.nextIdSequence), symbol, bounds };
+  const sequence = freeIdSequence(state, state.nextIdSequence);
+  const shape: SymbolShape = { id: state.deps.generateId(sequence), symbol, bounds };
   return {
     ...state,
     sketch: addShape(state.sketch, shape),
     selection: [shape.id],
-    nextIdSequence: state.nextIdSequence + 1,
+    nextIdSequence: sequence + 1,
   };
 };
 

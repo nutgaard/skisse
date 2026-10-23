@@ -6,6 +6,7 @@ import {
   type KeyInput,
   type Modifiers,
   type PointerInput,
+  type Sketch,
   type Tool,
 } from "./editor";
 import type { Point } from "./geometry";
@@ -14,8 +15,8 @@ import { shapes } from "./queries";
 
 const noModifiers: Modifiers = { shift: false, alt: false, ctrl: false, meta: false };
 
-export const newEditor = (): EditorState =>
-  createEditor({ measureText: fixedWidthTextMeasurer, generateId: sequentialIds });
+export const newEditor = (sketch?: Sketch): EditorState =>
+  createEditor({ measureText: fixedWidthTextMeasurer, generateId: sequentialIds }, sketch);
 
 export const apply = (state: EditorState, ...inputs: readonly Input[]): EditorState =>
   inputs.reduce(update, state);
