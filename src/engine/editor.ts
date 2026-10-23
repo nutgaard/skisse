@@ -346,9 +346,15 @@ const addShape = (sketch: Sketch, shape: SymbolShape): Sketch => ({
   shapes: { ...sketch.shapes, [shape.id]: shape },
 });
 
+// A new Shape becomes the selection, so it can be adjusted straight away.
 const createShape = (state: EditorState, symbol: SymbolId, bounds: Bounds): EditorState => {
   const shape: SymbolShape = { id: state.deps.generateId(state.nextIdSequence), symbol, bounds };
-  return { ...state, sketch: addShape(state.sketch, shape), nextIdSequence: state.nextIdSequence + 1 };
+  return {
+    ...state,
+    sketch: addShape(state.sketch, shape),
+    selection: [shape.id],
+    nextIdSequence: state.nextIdSequence + 1,
+  };
 };
 
 const pointerUp = (state: EditorState, input: PointerInput): EditorState => {

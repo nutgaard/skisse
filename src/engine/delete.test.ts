@@ -23,6 +23,6 @@ describe("deleting the selection", () => {
   });
 
   test("deleting with nothing selected removes nothing", () => {
-    expect(ids(press(threeRectangles(), "Delete"))).toEqual(["shape-1", "shape-2", "shape-3"]);
+    expect(ids(press(press(threeRectangles(), "Escape"), "Delete"))).toEqual(["shape-1", "shape-2", "shape-3"]);
   });
 });

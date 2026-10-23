@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { currentInteraction, shapes } from "./queries";
+import { currentInteraction, selection, shapes } from "./queries";
 import { apply, drawRectangle, keyDown, newEditor, pointerDown, pointerMove, pointerUp, selectTool } from "./test-helpers";
 
 describe("drawing a rectangle", () => {
@@ -17,6 +17,26 @@ describe("drawing a rectangle", () => {
     expect(shapes(state)).toEqual([
       { id: "shape-1", symbol: "rectangle", bounds: { x: 100, y: 50, width: 160, height: 80 } },
     ]);
+  });
+
+  test("the new rectangle is selected", () => {
+    const state = drawRectangle(newEditor(), { x: 100, y: 50 }, { x: 260, y: 130 });
+
+    expect(selection(state)).toEqual(["shape-1"]);
+  });
+
+  test("drawing another rectangle selects only the new one", () => {
+    const first = drawRectangle(newEditor(), { x: 100, y: 50 }, { x: 260, y: 130 });
+
+    expect(selection(drawRectangle(first, { x: 300, y: 50 }, { x: 400, y: 130 }))).toEqual(["shape-2"]);
+  });
+
+  test("cancelling a rectangle with Escape keeps the selection from before", () => {
+    const first = drawRectangle(newEditor(), { x: 100, y: 50 }, { x: 260, y: 130 });
+
+    const state = apply(first, pointerDown({ x: 300, y: 50 }), pointerMove({ x: 400, y: 130 }), keyDown("Escape"));
+
+    expect(selection(state)).toEqual(["shape-1"]);
   });
 
   test("while dragging, the rectangle being created follows the pointer", () => {

@@ -61,7 +61,7 @@ describe("nudging the selection with the arrow keys", () => {
   });
 
   test("arrow keys do nothing without a selection", () => {
-    expect(positions(press(twoRectangles(), "ArrowDown"))).toEqual({
+    expect(positions(press(press(twoRectangles(), "Escape"), "ArrowDown"))).toEqual({
       "shape-1": { x: 100, y: 100 },
       "shape-2": { x: 300, y: 100 },
     });

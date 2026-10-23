@@ -141,7 +141,7 @@ describe("select all", () => {
   });
 
   test("A without Cmd or Ctrl does not select anything", () => {
-    expect(selection(press(twoRectangles(), "a"))).toEqual([]);
+    expect(selection(press(press(twoRectangles(), "Escape"), "a"))).toEqual([]);
   });
 });
 
@@ -164,7 +164,7 @@ describe("Escape", () => {
 
   test("the pointer moving on after Escape no longer changes the selection", () => {
     const state = apply(
-      twoRectangles(),
+      press(twoRectangles(), "Escape"),
       selectTool("select"),
       pointerDown({ x: 50, y: 50 }),
       keyDown("Escape"),

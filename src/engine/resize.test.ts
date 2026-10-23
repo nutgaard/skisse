@@ -10,6 +10,7 @@ import {
   newEditor,
   pointerDown,
   pointerMove,
+  press,
   selectTool,
 } from "./test-helpers";
 
@@ -33,7 +34,9 @@ describe("resize handles", () => {
   });
 
   test("there are no handles without a selection", () => {
-    expect(resizeHandles(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 }))).toEqual([]);
+    const unselected = press(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 }), "Escape");
+
+    expect(resizeHandles(unselected)).toEqual([]);
   });
 
   test("there are no handles when several Shapes are selected", () => {
