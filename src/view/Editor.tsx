@@ -1,4 +1,4 @@
-import { useEffect, useReducer, type PointerEvent } from "react";
+import { useCallback, useEffect, useReducer, useRef, type PointerEvent } from "react";
 import {
   activeTool,
   canRedo,
@@ -8,10 +8,12 @@ import {
   resizeHandles,
   selection,
   shapes,
+  sketch,
   update,
   type Dependencies,
   type KeyInput,
   type PointerInput,
+  type Sketch,
   type Tool,
 } from "../engine";
 
@@ -46,17 +48,63 @@ const handleSize = 8;
 // Cmd/Ctrl+A is select all in the editor, so the browser must not also select the page's text.
 const isSelectAll = (event: KeyboardEvent) => (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a";
 
-export const Editor = ({ deps }: { readonly deps: Dependencies }) => {
-  const [state, dispatch] = useReducer(update, deps, createEditor);
+// Keys typed into a text field, such as when renaming a Sketch, are not editor shortcuts.
+const isTyping = (event: KeyboardEvent) => event.target instanceof HTMLInputElement;
+
+// How long, in milliseconds, the Sketch must stay unchanged before it is saved.
+const autosaveDelay = 300;
+
+// Saves the Sketch shortly after each change, and straight away when the Editor closes or the page is left, so a
+// change made just before is never lost.
+const useAutosave = (current: Sketch, save: (sketch: Sketch) => void) => {
+  const saved = useRef(current);
+  const unsaved = useRef<Sketch | undefined>(undefined);
+
+  const flush = useCallback(() => {
+    if (unsaved.current === undefined) return;
+    save(unsaved.current);
+    saved.current = unsaved.current;
+    unsaved.current = undefined;
+  }, [save]);
+
+  useEffect(() => {
+    unsaved.current = current === saved.current ? undefined : current;
+    const timer = setTimeout(flush, autosaveDelay);
+    return () => clearTimeout(timer);
+  }, [current, flush]);
+
+  useEffect(() => {
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, [flush]);
+};
+
+type EditorProps = {
+  readonly deps: Dependencies;
+  /** The Sketch to open. A different Sketch needs a new Editor, so its undo history starts afresh. */
+  readonly sketch: Sketch;
+  readonly onSave: (sketch: Sketch) => void;
+};
+
+export const Editor = ({ deps, sketch: opened, onSave }: EditorProps) => {
+  const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, opened));
   const interaction = currentInteraction(state);
   const selected = new Set(selection(state));
 
+  useAutosave(sketch(state), onSave);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isTyping(event)) return;
       if (isSelectAll(event)) event.preventDefault();
       dispatch(keyInput("keyDown", event));
     };
-    const onKeyUp = (event: KeyboardEvent) => dispatch(keyInput("keyUp", event));
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (!isTyping(event)) dispatch(keyInput("keyUp", event));
+    };
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     return () => {

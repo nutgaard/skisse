@@ -1,4 +1,12 @@
-import { drawnBounds, resizableShape, type EditorState, type ShapeId, type SymbolId, type Tool } from "./editor";
+import {
+  drawnBounds,
+  resizableShape,
+  type EditorState,
+  type ShapeId,
+  type Sketch,
+  type SymbolId,
+  type Tool,
+} from "./editor";
 import { boundsBetween, type Bounds, type Point } from "./geometry";
 import * as history from "./history";
 import { handlePositions, type ResizeHandle } from "./resize";
@@ -13,6 +21,9 @@ export type ShapeView = {
 
 export const shapes = (state: EditorState): readonly ShapeView[] =>
   Object.values(state.sketch.shapes).map(({ id, symbol, bounds }) => ({ id, symbol, bounds }));
+
+/** The Sketch as of the last finished change, leaving out any gesture still in progress. This is what to save. */
+export const sketch = (state: EditorState): Sketch => state.history.present;
 
 export const selection = (state: EditorState): readonly ShapeId[] => state.selection;
 

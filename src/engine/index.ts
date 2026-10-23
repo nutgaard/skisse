@@ -1,4 +1,4 @@
-export { createEditor, update } from "./editor";
+export { createEditor, emptySketch, update } from "./editor";
 export type { Bounds, Point } from "./geometry";
 export type {
   Dependencies,
@@ -9,10 +9,11 @@ export type {
   Modifiers,
   PointerInput,
   ShapeId,
+  Sketch,
   SymbolId,
   TextMeasurer,
   Tool,
 } from "./editor";
 export type { ResizeHandle } from "./resize";
-export { activeTool, canRedo, canUndo, currentInteraction, resizeHandles, selection, shapes } from "./queries";
+export { activeTool, canRedo, canUndo, currentInteraction, resizeHandles, selection, shapes, sketch } from "./queries";
 export type { HandleView, InteractionView, ShapeView } from "./queries";
