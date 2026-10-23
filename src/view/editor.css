@@ -21,6 +21,46 @@ body,
   stroke-width: 2;
 }
 
+.selection-outline {
+  fill: none;
+  stroke: #4f46e5;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.resize-handle {
+  fill: #fff;
+  stroke: #4f46e5;
+  stroke-width: 1;
+}
+
+.resize-handle[data-handle="nw"],
+.resize-handle[data-handle="se"] {
+  cursor: nwse-resize;
+}
+
+.resize-handle[data-handle="ne"],
+.resize-handle[data-handle="sw"] {
+  cursor: nesw-resize;
+}
+
+.resize-handle[data-handle="n"],
+.resize-handle[data-handle="s"] {
+  cursor: ns-resize;
+}
+
+.resize-handle[data-handle="e"],
+.resize-handle[data-handle="w"] {
+  cursor: ew-resize;
+}
+
+.selection-box {
+  fill: rgb(79 70 229 / 0.08);
+  stroke: #4f46e5;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
 .toolbar {
   position: fixed;
   top: 12px;
