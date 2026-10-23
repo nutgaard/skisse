@@ -40,7 +40,7 @@ export const currentInteraction = (state: EditorState): InteractionView => {
       return {
         kind: "creatingShape",
         symbol: interaction.symbol,
-        bounds: drawnBounds(interaction.origin, interaction.current),
+        bounds: drawnBounds(interaction.origin, interaction.current, interaction.snaps),
       };
     case "marqueeSelecting":
       return { kind: "marqueeSelecting", bounds: boundsBetween(interaction.origin, interaction.current) };

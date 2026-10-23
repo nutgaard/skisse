@@ -1,12 +1,15 @@
 import {
   boundsBetween,
-  boundsFrom,
+  boundsOfSpans,
   contains,
   containsBounds,
   enclosingBounds,
+  sideOf,
+  spanTowards,
   translate,
   type Bounds,
   type Point,
+  type Span,
 } from "./geometry";
 import { gridSize, nextGridLine, snapToGrid } from "./grid";
 import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
@@ -71,6 +74,7 @@ type Interaction =
       readonly symbol: SymbolId;
       readonly origin: Point;
       readonly current: Point;
+      readonly snaps: boolean;
     }
   | {
       readonly kind: "marqueeSelecting";
@@ -105,8 +109,16 @@ const dragThreshold = 3;
 
 const minimumShapeSize = 10;
 
-/** The Bounds of a Shape drawn by dragging from `origin` to `current`, never smaller than the minimum size. */
-export const drawnBounds = (origin: Point, current: Point): Bounds => boundsFrom(origin, current, minimumShapeSize);
+/**
+ * The Bounds of a Shape drawn by dragging from `origin` to `current`, never smaller than the minimum size. When
+ * snapping, both corners snap to the grid, but the Shape still grows the way the pointer went from where it started.
+ */
+export const drawnBounds = (origin: Point, current: Point, snaps: boolean): Bounds => {
+  const snap = (value: number) => (snaps ? snapToGrid(value) : value);
+  const span = (from: number, to: number): Span =>
+    spanTowards(snap(from), sideOf(from, to, 1), Math.max(Math.abs(snap(to) - snap(from)), minimumShapeSize));
+  return boundsOfSpans(span(origin.x, current.x), span(origin.y, current.y));
+};
 
 // How far, in screen pixels, from a resize handle's centre a press still grabs it.
 const handleReach = 6;
@@ -299,6 +311,7 @@ const pointerDown = (state: EditorState, input: PointerInput): EditorState =>
           symbol: state.tool,
           origin: input.position,
           current: input.position,
+          snaps: snapsToGrid(input.modifiers),
         },
       };
 
@@ -308,7 +321,10 @@ const pointerMove = (state: EditorState, input: PointerInput): EditorState => {
     case "idle":
       return state;
     case "creatingShape":
-      return { ...state, interaction: { ...interaction, current: input.position } };
+      return {
+        ...state,
+        interaction: { ...interaction, current: input.position, snaps: snapsToGrid(input.modifiers) },
+      };
     case "marqueeSelecting": {
       const inside = shapesInside(state.sketch, boundsBetween(interaction.origin, input.position));
       return {
@@ -339,7 +355,11 @@ const pointerUp = (state: EditorState, input: PointerInput): EditorState => {
   const finished: EditorState = { ...moved, interaction: idle };
   switch (interaction.kind) {
     case "creatingShape":
-      return createShape(finished, interaction.symbol, drawnBounds(interaction.origin, interaction.current));
+      return createShape(
+        finished,
+        interaction.symbol,
+        drawnBounds(interaction.origin, interaction.current, interaction.snaps),
+      );
     case "moving": {
       const clicked = interaction.dragged ? undefined : interaction.selectsOnClick;
       return clicked === undefined ? finished : { ...finished, selection: [clicked] };
@@ -405,9 +425,16 @@ const deleteSelection = (state: EditorState): EditorState => ({
 // without waiting for the pointer to move.
 const updateDragModifiers = (state: EditorState, modifiers: Modifiers): EditorState => {
   const { interaction } = state;
-  return interaction.kind === "moving" || interaction.kind === "resizing"
-    ? dragTo(state, interaction, { position: interaction.current, modifiers })
-    : state;
+  switch (interaction.kind) {
+    case "creatingShape":
+      return { ...state, interaction: { ...interaction, snaps: snapsToGrid(modifiers) } };
+    case "moving":
+    case "resizing":
+      return dragTo(state, interaction, { position: interaction.current, modifiers });
+    case "idle":
+    case "marqueeSelecting":
+      return state;
+  }
 };
 
 const keyDown = (state: EditorState, input: KeyInput): EditorState => {

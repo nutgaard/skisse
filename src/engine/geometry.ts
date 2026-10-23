@@ -7,7 +7,12 @@ export type Bounds = {
   readonly height: number;
 };
 
-export const boundsBetween = (a: Point, b: Point): Bounds => boundsFrom(a, b, 0);
+export const boundsBetween = (a: Point, b: Point): Bounds => ({
+  x: Math.min(a.x, b.x),
+  y: Math.min(a.y, b.y),
+  width: Math.abs(b.x - a.x),
+  height: Math.abs(b.y - a.y),
+});
 
 export const contains = (bounds: Bounds, point: Point): boolean =>
   point.x >= bounds.x &&
@@ -54,14 +59,3 @@ export const spanTowards = (anchor: number, side: -1 | 1, size: number): Span =>
   start: side > 0 ? anchor : anchor - size,
   size,
 });
-
-/**
- * The span from `anchor` towards `target`, at least `minimum` long. It flips to the other side of the anchor when
- * the target is there, and a target on the anchor spans forwards.
- */
-export const spanFrom = (anchor: number, target: number, minimum: number): Span =>
-  spanTowards(anchor, sideOf(anchor, target, 1), Math.max(Math.abs(target - anchor), minimum));
-
-/** The Bounds from `anchor` towards `target`, at least `minimum` wide and high. */
-export const boundsFrom = (anchor: Point, target: Point, minimum: number): Bounds =>
-  boundsOfSpans(spanFrom(anchor.x, target.x, minimum), spanFrom(anchor.y, target.y, minimum));
