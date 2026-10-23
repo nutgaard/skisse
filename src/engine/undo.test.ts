@@ -11,8 +11,10 @@ import {
   pointerMove,
   pointerUp,
   press,
+  redoInput,
   selectTool,
   twoRectangles,
+  undoInput,
 } from "./test-helpers";
 import type { EditorState } from "./editor";
 import { canRedo, canUndo, selection } from "./queries";
@@ -34,10 +36,10 @@ describe("undo and redo", () => {
   });
 
   test("the undo and redo inputs work like the shortcuts", () => {
-    const undone = apply(oneRectangle(), { type: "undo" });
+    const undone = apply(oneRectangle(), undoInput);
 
     expect(boundsById(undone)).toEqual({});
-    expect(boundsById(apply(undone, { type: "redo" }))).toEqual(boundsById(oneRectangle()));
+    expect(boundsById(apply(undone, redoInput))).toEqual(boundsById(oneRectangle()));
   });
 
   test("a new editor has nothing to undo or redo", () => {
@@ -153,7 +155,7 @@ describe("undo and redo", () => {
       pointerMove({ x: 200, y: 170 }),
     );
 
-    const state = apply(midDrag, keyDown("z", { meta: true }), { type: "undo" }, pointerUp({ x: 200, y: 170 }));
+    const state = apply(midDrag, keyDown("z", { meta: true }), undoInput, pointerUp({ x: 200, y: 170 }));
 
     expect(boundsById(state)).toEqual({ "shape-1": { x: 150, y: 130, width: 100, height: 80 } });
   });

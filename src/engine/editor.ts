@@ -110,6 +110,8 @@ export type EditorState = {
 
 const idle: Interaction = { kind: "idle" };
 
+const isIdle = (state: EditorState): boolean => state.interaction.kind === "idle";
+
 // How far, in screen pixels, the pointer must travel before a press on a Shape or a resize handle becomes a drag,
 // so a click never nudges or snaps a Shape by accident.
 const dragThreshold = 3;
@@ -457,7 +459,7 @@ const updateDragModifiers = (state: EditorState, modifiers: Modifiers): EditorSt
 
 const keyDown = (state: EditorState, input: KeyInput): EditorState => {
   if (input.key === "Escape") {
-    return state.interaction.kind === "idle" ? { ...state, selection: [] } : cancelGesture(state);
+    return isIdle(state) ? { ...state, selection: [] } : cancelGesture(state);
   }
   if (state.interaction.kind !== "idle") return updateDragModifiers(state, input.modifiers);
   const command = input.modifiers.meta || input.modifiers.ctrl;
@@ -483,7 +485,7 @@ const undo = (state: EditorState): EditorState => restore(state, history.undo(st
 
 const redo = (state: EditorState): EditorState => restore(state, history.redo(state.history));
 
-const step = (state: EditorState, input: Input): EditorState => {
+const applyInput = (state: EditorState, input: Input): EditorState => {
   switch (input.type) {
     case "selectTool":
       return { ...state, tool: input.tool };
@@ -500,15 +502,15 @@ const step = (state: EditorState, input: Input): EditorState => {
     case "keyUp":
       return updateDragModifiers(state, input.modifiers);
     case "undo":
-      return state.interaction.kind === "idle" ? undo(state) : state;
+      return isIdle(state) ? undo(state) : state;
     case "redo":
-      return state.interaction.kind === "idle" ? redo(state) : state;
+      return isIdle(state) ? redo(state) : state;
   }
 };
 
-// A change to the Sketch is recorded once the editor is idle again, so a whole gesture is one step and a cancelled
-// one, which puts the Sketch back, records nothing.
+// A change to the Sketch is recorded once the editor is idle again, so a whole gesture, or any longer interaction,
+// is one step, and a cancelled one, which puts the Sketch back, records nothing.
 export const update = (state: EditorState, input: Input): EditorState => {
-  const next = step(state, input);
-  return next.interaction.kind === "idle" ? { ...next, history: history.record(next.history, next.sketch) } : next;
+  const next = applyInput(state, input);
+  return isIdle(next) ? { ...next, history: history.record(next.history, next.sketch) } : next;
 };
