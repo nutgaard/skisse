@@ -15,7 +15,7 @@ export type ShapeGeometry = {
   readonly ports: readonly Point[];
 };
 
-export const shapeGeometry = (symbol: SymbolId, box: Bounds): ShapeGeometry => {
+export function shapeGeometry(symbol: SymbolId, box: Bounds): ShapeGeometry {
   const definition = symbolDefinition(symbol);
   const outline = definition.outline(box);
   return {
@@ -24,8 +24,9 @@ export const shapeGeometry = (symbol: SymbolId, box: Bounds): ShapeGeometry => {
     labelArea: definition.labelArea(box),
     ports: (definition.ports ?? sideMidpoints)(box),
   };
-};
+}
 
 /** Whether `point` hits a Shape of `symbol` filling `box`. Anywhere inside the outline counts, even with no fill. */
-export const hitsOutline = (symbol: SymbolId, box: Bounds, point: Point): boolean =>
-  insidePath(symbolDefinition(symbol).outline(box), point);
+export function hitsOutline(symbol: SymbolId, box: Bounds, point: Point): boolean {
+  return insidePath(symbolDefinition(symbol).outline(box), point);
+}

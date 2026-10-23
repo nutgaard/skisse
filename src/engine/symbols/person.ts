@@ -4,12 +4,16 @@ import { inset, labelMargin, type SymbolDefinition } from "./symbol";
 
 // A round head on top of a torso with rounded shoulders. The head stays round at any aspect ratio, so the person
 // stays recognisable when stretched.
-const headRadius = (box: Bounds): number => Math.min(box.height * 0.16, box.width * 0.3);
+function headRadius(box: Bounds): number {
+  return Math.min(box.height * 0.16, box.width * 0.3);
+}
 
 // A small gap between the head and the torso.
-const neck = (box: Bounds): number => box.height * 0.03;
+function neck(box: Bounds): number {
+  return box.height * 0.03;
+}
 
-const outline = (box: Bounds): Path => {
+function outline(box: Bounds): Path {
   const r = headRadius(box);
   const centerX = box.x + box.width / 2;
   const torsoTop = box.y + 2 * r + neck(box);
@@ -29,7 +33,7 @@ const outline = (box: Bounds): Path => {
     lineTo({ x: right, y: bottom }),
     close,
   ];
-};
+}
 
 export const person: SymbolDefinition = {
   name: "Person",

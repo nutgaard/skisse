@@ -4,9 +4,11 @@ import { inset, labelMargin, type SymbolDefinition } from "./symbol";
 
 // A cylinder on its side, its lid facing right. Half the width of the lid's ellipse follows the height, as for the
 // upright cylinder.
-const lidRadius = (box: Bounds): number => Math.min(box.height * 0.15, box.width * 0.2);
+function lidRadius(box: Bounds): number {
+  return Math.min(box.height * 0.15, box.width * 0.2);
+}
 
-const outline = (box: Bounds): Path => {
+function outline(box: Bounds): Path {
   const rx = lidRadius(box);
   const ry = box.height / 2;
   const centerY = box.y + ry;
@@ -19,10 +21,10 @@ const outline = (box: Bounds): Path => {
     ...arc({ x: box.x + rx, y: centerY }, rx, ry, Math.PI / 2, (3 * Math.PI) / 2),
     close,
   ];
-};
+}
 
 // The near edge of the lid, drawn across the right end of the body.
-const lidEdge = (box: Bounds): Path => {
+function lidEdge(box: Bounds): Path {
   const rx = lidRadius(box);
   const ry = box.height / 2;
   const centerX = box.x + box.width - rx;
@@ -30,7 +32,7 @@ const lidEdge = (box: Bounds): Path => {
     moveTo({ x: centerX, y: box.y }),
     ...arc({ x: centerX, y: box.y + ry }, rx, ry, -Math.PI / 2, -(3 * Math.PI) / 2),
   ];
-};
+}
 
 export const horizontalCylinder: SymbolDefinition = {
   name: "Queue",

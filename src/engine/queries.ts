@@ -22,28 +22,41 @@ export type ShapeView = {
   readonly bounds: Bounds;
 };
 
-export const shapes = (state: EditorState): readonly ShapeView[] =>
-  Object.values(state.sketch.shapes).map(({ id, symbol, bounds }) => ({ id, symbol, bounds }));
+export function shapes(state: EditorState): readonly ShapeView[] {
+  return Object.values(state.sketch.shapes).map(({ id, symbol, bounds }) => ({ id, symbol, bounds }));
+}
 
 /** The Sketch as of the last finished change, leaving out any gesture still in progress. This is what to save. */
-export const sketch = (state: EditorState): Sketch => state.history.present;
+export function sketch(state: EditorState): Sketch {
+  return state.history.present;
+}
 
-export const selection = (state: EditorState): readonly ShapeId[] => state.selection;
+export function selection(state: EditorState): readonly ShapeId[] {
+  return state.selection;
+}
 
 export type HandleView = { readonly handle: ResizeHandle; readonly position: Point };
 
-export const resizeHandles = (state: EditorState): readonly HandleView[] => {
+export function resizeHandles(state: EditorState): readonly HandleView[] {
   const shape = resizableShape(state);
   return shape ? handlePositions(shape.bounds) : [];
-};
+}
 
-export const canUndo = (state: EditorState): boolean => history.canUndo(state.history);
+export function canUndo(state: EditorState): boolean {
+  return history.canUndo(state.history);
+}
 
-export const canRedo = (state: EditorState): boolean => history.canRedo(state.history);
+export function canRedo(state: EditorState): boolean {
+  return history.canRedo(state.history);
+}
 
-export const viewport = (state: EditorState): Viewport => state.viewport;
+export function viewport(state: EditorState): Viewport {
+  return state.viewport;
+}
 
-export const activeTool = (state: EditorState): Tool => state.tool;
+export function activeTool(state: EditorState): Tool {
+  return state.tool;
+}
 
 export type InteractionView =
   | { readonly kind: "idle" }
@@ -56,7 +69,7 @@ export type InteractionView =
   | { readonly kind: "resizing"; readonly handle: ResizeHandle }
   | { readonly kind: "panning" };
 
-export const currentInteraction = (state: EditorState): InteractionView => {
+export function currentInteraction(state: EditorState): InteractionView {
   const { interaction } = state;
   switch (interaction.kind) {
     case "idle":
@@ -74,4 +87,4 @@ export const currentInteraction = (state: EditorState): InteractionView => {
     case "panning":
       return { kind: "panning" };
   }
-};
+}

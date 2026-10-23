@@ -32,6 +32,8 @@ export type SymbolId = keyof typeof builtInSymbols;
 
 export const symbolIds = Object.keys(builtInSymbols) as readonly SymbolId[];
 
-export const symbolDefinition = (id: SymbolId): SymbolDefinition => builtInSymbols[id];
+export function symbolDefinition(id: SymbolId): SymbolDefinition {
+  return builtInSymbols[id];
+}
 
 export type { SymbolDefinition } from "./symbol";

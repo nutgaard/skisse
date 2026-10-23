@@ -31,30 +31,36 @@ import {
 } from "../engine";
 import { useAutosave } from "./autosave";
 
-const modifiersOf = (event: KeyboardEvent | PointerEvent | WheelEvent) => ({
-  shift: event.shiftKey,
-  alt: event.altKey,
-  ctrl: event.ctrlKey,
-  meta: event.metaKey,
-});
+function modifiersOf(event: KeyboardEvent | PointerEvent | WheelEvent) {
+  return {
+    shift: event.shiftKey,
+    alt: event.altKey,
+    ctrl: event.ctrlKey,
+    meta: event.metaKey,
+  };
+}
 
-const pointerInput = (type: PointerInput["type"], event: PointerEvent): PointerInput => ({
-  type,
-  position: { x: event.clientX, y: event.clientY },
-  button: event.button,
-  modifiers: modifiersOf(event),
-});
+function pointerInput(type: PointerInput["type"], event: PointerEvent): PointerInput {
+  return {
+    type,
+    position: { x: event.clientX, y: event.clientY },
+    button: event.button,
+    modifiers: modifiersOf(event),
+  };
+}
 
-const keyInput = (type: KeyInput["type"], event: KeyboardEvent): KeyInput => ({
-  type,
-  key: event.key,
-  modifiers: modifiersOf(event),
-});
+function keyInput(type: KeyInput["type"], event: KeyboardEvent): KeyInput {
+  return {
+    type,
+    key: event.key,
+    modifiers: modifiersOf(event),
+  };
+}
 
 // Pixels per line, for a wheel that scrolls by lines rather than pixels.
 const lineHeight = 16;
 
-const wheelInput = (event: WheelEvent, screenSize: Size): WheelInput => {
+function wheelInput(event: WheelEvent, screenSize: Size): WheelInput {
   const scale =
     event.deltaMode === WheelEvent.DOM_DELTA_LINE
       ? lineHeight
@@ -67,7 +73,7 @@ const wheelInput = (event: WheelEvent, screenSize: Size): WheelInput => {
     delta: { x: event.deltaX * scale, y: event.deltaY * scale },
     modifiers: modifiersOf(event),
   };
-};
+}
 
 // Safari reports a trackpad pinch as gesture events, with the scale since the pinch started. Other browsers report it
 // as a wheel event with ctrl held.
@@ -79,25 +85,34 @@ const spaceReleased: KeyInput = { type: "keyUp", key: " ", modifiers: noModifier
 const handleSize = 8;
 
 // Cmd/Ctrl+A is select all in the editor, so the browser must not also select the page's text.
-const isSelectAll = (event: KeyboardEvent) => (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a";
+function isSelectAll(event: KeyboardEvent) {
+  return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a";
+}
 
 // Keys typed into a text field, such as when renaming a Sketch, are not editor shortcuts.
-const isTyping = (event: KeyboardEvent) => event.target instanceof HTMLInputElement;
+function isTyping(event: KeyboardEvent) {
+  return event.target instanceof HTMLInputElement;
+}
 
-const isSpace = (event: KeyboardEvent) => event.key === " ";
+function isSpace(event: KeyboardEvent) {
+  return event.key === " ";
+}
 
 // Space presses a button outside the editor's toolbar, such as in the Sketch list, when the keyboard moved focus to it.
 // Otherwise it pans, even right after clicking such a button, and must not also press the button or scroll the page.
-const spacePans = (event: KeyboardEvent, toolbar: HTMLElement | null, keyboardFocused: EventTarget | null) =>
-  !(event.target instanceof HTMLButtonElement) ||
-  event.target !== keyboardFocused ||
-  (toolbar?.contains(event.target) ?? false);
+function spacePans(event: KeyboardEvent, toolbar: HTMLElement | null, keyboardFocused: EventTarget | null) {
+  return (
+    !(event.target instanceof HTMLButtonElement) ||
+    event.target !== keyboardFocused ||
+    (toolbar?.contains(event.target) ?? false)
+  );
+}
 
 // Grid lines closer together than this, in screen pixels, are left out, leaving only every tenth line.
 const minimumGridSpacing = 8;
 
 /** The grid, drawn in screen pixels so its lines stay thin at any zoom, lined up with the Sketch's grid. */
-const Grid = ({ viewport }: { readonly viewport: Viewport }) => {
+function Grid({ viewport }: { readonly viewport: Viewport }) {
   const id = useId();
   const origin = { x: -viewport.x * viewport.zoom, y: -viewport.y * viewport.zoom };
   const levels = [
@@ -127,13 +142,13 @@ const Grid = ({ viewport }: { readonly viewport: Viewport }) => {
       ))}
     </>
   );
-};
+}
 
 /**
  * A Shape drawn from its Symbol's geometry: the outline as its fill, and the Symbol's lines on top. A Symbol with no
  * lines of its own, such as text, shows a faint outline instead, so the Shape can still be found.
  */
-const SymbolShape = ({ symbol, bounds }: { readonly symbol: SymbolId; readonly bounds: Bounds }) => {
+function SymbolShape({ symbol, bounds }: { readonly symbol: SymbolId; readonly bounds: Bounds }) {
   const { outline, lines } = shapeGeometry(symbol, bounds);
   return (
     <g data-symbol={symbol} className="shape">
@@ -141,30 +156,32 @@ const SymbolShape = ({ symbol, bounds }: { readonly symbol: SymbolId; readonly b
       <path d={pathData(lines)} className="shape-lines" />
     </g>
   );
-};
+}
 
 // Size, in screen pixels, of a Symbol's picture on its toolbar button.
 const iconSize = 18;
 
 type ToolButtonProps = { readonly info: ToolInfo; readonly active: boolean; readonly onSelect: () => void };
 
-const ToolButton = ({ info, active, onSelect }: ToolButtonProps) => (
-  <button
-    type="button"
-    aria-pressed={active}
-    aria-label={info.symbol ? info.name : undefined}
-    title={`${info.name} (${info.shortcut.toUpperCase()})`}
-    onClick={onSelect}
-  >
-    {info.symbol ? (
-      <svg className="tool-icon" width={iconSize} height={iconSize} aria-hidden="true">
-        <path d={pathData(symbolIcon(info.symbol, iconSize - 2))} transform="translate(1 1)" />
-      </svg>
-    ) : (
-      info.name
-    )}
-  </button>
-);
+function ToolButton({ info, active, onSelect }: ToolButtonProps) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      aria-label={info.symbol ? info.name : undefined}
+      title={`${info.name} (${info.shortcut.toUpperCase()})`}
+      onClick={onSelect}
+    >
+      {info.symbol ? (
+        <svg className="tool-icon" width={iconSize} height={iconSize} aria-hidden="true">
+          <path d={pathData(symbolIcon(info.symbol, iconSize - 2))} transform="translate(1 1)" />
+        </svg>
+      ) : (
+        info.name
+      )}
+    </button>
+  );
+}
 
 type EditorProps = {
   readonly deps: Dependencies;
@@ -173,7 +190,7 @@ type EditorProps = {
   readonly onSave: (sketch: Sketch) => void;
 };
 
-export const Editor = ({ deps, initialSketch, onSave }: EditorProps) => {
+export function Editor({ deps, initialSketch, onSave }: EditorProps) {
   const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, initialSketch));
   const svgRef = useRef<SVGSVGElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
@@ -337,4 +354,4 @@ export const Editor = ({ deps, initialSketch, onSave }: EditorProps) => {
       </div>
     </>
   );
-};
+}

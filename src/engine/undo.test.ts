@@ -24,10 +24,16 @@ import {
 import type { EditorState } from "./editor";
 import { canRedo, canUndo, selection, viewport } from "./queries";
 
-const undo = (state: EditorState) => press(state, "z", { meta: true });
-const redo = (state: EditorState) => press(state, "z", { meta: true, shift: true });
+function undo(state: EditorState) {
+  return press(state, "z", { meta: true });
+}
+function redo(state: EditorState) {
+  return press(state, "z", { meta: true, shift: true });
+}
 
-const oneRectangle = () => drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 });
+function oneRectangle() {
+  return drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 });
+}
 
 describe("undo and redo", () => {
   test("undoing a create removes the Shape", () => {

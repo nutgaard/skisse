@@ -28,8 +28,8 @@ const builtInSymbols: readonly BuiltInSymbol[] = [
 const defaultBox: Bounds = { x: 100, y: 50, width: 160, height: 80 };
 
 // A Shape of the Symbol filling `box`, by default (100,50)–(260,130), with nothing selected.
-const unselectedShape = (symbol: SymbolId, box: Bounds = defaultBox): EditorState =>
-  press(
+function unselectedShape(symbol: SymbolId, box: Bounds = defaultBox): EditorState {
+  return press(
     apply(
       newEditor(),
       selectTool(symbol),
@@ -38,17 +38,19 @@ const unselectedShape = (symbol: SymbolId, box: Bounds = defaultBox): EditorStat
     ),
     "Escape",
   );
+}
 
 // A point `distance` from `point` towards the middle of `box`, along one axis.
-const towardsMiddle = (point: Point, box: Bounds, distance: number): Point => {
+function towardsMiddle(point: Point, box: Bounds, distance: number): Point {
   const middle = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   return point.x === middle.x
     ? { x: point.x, y: point.y + Math.sign(middle.y - point.y) * distance }
     : { x: point.x + Math.sign(middle.x - point.x) * distance, y: point.y };
-};
+}
 
-const createByClicking = (symbol: SymbolId, at: Point): EditorState =>
-  apply(newEditor(), selectTool(symbol), pointerDown(at), pointerUp(at));
+function createByClicking(symbol: SymbolId, at: Point): EditorState {
+  return apply(newEditor(), selectTool(symbol), pointerDown(at), pointerUp(at));
+}
 
 describe.each(builtInSymbols)("the $symbol tool", ({ symbol, shortcut, defaultSize }) => {
   test("dragging creates a Shape of the Symbol matching the drag", () => {

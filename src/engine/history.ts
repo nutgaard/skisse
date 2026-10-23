@@ -8,31 +8,40 @@ export type History<T> = {
   readonly future: readonly T[];
 };
 
-export const startHistory = <T>(present: T): History<T> => ({ past: [], present, future: [] });
+export function startHistory<T>(present: T): History<T> {
+  return { past: [], present, future: [] };
+}
 
 /** Records `value` as one step, unless it equals the present value. A new step discards what was undone. */
-export const record = <T>(history: History<T>, value: T): History<T> =>
-  isEqual(history.present, value) ? history : { past: [...history.past, history.present], present: value, future: [] };
+export function record<T>(history: History<T>, value: T): History<T> {
+  return isEqual(history.present, value)
+    ? history
+    : { past: [...history.past, history.present], present: value, future: [] };
+}
 
-export const undo = <T>(history: History<T>): History<T> => {
+export function undo<T>(history: History<T>): History<T> {
   const previous = history.past.at(-1);
   return previous === undefined
     ? history
     : { past: history.past.slice(0, -1), present: previous, future: [history.present, ...history.future] };
-};
+}
 
-export const redo = <T>(history: History<T>): History<T> => {
+export function redo<T>(history: History<T>): History<T> {
   const [next, ...future] = history.future;
   return next === undefined ? history : { past: [...history.past, history.present], present: next, future };
-};
+}
 
-export const canUndo = (history: History<unknown>): boolean => history.past.length > 0;
+export function canUndo(history: History<unknown>): boolean {
+  return history.past.length > 0;
+}
 
-export const canRedo = (history: History<unknown>): boolean => history.future.length > 0;
+export function canRedo(history: History<unknown>): boolean {
+  return history.future.length > 0;
+}
 
 // Compares plain data structurally, so a gesture that ends where it began records nothing. Unchanged parts of
 // immutable data are the same objects, which keeps this cheap.
-const isEqual = (a: unknown, b: unknown): boolean => {
+function isEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
   if (Array.isArray(a) !== Array.isArray(b)) return false;
@@ -41,4 +50,4 @@ const isEqual = (a: unknown, b: unknown): boolean => {
     aEntries.length === Object.keys(b).length &&
     aEntries.every(([key, value]) => Object.hasOwn(b, key) && isEqual(value, (b as Record<string, unknown>)[key]))
   );
-};
+}

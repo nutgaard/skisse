@@ -11,7 +11,7 @@ type AppProps = {
   readonly openAtStart: OpenSketch;
 };
 
-export const App = ({ deps, store, openAtStart }: AppProps) => {
+export function App({ deps, store, openAtStart }: AppProps) {
   const [current, setCurrent] = useState(openAtStart);
   const [entries, setEntries] = useState(store.list);
   const openId = current.id;
@@ -43,4 +43,4 @@ export const App = ({ deps, store, openAtStart }: AppProps) => {
       />
     </>
   );
-};
+}

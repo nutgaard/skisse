@@ -22,7 +22,7 @@ const bumps: readonly Bump[] = [
 ];
 
 // The circle through `from` and `to` that bulges `bulge` outwards (to the left of the way the outline runs) halfway.
-const bumpCircle = (from: Point, to: Point, bulge: number) => {
+function bumpCircle(from: Point, to: Point, bulge: number) {
   const chord = { x: to.x - from.x, y: to.y - from.y };
   const length = Math.hypot(chord.x, chord.y);
   const outwards = { x: chord.y / length, y: -chord.x / length };
@@ -32,10 +32,10 @@ const bumpCircle = (from: Point, to: Point, bulge: number) => {
     center: { x: middle.x - outwards.x * (radius - bulge), y: middle.y - outwards.y * (radius - bulge) },
     radius,
   };
-};
+}
 
 // The arc of a bump, stretched from the unit box into `box`. It runs clockwise, the way the outline goes.
-const bumpArc = (box: Bounds, from: Point, { to, bulge }: Bump): Path => {
+function bumpArc(box: Bounds, from: Point, { to, bulge }: Bump): Path {
   const { center, radius } = bumpCircle(from, to, bulge);
   const startAngle = Math.atan2(from.y - center.y, from.x - center.x);
   const endAngle = Math.atan2(to.y - center.y, to.x - center.x);
@@ -47,13 +47,15 @@ const bumpArc = (box: Bounds, from: Point, { to, bulge }: Bump): Path => {
     startAngle,
     startAngle + turn,
   );
-};
+}
 
-const outline = (box: Bounds): Path => [
-  moveTo({ x: box.x + start.x * box.width, y: box.y + start.y * box.height }),
-  ...bumps.flatMap((bump, index) => bumpArc(box, bumps[index - 1]?.to ?? start, bump)),
-  close,
-];
+function outline(box: Bounds): Path {
+  return [
+    moveTo({ x: box.x + start.x * box.width, y: box.y + start.y * box.height }),
+    ...bumps.flatMap((bump, index) => bumpArc(box, bumps[index - 1]?.to ?? start, bump)),
+    close,
+  ];
+}
 
 export const cloud: SymbolDefinition = {
   name: "Cloud",

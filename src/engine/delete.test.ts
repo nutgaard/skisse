@@ -4,13 +4,16 @@ import { selection, shapes } from "./queries";
 import { click, drawRectangle, newEditor, press } from "./test-helpers";
 
 // shape-1 at (100,100)–(200,180), shape-2 at (300,100)–(400,180), shape-3 at (500,100)–(600,180).
-const threeRectangles = () =>
-  [{ x: 100 }, { x: 300 }, { x: 500 }].reduce(
+function threeRectangles() {
+  return [{ x: 100 }, { x: 300 }, { x: 500 }].reduce(
     (state, { x }) => drawRectangle(state, { x, y: 100 }, { x: x + 100, y: 180 }),
     newEditor(),
   );
+}
 
-const ids = (state: EditorState) => shapes(state).map(({ id }) => id);
+function ids(state: EditorState) {
+  return shapes(state).map(({ id }) => id);
+}
 
 describe("deleting the selection", () => {
   test.each(["Delete", "Backspace"])("%s removes the selected Shapes", (key) => {
