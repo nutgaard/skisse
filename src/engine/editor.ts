@@ -57,7 +57,12 @@ export type Sketch = {
 
 type Interaction =
   | { readonly kind: "idle" }
-  | { readonly kind: "creatingShape"; readonly symbol: SymbolId; readonly origin: Point };
+  | {
+      readonly kind: "creatingShape";
+      readonly symbol: SymbolId;
+      readonly origin: Point;
+      readonly current: Point;
+    };
 
 export type EditorState = {
   readonly deps: Dependencies;
@@ -75,7 +80,7 @@ export const createEditor = (deps: Dependencies): EditorState => ({
   nextIdSequence: 1,
 });
 
-const boundsBetween = (a: Point, b: Point): Bounds => ({
+export const boundsBetween = (a: Point, b: Point): Bounds => ({
   x: Math.min(a.x, b.x),
   y: Math.min(a.y, b.y),
   width: Math.abs(b.x - a.x),
@@ -99,9 +104,19 @@ export const update = (state: EditorState, input: Input): EditorState => {
     case "pointerDown":
       return state.tool === "select"
         ? state
-        : { ...state, interaction: { kind: "creatingShape", symbol: state.tool, origin: input.position } };
+        : {
+            ...state,
+            interaction: {
+              kind: "creatingShape",
+              symbol: state.tool,
+              origin: input.position,
+              current: input.position,
+            },
+          };
     case "pointerMove":
-      return state;
+      return state.interaction.kind === "creatingShape"
+        ? { ...state, interaction: { ...state.interaction, current: input.position } }
+        : state;
     case "pointerUp": {
       if (state.interaction.kind !== "creatingShape") return state;
       const { symbol, origin } = state.interaction;

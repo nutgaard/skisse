@@ -2,6 +2,7 @@ import { useEffect, useReducer, type PointerEvent } from "react";
 import {
   activeTool,
   createEditor,
+  currentInteraction,
   shapes,
   update,
   type Dependencies,
@@ -37,6 +38,7 @@ const keyInput = (type: KeyInput["type"], event: KeyboardEvent): KeyInput => ({
 
 export const Editor = ({ deps }: { readonly deps: Dependencies }) => {
   const [state, dispatch] = useReducer(update, deps, createEditor);
+  const interaction = currentInteraction(state);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => dispatch(keyInput("keyDown", event));
@@ -65,6 +67,9 @@ export const Editor = ({ deps }: { readonly deps: Dependencies }) => {
         {shapes(state).map(({ id, symbol, bounds }) => (
           <rect key={id} data-symbol={symbol} {...bounds} className="shape" />
         ))}
+        {interaction.kind === "creatingShape" && (
+          <rect data-symbol={interaction.symbol} {...interaction.bounds} className="shape" />
+        )}
       </svg>
       <div className="toolbar" role="toolbar">
         {tools.map(({ tool, label }) => (

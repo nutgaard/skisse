@@ -14,5 +14,5 @@ export type {
   TextMeasurer,
   Tool,
 } from "./editor";
-export { activeTool, shapes } from "./queries";
-export type { ShapeView } from "./queries";
+export { activeTool, currentInteraction, shapes } from "./queries";
+export type { InteractionView, ShapeView } from "./queries";
