@@ -286,12 +286,12 @@ const selectionBlock = (sketch: Sketch, selection: readonly ShapeId[]): Bounds =
 type PointerState = Pick<PointerInput, "position" | "modifiers">;
 
 // The press with the pointer at `pointer`, noting whether it has now travelled past the drag threshold.
-const continuePress = <P extends Press>(state: EditorState, drag: P, pointer: PointerState): P => {
-  const travelled = Math.hypot(pointer.position.x - drag.origin.x, pointer.position.y - drag.origin.y);
+const continuePress = <P extends Press>(state: EditorState, press: P, pointer: PointerState): P => {
+  const travelled = Math.hypot(pointer.position.x - press.origin.x, pointer.position.y - press.origin.y);
   return {
-    ...drag,
+    ...press,
     current: pointer.position,
-    dragged: drag.dragged || travelled >= sketchDistance(state, dragThreshold),
+    dragged: press.dragged || travelled >= sketchDistance(state, dragThreshold),
   };
 };
 
