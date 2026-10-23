@@ -133,4 +133,17 @@ describe("panning", () => {
     expect(pansOnPress(apply(newEditor(), keyDown(" ")))).toBe(true);
     expect(pansOnPress(apply(newEditor(), keyDown(" "), keyUp(" ")))).toBe(false);
   });
+
+  test("a space press mid-drag still applies the modifiers held with it", () => {
+    const moving = apply(
+      press(twoRectangles(), "Escape"),
+      selectTool("select"),
+      pointerDown({ x: 150, y: 140 }),
+      pointerMove({ x: 154, y: 140 }),
+    );
+
+    const state = apply(moving, keyDown(" ", { alt: true }));
+
+    expect(boundsById(state)["shape-1"]).toEqual({ x: 100, y: 100, width: 100, height: 80 });
+  });
 });

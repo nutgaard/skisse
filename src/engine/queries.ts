@@ -1,6 +1,5 @@
 import {
   drawnBounds,
-  pressPans,
   resizableShape,
   type EditorState,
   type ShapeId,
@@ -42,8 +41,7 @@ export const canRedo = (state: EditorState): boolean => history.canRedo(state.hi
 
 export const viewport = (state: EditorState): Viewport => state.viewport;
 
-/** Whether a press on the Sketch would pan rather than use the active tool, such as while space is held. */
-export const pansOnPress = (state: EditorState): boolean => pressPans(state);
+export { pansOnPress } from "./editor";
 
 export const activeTool = (state: EditorState): Tool => state.tool;
 

@@ -73,7 +73,12 @@ describe("zooming", () => {
   test("zooming in stops at 800%, still keeping the Sketch point under the pointer under it", () => {
     const before = newEditor();
 
-    const after = apply(before, pinch(pointer, 5), pinch(pointer, 5), wheel(pointer, { x: 0, y: -50 }, { ctrl: true }));
+    const after = apply(
+      before,
+      pinch(pointer, 5),
+      pinch(pointer, 5),
+      wheel(pointer, { x: 0, y: -50 }, { ctrl: true }),
+    );
 
     expect(viewport(after).zoom).toBe(8);
     expectSamePoint(sketchPointUnder(after, pointer), sketchPointUnder(before, pointer));
@@ -82,7 +87,12 @@ describe("zooming", () => {
   test("zooming out stops at 10%, still keeping the Sketch point under the pointer under it", () => {
     const before = newEditor();
 
-    const after = apply(before, pinch(pointer, 0.2), pinch(pointer, 0.2), wheel(pointer, { x: 0, y: 50 }, { ctrl: true }));
+    const after = apply(
+      before,
+      pinch(pointer, 0.2),
+      pinch(pointer, 0.2),
+      wheel(pointer, { x: 0, y: 50 }, { ctrl: true }),
+    );
 
     expect(viewport(after).zoom).toBe(0.1);
     expectSamePoint(sketchPointUnder(after, pointer), sketchPointUnder(before, pointer));
@@ -141,7 +151,12 @@ describe("zoom to fit and reset zoom", () => {
   });
 
   test("zoom to fit zooms no further in than 800%", () => {
-    const oneSmallShape = apply(newEditor(), selectTool("rectangle"), pointerDown({ x: 500, y: 500 }), pointerUp({ x: 500, y: 500 }));
+    const oneSmallShape = apply(
+      newEditor(),
+      selectTool("rectangle"),
+      pointerDown({ x: 500, y: 500 }),
+      pointerUp({ x: 500, y: 500 }),
+    );
 
     const state = apply(oneSmallShape, zoomToFit({ width: 700, height: 600 }));
 

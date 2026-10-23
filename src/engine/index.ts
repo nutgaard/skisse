@@ -1,4 +1,4 @@
-export { createEditor, emptySketch, update } from "./editor";
+export { createEditor, emptySketch, noModifiers, update } from "./editor";
 export type { Bounds, Point } from "./geometry";
 export type {
   Dependencies,

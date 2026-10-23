@@ -6,6 +6,7 @@ import {
   createEditor,
   currentInteraction,
   gridSize,
+  noModifiers,
   pansOnPress,
   resizeHandles,
   selection,
@@ -72,7 +73,7 @@ const wheelInput = (event: WheelEvent, screenSize: Size): WheelInput => {
 // as a wheel event with ctrl held.
 type GestureEvent = UIEvent & { readonly scale: number; readonly clientX: number; readonly clientY: number };
 
-const released: KeyInput = { type: "keyUp", key: " ", modifiers: { shift: false, alt: false, ctrl: false, meta: false } };
+const spaceReleased: KeyInput = { type: "keyUp", key: " ", modifiers: noModifiers };
 
 // Size, in screen pixels, of the square drawn for each resize handle.
 const handleSize = 8;
@@ -83,8 +84,12 @@ const isSelectAll = (event: KeyboardEvent) => (event.metaKey || event.ctrlKey) &
 // Keys typed into a text field, such as when renaming a Sketch, are not editor shortcuts.
 const isTyping = (event: KeyboardEvent) => event.target instanceof HTMLInputElement;
 
-// Space pans, so it must not also press the focused toolbar button or scroll the page.
 const isSpace = (event: KeyboardEvent) => event.key === " ";
+
+// Space on a focused button outside the editor's toolbar, such as in the Sketch list, presses that button. Anywhere
+// else it pans, and must not also press the focused toolbar button or scroll the page.
+const spacePans = (event: KeyboardEvent, toolbar: HTMLElement | null) =>
+  !(event.target instanceof HTMLButtonElement) || (toolbar?.contains(event.target) ?? false);
 
 // Grid lines closer together than this, in screen pixels, are left out, leaving only every tenth line.
 const minimumGridSpacing = 8;
@@ -93,15 +98,18 @@ const minimumGridSpacing = 8;
 const Grid = ({ viewport }: { readonly viewport: Viewport }) => {
   const id = useId();
   const origin = { x: -viewport.x * viewport.zoom, y: -viewport.y * viewport.zoom };
-  const steps = [gridSize * viewport.zoom, gridSize * 10 * viewport.zoom].filter((step) => step >= minimumGridSpacing);
+  const levels = [
+    { kind: "minor", step: gridSize * viewport.zoom },
+    { kind: "major", step: gridSize * 10 * viewport.zoom },
+  ].filter(({ step }) => step >= minimumGridSpacing);
   return (
     <>
       <defs>
-        {steps.map((step, index) => (
+        {levels.map(({ kind, step }) => (
           <pattern
-            key={index}
-            id={`${id}-${index}`}
-            className={index === 0 ? "grid-minor" : "grid-major"}
+            key={kind}
+            id={`${id}-${kind}`}
+            className={`grid-${kind}`}
             x={origin.x}
             y={origin.y}
             width={step}
@@ -112,8 +120,8 @@ const Grid = ({ viewport }: { readonly viewport: Viewport }) => {
           </pattern>
         ))}
       </defs>
-      {steps.map((_, index) => (
-        <rect key={index} width="100%" height="100%" fill={`url(#${id}-${index})`} className="grid" />
+      {levels.map(({ kind }) => (
+        <rect key={kind} width="100%" height="100%" fill={`url(#${id}-${kind})`} className="grid" />
       ))}
     </>
   );
@@ -129,6 +137,7 @@ type EditorProps = {
 export const Editor = ({ deps, initialSketch, onSave }: EditorProps) => {
   const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, initialSketch));
   const svgRef = useRef<SVGSVGElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
   const interaction = currentInteraction(state);
   const selected = new Set(selection(state));
   const view = viewport(state);
@@ -143,16 +152,20 @@ export const Editor = ({ deps, initialSketch, onSave }: EditorProps) => {
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (isTyping(event)) return;
-      if (isSelectAll(event) || isSpace(event)) event.preventDefault();
+      if (isSpace(event)) {
+        if (!spacePans(event, toolbarRef.current)) return;
+        event.preventDefault();
+      }
+      if (isSelectAll(event)) event.preventDefault();
       dispatch(keyInput("keyDown", event));
     };
     // Releases still reach the editor, so a modifier let go while typing doesn't stay held.
     const onKeyUp = (event: KeyboardEvent) => {
-      if (!isTyping(event) && isSpace(event)) event.preventDefault();
+      if (isSpace(event) && !isTyping(event) && spacePans(event, toolbarRef.current)) event.preventDefault();
       dispatch(keyInput("keyUp", event));
     };
     // Keys let go while the window is in the background never reach it, so space must not stay held.
-    const onBlur = () => dispatch(released);
+    const onBlur = () => dispatch(spaceReleased);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
@@ -245,7 +258,7 @@ export const Editor = ({ deps, initialSketch, onSave }: EditorProps) => {
           {interaction.kind === "marqueeSelecting" && <rect {...interaction.bounds} className="selection-box" />}
         </g>
       </svg>
-      <div className="toolbar" role="toolbar">
+      <div ref={toolbarRef} className="toolbar" role="toolbar">
         {tools.map(({ tool, label }) => (
           <button
             key={tool}

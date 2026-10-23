@@ -1,5 +1,6 @@
 import {
   createEditor,
+  noModifiers,
   update,
   type EditorState,
   type Input,
@@ -13,8 +14,6 @@ import type { Point } from "./geometry";
 import { fixedWidthTextMeasurer, sequentialIds } from "./fakes";
 import { selection, shapes } from "./queries";
 import type { Size } from "./viewport";
-
-const noModifiers: Modifiers = { shift: false, alt: false, ctrl: false, meta: false };
 
 export const newEditor = (sketch?: Sketch): EditorState =>
   createEditor({ measureText: fixedWidthTextMeasurer, generateId: sequentialIds }, sketch);

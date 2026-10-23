@@ -29,8 +29,17 @@ export const zoomAround = (viewport: Viewport, screen: Point, factor: number): V
 /** Moves the view by `distance` screen pixels, so the Sketch moves the other way. */
 export const panBy = (viewport: Viewport, distance: Point): Viewport => ({
   ...viewport,
-  x: viewport.x + distance.x / viewport.zoom,
-  y: viewport.y + distance.y / viewport.zoom,
+  ...toSketch(viewport, distance),
+});
+
+/**
+ * Pans so the Sketch point `grabbed` is shown under the pointer, which is now over the Sketch point `pointer` (in
+ * this viewport's Sketch coordinates).
+ */
+export const keepUnderPointer = (viewport: Viewport, grabbed: Point, pointer: Point): Viewport => ({
+  ...viewport,
+  x: viewport.x + grabbed.x - pointer.x,
+  y: viewport.y + grabbed.y - pointer.y,
 });
 
 const centreOf = (screenSize: Size): Point => ({ x: screenSize.width / 2, y: screenSize.height / 2 });
