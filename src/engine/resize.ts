@@ -31,14 +31,15 @@ const handles: readonly ResizeHandle[] = ["nw", "n", "ne", "e", "se", "s", "sw",
 
 export type HandlePosition = { readonly handle: ResizeHandle; readonly position: Point };
 
-export const handlePositions = (bounds: Bounds): readonly HandlePosition[] =>
-  handles.map((handle) => ({
+export function handlePositions(bounds: Bounds): readonly HandlePosition[] {
+  return handles.map((handle) => ({
     handle,
     position: {
       x: bounds.x + (bounds.width * (handleDirections[handle].x + 1)) / 2,
       y: bounds.y + (bounds.height * (handleDirections[handle].y + 1)) / 2,
     },
   }));
+}
 
 export type ResizeOptions = {
   readonly snap: (value: number) => number;
@@ -52,14 +53,16 @@ type EdgeDrag = { readonly anchor: number; readonly target: number; readonly sid
 
 // Drags the edge of `span` on the `towards` side by `delta`, snapping where it lands. The side the Shape ends up on
 // comes from the unsnapped pointer, because snapping can carry the edge onto or across the opposite edge.
-const dragEdge = (span: Span, towards: -1 | 1, delta: number, snap: (value: number) => number): EdgeDrag => {
+function dragEdge(span: Span, towards: -1 | 1, delta: number, snap: (value: number) => number): EdgeDrag {
   const anchor = towards > 0 ? span.start : span.start + span.size;
   const dragged = anchor + towards * span.size + delta;
   return { anchor, target: snap(dragged), side: sideOf(anchor, dragged, towards) };
-};
+}
 
 // How much the drag scales a span of `size` along its axis.
-const axisScale = (edge: EdgeDrag, size: number): number => Math.abs(edge.target - edge.anchor) / size;
+function axisScale(edge: EdgeDrag, size: number): number {
+  return Math.abs(edge.target - edge.anchor) / size;
+}
 
 /**
  * The Bounds after dragging `handle` by `offset`. Along each axis the handle moves, the opposite edge stays put and
@@ -68,7 +71,7 @@ const axisScale = (edge: EdgeDrag, size: number): number => Math.abs(edge.target
  * opposite edge, or the middle for an axis the handle doesn't move. Scaling happens after snapping, so with the
  * aspect ratio kept the size can land off the grid.
  */
-export const resizeBounds = (bounds: Bounds, handle: ResizeHandle, offset: Point, options: ResizeOptions): Bounds => {
+export function resizeBounds(bounds: Bounds, handle: ResizeHandle, offset: Point, options: ResizeOptions): Bounds {
   const { snap, keepAspectRatio, minimumSize } = options;
   const direction = handleDirections[handle];
   const horizontal = horizontalSpan(bounds);
@@ -96,4 +99,4 @@ export const resizeBounds = (bounds: Bounds, handle: ResizeHandle, offset: Point
       : { start: span.start + (span.size - size) / 2, size };
   };
   return boundsOfSpans(scaleSpan(horizontal, horizontalEdge), scaleSpan(vertical, verticalEdge));
-};
+}

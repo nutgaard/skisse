@@ -1,5 +1,9 @@
 # Skisse
 
+## Code style
+
+Declare module-level functions and React components with `function`. Keep arrows for inline callbacks, functions nested in a body, and a `const` typed by a function type (such as `IdGenerator`), where the annotation checks the signature.
+
 ## Agent skills
 
 ### Issue tracker

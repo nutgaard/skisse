@@ -31,15 +31,17 @@ export type SymbolDefinition = {
 };
 
 /** The midpoints of the box's top, right, bottom and left sides. */
-export const sideMidpoints = ({ x, y, width, height }: Bounds): readonly Point[] => [
-  { x: x + width / 2, y },
-  { x: x + width, y: y + height / 2 },
-  { x: x + width / 2, y: y + height },
-  { x, y: y + height / 2 },
-];
+export function sideMidpoints({ x, y, width, height }: Bounds): readonly Point[] {
+  return [
+    { x: x + width / 2, y },
+    { x: x + width, y: y + height / 2 },
+    { x: x + width / 2, y: y + height },
+    { x, y: y + height / 2 },
+  ];
+}
 
 /** The box shrunk by `margin` on every side, but never past its middle. */
-export const inset = (box: Bounds, margin: number): Bounds => {
+export function inset(box: Bounds, margin: number): Bounds {
   const horizontal = Math.min(margin, box.width / 2);
   const vertical = Math.min(margin, box.height / 2);
   return {
@@ -48,7 +50,7 @@ export const inset = (box: Bounds, margin: number): Bounds => {
     width: box.width - 2 * horizontal,
     height: box.height - 2 * vertical,
   };
-};
+}
 
 /** The space kept between a Label and the lines around it. */
 export const labelMargin = 8;

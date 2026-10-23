@@ -4,9 +4,11 @@ import { inset, labelMargin, type SymbolDefinition } from "./symbol";
 
 // Half the height of the lid's ellipse. It follows the width, so the lid keeps its look on a tall cylinder, but a low
 // cylinder flattens it so the body still shows.
-const lidRadius = (box: Bounds): number => Math.min(box.width * 0.15, box.height * 0.2);
+function lidRadius(box: Bounds): number {
+  return Math.min(box.width * 0.15, box.height * 0.2);
+}
 
-const outline = (box: Bounds): Path => {
+function outline(box: Bounds): Path {
   const ry = lidRadius(box);
   const rx = box.width / 2;
   const centerX = box.x + rx;
@@ -18,14 +20,14 @@ const outline = (box: Bounds): Path => {
     ...arc({ x: centerX, y: box.y + box.height - ry }, rx, ry, 0, Math.PI),
     close,
   ];
-};
+}
 
 // The near edge of the lid, drawn across the top of the body.
-const lidEdge = (box: Bounds): Path => {
+function lidEdge(box: Bounds): Path {
   const ry = lidRadius(box);
   const rx = box.width / 2;
   return [moveTo({ x: box.x, y: box.y + ry }), ...arc({ x: box.x + rx, y: box.y + ry }, rx, ry, Math.PI, 0)];
-};
+}
 
 export const cylinder: SymbolDefinition = {
   name: "Cylinder",

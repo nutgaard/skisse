@@ -26,11 +26,12 @@ export const tools: readonly ToolInfo[] = [
 ];
 
 /** The tool whose shortcut is `key`, ignoring case, so shift and caps lock don't matter. */
-export const toolOfShortcut = (key: string): Tool | undefined =>
-  tools.find(({ shortcut }) => shortcut === key.toLowerCase())?.tool;
+export function toolOfShortcut(key: string): Tool | undefined {
+  return tools.find(({ shortcut }) => shortcut === key.toLowerCase())?.tool;
+}
 
 /** The picture for the Symbol's toolbar button, in a `size` square. */
-export const symbolIcon = (symbol: SymbolId, size: number): Path => {
+export function symbolIcon(symbol: SymbolId, size: number): Path {
   const definition = symbolDefinition(symbol);
   if (definition.icon) return definition.icon({ x: 0, y: 0, width: size, height: size });
   const { width, height } = definition.defaultSize;
@@ -42,4 +43,4 @@ export const symbolIcon = (symbol: SymbolId, size: number): Path => {
     height: height * scale,
   };
   return shapeGeometry(symbol, box).lines;
-};
+}

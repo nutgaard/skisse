@@ -12,14 +12,14 @@ type SketchListProps = {
 
 // The name field shown while renaming. Enter or leaving the field keeps the new name, Escape keeps the old one.
 // It finishes only once, so the blur that can follow Enter or Escape changes nothing.
-const RenameField = ({
+function RenameField({
   entry,
   onDone,
 }: {
   readonly entry: SketchEntry;
   /** Gets the new name, or `undefined` when renaming was cancelled. */
   readonly onDone: (name: string | undefined) => void;
-}) => {
+}) {
   const done = useRef(false);
   const finish = (name: string | undefined) => {
     if (done.current) return;
@@ -45,9 +45,9 @@ const RenameField = ({
       onBlur={(event) => commit(event.currentTarget.value)}
     />
   );
-};
+}
 
-export const SketchList = ({ entries, openId, onCreate, onOpen, onRename, onDelete }: SketchListProps) => {
+export function SketchList({ entries, openId, onCreate, onOpen, onRename, onDelete }: SketchListProps) {
   const [expanded, setExpanded] = useState(false);
   const [renaming, setRenaming] = useState<SketchId | undefined>(undefined);
   const openName = entries.find(({ id }) => id === openId)?.name;
@@ -97,4 +97,4 @@ export const SketchList = ({ entries, openId, onCreate, onOpen, onRename, onDele
       )}
     </div>
   );
-};
+}

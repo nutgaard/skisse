@@ -17,11 +17,13 @@ import {
   wheel,
 } from "./test-helpers";
 
-const dragBy = (from: { x: number; y: number }, to: { x: number; y: number }) => [
-  pointerDown(from),
-  pointerMove(to),
-  pointerUp(to),
-];
+function dragBy(from: { x: number; y: number }, to: { x: number; y: number }) {
+  return [
+    pointerDown(from),
+    pointerMove(to),
+    pointerUp(to),
+  ];
+}
 
 describe("panning", () => {
   test("scrolling pans the viewport by the scrolled distance", () => {

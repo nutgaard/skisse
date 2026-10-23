@@ -126,7 +126,9 @@ export type EditorState = {
 
 const idle: Interaction = { kind: "idle" };
 
-const isIdle = (state: EditorState): boolean => state.interaction.kind === "idle";
+function isIdle(state: EditorState): boolean {
+  return state.interaction.kind === "idle";
+}
 
 // How far, in screen pixels, the pointer must travel before a press on a Shape or a resize handle becomes a drag,
 // so a click never nudges or snaps a Shape by accident.
@@ -136,66 +138,78 @@ const minimumShapeSize = 10;
 
 // The Bounds of a Shape drawn by dragging from `origin` to `current`, never smaller than the minimum size. When
 // snapping, both corners snap to the grid, but the Shape still grows the way the pointer went from where it started.
-const drawnBounds = (origin: Point, current: Point, snap: (value: number) => number): Bounds => {
+function drawnBounds(origin: Point, current: Point, snap: (value: number) => number): Bounds {
   const span = (from: number, to: number): Span =>
     spanAtLeast(snap(from), snap(to), sideOf(from, to, 1), minimumShapeSize);
   return boundsOfSpans(span(origin.x, current.x), span(origin.y, current.y));
-};
+}
 
 // A click gives the Symbol's default size, centred on the click. When snapping, both corners snap to the grid, as for
 // a drawn Shape.
-const clickedBounds = (symbol: SymbolId, at: Point, snap: (value: number) => number): Bounds => {
+function clickedBounds(symbol: SymbolId, at: Point, snap: (value: number) => number): Bounds {
   const { width, height } = symbolDefinition(symbol).defaultSize;
   const span = (middle: number, size: number): Span =>
     spanAtLeast(snap(middle - size / 2), snap(middle + size / 2), 1, minimumShapeSize);
   return boundsOfSpans(span(at.x, width), span(at.y, height));
-};
+}
 
 /** The Bounds of the Shape that releasing the pointer now would create. */
-export const creationBounds = ({ symbol, origin, current, dragged, snaps }: Creation): Bounds =>
-  dragged ? drawnBounds(origin, current, snapperFor(snaps)) : clickedBounds(symbol, origin, snapperFor(snaps));
+export function creationBounds({ symbol, origin, current, dragged, snaps }: Creation): Bounds {
+  return dragged ? drawnBounds(origin, current, snapperFor(snaps)) : clickedBounds(symbol, origin, snapperFor(snaps));
+}
 
 // How far, in screen pixels, from a resize handle's centre a press still grabs it.
 const handleReach = 6;
 
 // Snapping to the grid is off by default. Holding Alt turns it on, for drags, resizes and arrow keys alike.
-const snapsToGrid = (modifiers: Modifiers): boolean => modifiers.alt;
+function snapsToGrid(modifiers: Modifiers): boolean {
+  return modifiers.alt;
+}
 
-const snapperFor = (snaps: boolean): ((value: number) => number) => (snaps ? snapToGrid : (value) => value);
+function snapperFor(snaps: boolean): ((value: number) => number) {
+  return (snaps ? snapToGrid : (value) => value);
+}
 
 export const emptySketch: Sketch = { shapes: {} };
 
 /** A fresh editor on `sketch`, a new empty one by default. Nothing is selected and there is nothing to undo. */
-export const createEditor = (deps: Dependencies, sketch: Sketch = emptySketch): EditorState => ({
-  deps,
-  sketch,
-  tool: "select",
-  selection: [],
-  interaction: idle,
-  viewport: viewport.initialViewport,
-  spaceHeld: false,
-  nextIdSequence: 1,
-  history: history.startHistory(sketch),
-});
+export function createEditor(deps: Dependencies, sketch: Sketch = emptySketch): EditorState {
+  return {
+    deps,
+    sketch,
+    tool: "select",
+    selection: [],
+    interaction: idle,
+    viewport: viewport.initialViewport,
+    spaceHeld: false,
+    nextIdSequence: 1,
+    history: history.startHistory(sketch),
+  };
+}
 
 // Shapes are hit-tested by their Symbol's outline, as if filled, even with a transparent fill. The topmost Shape wins.
-const shapeAt = (sketch: Sketch, point: Point): SymbolShape | undefined =>
-  Object.values(sketch.shapes).findLast((shape) => hitsOutline(shape.symbol, shape.bounds, point));
+function shapeAt(sketch: Sketch, point: Point): SymbolShape | undefined {
+  return Object.values(sketch.shapes).findLast((shape) => hitsOutline(shape.symbol, shape.bounds, point));
+}
 
-const shapesInside = (sketch: Sketch, box: Bounds): readonly ShapeId[] =>
-  Object.values(sketch.shapes)
+function shapesInside(sketch: Sketch, box: Bounds): readonly ShapeId[] {
+  return Object.values(sketch.shapes)
     .filter((shape) => containsBounds(box, shape.bounds))
     .map(({ id }) => id);
+}
 
-const union = (a: readonly ShapeId[], b: readonly ShapeId[]): readonly ShapeId[] => [
-  ...a,
-  ...b.filter((id) => !a.includes(id)),
-];
+function union(a: readonly ShapeId[], b: readonly ShapeId[]): readonly ShapeId[] {
+  return [
+    ...a,
+    ...b.filter((id) => !a.includes(id)),
+  ];
+}
 
-const toggle = (ids: readonly ShapeId[], id: ShapeId): readonly ShapeId[] =>
-  ids.includes(id) ? ids.filter((other) => other !== id) : [...ids, id];
+function toggle(ids: readonly ShapeId[], id: ShapeId): readonly ShapeId[] {
+  return ids.includes(id) ? ids.filter((other) => other !== id) : [...ids, id];
+}
 
-const startMarquee = (state: EditorState, input: PointerInput): EditorState => {
+function startMarquee(state: EditorState, input: PointerInput): EditorState {
   const additive = input.modifiers.shift;
   return {
     ...state,
@@ -208,18 +222,20 @@ const startMarquee = (state: EditorState, input: PointerInput): EditorState => {
       additive,
     },
   };
-};
+}
 
 /** The one selected Shape, which is the only time resize handles are shown. */
-export const resizableShape = (state: EditorState): SymbolShape | undefined => {
+export function resizableShape(state: EditorState): SymbolShape | undefined {
   const [id, ...others] = state.selection;
   return id !== undefined && others.length === 0 ? state.sketch.shapes[id] : undefined;
-};
+}
 
 // A distance in screen pixels, such as the drag threshold, as a distance on the Sketch at the current zoom.
-const sketchDistance = (state: EditorState, screenDistance: number): number => screenDistance / state.viewport.zoom;
+function sketchDistance(state: EditorState, screenDistance: number): number {
+  return screenDistance / state.viewport.zoom;
+}
 
-const handleAt = (state: EditorState, point: Point): { shape: SymbolShape; handle: ResizeHandle } | undefined => {
+function handleAt(state: EditorState, point: Point): { shape: SymbolShape; handle: ResizeHandle } | undefined {
   const shape = resizableShape(state);
   const reach = sketchDistance(state, handleReach);
   const nearby = shape
@@ -228,9 +244,9 @@ const handleAt = (state: EditorState, point: Point): { shape: SymbolShape; handl
       )
     : undefined;
   return shape && nearby ? { shape, handle: nearby.handle } : undefined;
-};
+}
 
-const pressWithSelectTool = (state: EditorState, input: PointerInput): EditorState => {
+function pressWithSelectTool(state: EditorState, input: PointerInput): EditorState {
   const grabbedHandle = handleAt(state, input.position);
   if (grabbedHandle) {
     return {
@@ -263,44 +279,50 @@ const pressWithSelectTool = (state: EditorState, input: PointerInput): EditorSta
       dragged: false,
     },
   };
-};
+}
 
-const moveShapes = (sketch: Sketch, ids: readonly ShapeId[], offset: Point): Sketch => ({
-  ...sketch,
-  shapes: {
-    ...sketch.shapes,
-    ...Object.fromEntries(
-      ids
-        .map((id) => sketch.shapes[id])
-        .filter((shape) => shape !== undefined)
-        .map((shape) => [shape.id, { ...shape, bounds: translate(shape.bounds, offset) }]),
-    ),
-  },
-});
+function moveShapes(sketch: Sketch, ids: readonly ShapeId[], offset: Point): Sketch {
+  return {
+    ...sketch,
+    shapes: {
+      ...sketch.shapes,
+      ...Object.fromEntries(
+        ids
+          .map((id) => sketch.shapes[id])
+          .filter((shape) => shape !== undefined)
+          .map((shape) => [shape.id, { ...shape, bounds: translate(shape.bounds, offset) }]),
+      ),
+    },
+  };
+}
 
 // The Bounds around the selection, which moves as one block.
-const selectionBlock = (sketch: Sketch, selection: readonly ShapeId[]): Bounds =>
-  enclosingBounds(selection.flatMap((id) => sketch.shapes[id]?.bounds ?? []));
+function selectionBlock(sketch: Sketch, selection: readonly ShapeId[]): Bounds {
+  return enclosingBounds(selection.flatMap((id) => sketch.shapes[id]?.bounds ?? []));
+}
 
 // Where the pointer is and which modifiers are held: all a drag needs, whether from a pointer move or a key press.
 type PointerState = Pick<PointerInput, "position" | "modifiers">;
 
 // The press with the pointer at `pointer`, noting whether it has now travelled past the drag threshold.
-const continuePress = <P extends Press>(state: EditorState, press: P, pointer: PointerState): P => {
+function continuePress<P extends Press>(state: EditorState, press: P, pointer: PointerState): P {
   const travelled = Math.hypot(pointer.position.x - press.origin.x, pointer.position.y - press.origin.y);
   return {
     ...press,
     current: pointer.position,
     dragged: press.dragged || travelled >= sketchDistance(state, dragThreshold),
   };
-};
+}
 
 // Zero until the pointer has travelled past the drag threshold.
-const pointerOffset = (drag: Drag, pointer: PointerState): Point =>
-  drag.dragged ? { x: pointer.position.x - drag.origin.x, y: pointer.position.y - drag.origin.y } : { x: 0, y: 0 };
+function pointerOffset(drag: Drag, pointer: PointerState): Point {
+  return drag.dragged
+    ? { x: pointer.position.x - drag.origin.x, y: pointer.position.y - drag.origin.y }
+    : { x: 0, y: 0 };
+}
 
 // The block's top-left corner snaps to the grid, so the Shapes keep their distances.
-const dragOffset = (state: EditorState, drag: Drag, pointer: PointerState): Point => {
+function dragOffset(state: EditorState, drag: Drag, pointer: PointerState): Point {
   const offset = pointerOffset(drag, pointer);
   if (!drag.dragged || !snapsToGrid(pointer.modifiers)) return offset;
   const block = selectionBlock(drag.before, state.selection);
@@ -308,13 +330,13 @@ const dragOffset = (state: EditorState, drag: Drag, pointer: PointerState): Poin
     x: snapToGrid(block.x + offset.x) - block.x,
     y: snapToGrid(block.y + offset.y) - block.y,
   };
-};
+}
 
-const resizeShape = (
+function resizeShape(
   state: EditorState,
   interaction: Extract<Interaction, { kind: "resizing" }>,
   pointer: PointerState,
-): EditorState => {
+): EditorState {
   const { before, shapeId, handle } = interaction;
   const shape = before.shapes[shapeId];
   if (!shape || !interaction.dragged) return { ...state, sketch: before, interaction };
@@ -328,13 +350,13 @@ const resizeShape = (
     sketch: { ...before, shapes: { ...before.shapes, [shapeId]: { ...shape, bounds } } },
     interaction,
   };
-};
+}
 
-const dragTo = (
+function dragTo(
   state: EditorState,
   interaction: Extract<Interaction, { kind: "moving" | "resizing" }>,
   pointer: PointerState,
-): EditorState => {
+): EditorState {
   switch (interaction.kind) {
     case "moving": {
       const drag = continuePress(state, interaction, pointer);
@@ -347,12 +369,14 @@ const dragTo = (
     case "resizing":
       return resizeShape(state, continuePress(state, interaction, pointer), pointer);
   }
-};
+}
 
 /** Whether a press on the Sketch pans instead of using the active tool: with the pan tool, or while space is held. */
-export const pansOnPress = (state: EditorState): boolean => state.tool === "pan" || state.spaceHeld;
+export function pansOnPress(state: EditorState): boolean {
+  return state.tool === "pan" || state.spaceHeld;
+}
 
-const pointerDown = (state: EditorState, input: PointerInput): EditorState => {
+function pointerDown(state: EditorState, input: PointerInput): EditorState {
   if (pansOnPress(state)) return { ...state, interaction: { kind: "panning", grabbed: input.position } };
   switch (state.tool) {
     case "select":
@@ -373,9 +397,9 @@ const pointerDown = (state: EditorState, input: PointerInput): EditorState => {
         },
       };
   }
-};
+}
 
-const pointerMove = (state: EditorState, input: PointerInput): EditorState => {
+function pointerMove(state: EditorState, input: PointerInput): EditorState {
   const { interaction } = state;
   switch (interaction.kind) {
     case "idle":
@@ -399,20 +423,25 @@ const pointerMove = (state: EditorState, input: PointerInput): EditorState => {
     case "panning":
       return { ...state, viewport: viewport.keepUnderPointer(state.viewport, interaction.grabbed, input.position) };
   }
-};
+}
 
-const addShape = (sketch: Sketch, shape: SymbolShape): Sketch => ({
-  ...sketch,
-  shapes: { ...sketch.shapes, [shape.id]: shape },
-});
+function addShape(sketch: Sketch, shape: SymbolShape): Sketch {
+  return {
+    ...sketch,
+    shapes: { ...sketch.shapes, [shape.id]: shape },
+  };
+}
 
 // The first sequence number, from `sequence` on, whose ID is not taken yet. A loaded Sketch can already hold IDs that
 // the generator gives again, such as when a Sketch is closed and opened again, which starts the sequence afresh.
-const freeIdSequence = (state: EditorState, sequence: number): number =>
-  state.sketch.shapes[state.deps.generateId(sequence)] === undefined ? sequence : freeIdSequence(state, sequence + 1);
+function freeIdSequence(state: EditorState, sequence: number): number {
+  return state.sketch.shapes[state.deps.generateId(sequence)] === undefined
+    ? sequence
+    : freeIdSequence(state, sequence + 1);
+}
 
 // A new Shape becomes the selection, so it can be adjusted straight away.
-const createShape = (state: EditorState, symbol: SymbolId, bounds: Bounds): EditorState => {
+function createShape(state: EditorState, symbol: SymbolId, bounds: Bounds): EditorState {
   const sequence = freeIdSequence(state, state.nextIdSequence);
   const shape: SymbolShape = { id: state.deps.generateId(sequence), symbol, bounds };
   return {
@@ -421,9 +450,9 @@ const createShape = (state: EditorState, symbol: SymbolId, bounds: Bounds): Edit
     selection: [shape.id],
     nextIdSequence: sequence + 1,
   };
-};
+}
 
-const pointerUp = (state: EditorState, input: PointerInput): EditorState => {
+function pointerUp(state: EditorState, input: PointerInput): EditorState {
   const moved = pointerMove(state, input);
   const { interaction } = moved;
   const finished: EditorState = { ...moved, interaction: idle };
@@ -440,9 +469,9 @@ const pointerUp = (state: EditorState, input: PointerInput): EditorState => {
     case "panning":
       return finished;
   }
-};
+}
 
-const cancelGesture = (state: EditorState): EditorState => {
+function cancelGesture(state: EditorState): EditorState {
   const { interaction } = state;
   const cancelled: EditorState = { ...state, interaction: idle };
   switch (interaction.kind) {
@@ -456,7 +485,7 @@ const cancelGesture = (state: EditorState): EditorState => {
     case "resizing":
       return { ...cancelled, sketch: interaction.before };
   }
-};
+}
 
 const nudgeDirections: Readonly<Record<string, Point>> = {
   ArrowLeft: { x: -1, y: 0 },
@@ -467,7 +496,7 @@ const nudgeDirections: Readonly<Record<string, Point>> = {
 
 // A nudge moves by one unit, or by one grid step with shift. With snapping on, it moves the selection's top-left
 // corner to the next grid line instead.
-const nudgeOffset = (state: EditorState, direction: Point, modifiers: Modifiers): Point => {
+function nudgeOffset(state: EditorState, direction: Point, modifiers: Modifiers): Point {
   if (!snapsToGrid(modifiers)) {
     const step = modifiers.shift ? gridSize : 1;
     return { x: direction.x * step, y: direction.y * step };
@@ -477,25 +506,28 @@ const nudgeOffset = (state: EditorState, direction: Point, modifiers: Modifiers)
     x: direction.x === 0 ? 0 : nextGridLine(block.x, direction.x) - block.x,
     y: direction.y === 0 ? 0 : nextGridLine(block.y, direction.y) - block.y,
   };
-};
+}
 
-const nudge = (state: EditorState, direction: Point, modifiers: Modifiers): EditorState =>
-  state.selection.length === 0
+function nudge(state: EditorState, direction: Point, modifiers: Modifiers): EditorState {
+  return state.selection.length === 0
     ? state
     : { ...state, sketch: moveShapes(state.sketch, state.selection, nudgeOffset(state, direction, modifiers)) };
+}
 
-const deleteSelection = (state: EditorState): EditorState => ({
-  ...state,
-  sketch: {
-    ...state.sketch,
-    shapes: Object.fromEntries(Object.entries(state.sketch.shapes).filter(([id]) => !state.selection.includes(id))),
-  },
-  selection: [],
-});
+function deleteSelection(state: EditorState): EditorState {
+  return {
+    ...state,
+    sketch: {
+      ...state.sketch,
+      shapes: Object.fromEntries(Object.entries(state.sketch.shapes).filter(([id]) => !state.selection.includes(id))),
+    },
+    selection: [],
+  };
+}
 
 // Pressing or releasing a modifier mid-drag, such as Alt for snapping, applies to the drag straight away,
 // without waiting for the pointer to move.
-const updateDragModifiers = (state: EditorState, modifiers: Modifiers): EditorState => {
+function updateDragModifiers(state: EditorState, modifiers: Modifiers): EditorState {
   const { interaction } = state;
   switch (interaction.kind) {
     case "creatingShape":
@@ -508,13 +540,14 @@ const updateDragModifiers = (state: EditorState, modifiers: Modifiers): EditorSt
     case "panning":
       return state;
   }
-};
+}
 
 // Space is tracked on its own, whatever else is going on, as a press while it is held pans.
-const trackSpace = (state: EditorState, input: KeyInput): EditorState =>
-  input.key === " " ? { ...state, spaceHeld: input.type === "keyDown" } : state;
+function trackSpace(state: EditorState, input: KeyInput): EditorState {
+  return input.key === " " ? { ...state, spaceHeld: input.type === "keyDown" } : state;
+}
 
-const keyDown = (state: EditorState, input: KeyInput): EditorState => {
+function keyDown(state: EditorState, input: KeyInput): EditorState {
   if (input.key === "Escape") {
     return isIdle(state) ? { ...state, selection: [] } : cancelGesture(state);
   }
@@ -530,44 +563,55 @@ const keyDown = (state: EditorState, input: KeyInput): EditorState => {
   const tool = command || input.modifiers.alt ? undefined : toolOfShortcut(input.key);
   if (tool) return { ...state, tool };
   return state;
-};
+}
 
 // Puts back the Sketch the history now holds. Shapes that no longer exist drop out of the selection.
-const restore = (state: EditorState, restored: history.History<Sketch>): EditorState => ({
-  ...state,
-  sketch: restored.present,
-  selection: state.selection.filter((id) => restored.present.shapes[id] !== undefined),
-  history: restored,
-});
+function restore(state: EditorState, restored: history.History<Sketch>): EditorState {
+  return {
+    ...state,
+    sketch: restored.present,
+    selection: state.selection.filter((id) => restored.present.shapes[id] !== undefined),
+    history: restored,
+  };
+}
 
-const undo = (state: EditorState): EditorState => restore(state, history.undo(state.history));
+function undo(state: EditorState): EditorState {
+  return restore(state, history.undo(state.history));
+}
 
-const redo = (state: EditorState): EditorState => restore(state, history.redo(state.history));
+function redo(state: EditorState): EditorState {
+  return restore(state, history.redo(state.history));
+}
 
 // Scrolling 100 pixels zooms by 2×. A mouse wheel scrolls about 100 pixels a notch, which would zoom too far at a
 // time, so a single scroll counts for at most half that. A trackpad scrolls a few pixels at a time.
-const zoomFactorOfScroll = (deltaY: number): number => 2 ** (-Math.max(-50, Math.min(50, deltaY)) / 100);
+function zoomFactorOfScroll(deltaY: number): number {
+  return 2 ** (-Math.max(-50, Math.min(50, deltaY)) / 100);
+}
 
-const wheel = (state: EditorState, input: WheelInput): EditorState =>
-  input.modifiers.ctrl || input.modifiers.meta
+function wheel(state: EditorState, input: WheelInput): EditorState {
+  return input.modifiers.ctrl || input.modifiers.meta
     ? { ...state, viewport: viewport.zoomAround(state.viewport, input.position, zoomFactorOfScroll(input.delta.y)) }
     : { ...state, viewport: viewport.panBy(state.viewport, input.delta) };
+}
 
 // An empty Sketch has nothing to frame, so it goes back to 100% instead.
-const zoomToFit = (state: EditorState, screenSize: viewport.Size): viewport.Viewport => {
+function zoomToFit(state: EditorState, screenSize: viewport.Size): viewport.Viewport {
   const all = Object.values(state.sketch.shapes).map(({ bounds }) => bounds);
   return all.length === 0
     ? viewport.resetZoom(state.viewport, screenSize)
     : viewport.fit(screenSize, enclosingBounds(all));
-};
+}
 
 // Pointer positions arrive in screen pixels. Gestures on the Sketch work in Sketch coordinates.
-const inSketch = (state: EditorState, input: PointerInput): PointerInput => ({
-  ...input,
-  position: viewport.toSketch(state.viewport, input.position),
-});
+function inSketch(state: EditorState, input: PointerInput): PointerInput {
+  return {
+    ...input,
+    position: viewport.toSketch(state.viewport, input.position),
+  };
+}
 
-const applyInput = (state: EditorState, input: Input): EditorState => {
+function applyInput(state: EditorState, input: Input): EditorState {
   switch (input.type) {
     case "selectTool":
       return { ...state, tool: input.tool };
@@ -596,11 +640,11 @@ const applyInput = (state: EditorState, input: Input): EditorState => {
     case "redo":
       return isIdle(state) ? redo(state) : state;
   }
-};
+}
 
 // A change to the Sketch is recorded once the editor is idle again, so a whole gesture, or any longer interaction,
 // is one step, and a cancelled one, which puts the Sketch back, records nothing.
-export const update = (state: EditorState, input: Input): EditorState => {
+export function update(state: EditorState, input: Input): EditorState {
   const next = applyInput(state, input);
   return isIdle(next) ? { ...next, history: history.record(next.history, next.sketch) } : next;
-};
+}

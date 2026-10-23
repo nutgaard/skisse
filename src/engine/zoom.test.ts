@@ -20,10 +20,10 @@ import {
 
 const pointer = { x: 300, y: 200 };
 
-const expectSamePoint = (actual: Point, expected: Point) => {
+function expectSamePoint(actual: Point, expected: Point) {
   expect(actual.x).toBeCloseTo(expected.x);
   expect(actual.y).toBeCloseTo(expected.y);
-};
+}
 
 describe("zooming", () => {
   test("a new editor shows the Sketch from its origin at 100%", () => {

@@ -6,7 +6,7 @@ const autosaveDelay = 300;
 
 // Saves the Sketch shortly after each change, and straight away when the Editor closes or the page is left, so a
 // change made just before is never lost.
-export const useAutosave = (current: Sketch, save: (sketch: Sketch) => void) => {
+export function useAutosave(current: Sketch, save: (sketch: Sketch) => void) {
   const saved = useRef(current);
   const unsaved = useRef<Sketch | undefined>(undefined);
 
@@ -30,4 +30,4 @@ export const useAutosave = (current: Sketch, save: (sketch: Sketch) => void) => 
       flush();
     };
   }, [flush]);
-};
+}
