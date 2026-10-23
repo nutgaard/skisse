@@ -3,13 +3,14 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "packageManager": "bun@1.4.4",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "typecheck": "tsc -p tsconfig.json && tsc -p src/engine/tsconfig.json",
-    "test": "vitest run",
-    "test:e2e": "playwright test"
+    "dev": "bun --bun vite",
+    "build": "bun --bun vite build",
+    "preview": "bun --bun vite preview",
+    "typecheck": "bun --bun tsc -p tsconfig.json && bun --bun tsc -p src/engine/tsconfig.json",
+    "test": "bun --bun vitest run",
+    "test:e2e": "bun --bun playwright test"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -17,7 +18,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.64.1",
-    "@types/node": "^26.6.5",
+    "@types/bun": "^1.4.4",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
