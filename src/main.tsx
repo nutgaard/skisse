@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import type { Dependencies } from "./engine";
+import { labelFontFamily, type Dependencies } from "./engine";
 import { browserSketchStore } from "./store/browser-sketch-store";
 import { openOnStart } from "./store/open-sketch";
 import { App } from "./view/App";
@@ -11,7 +11,7 @@ import "./view/editor.css";
 const idPrefix = crypto.randomUUID();
 
 const deps: Dependencies = {
-  measureText: canvasTextMeasurer("system-ui, sans-serif"),
+  measureText: canvasTextMeasurer(labelFontFamily),
   generateId: (sequence) => `${idPrefix}-${sequence}`,
 };
 

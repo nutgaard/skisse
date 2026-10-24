@@ -18,6 +18,8 @@ export type SymbolDefinition = {
   readonly defaultSize: Size;
   readonly canBeContainer: boolean;
   readonly defaultLabelAlignment: LabelAlignment;
+  /** Whether the Shape is nothing but its Label, such as standalone text, and so is removed when its Label is empty. */
+  readonly labelOnly?: boolean;
   /** The area the Shape covers: filled, hit-tested, and where Arrow ends attach. */
   readonly outline: (box: Bounds) => Path;
   /** The lines drawn for the Shape. By default its outline. */

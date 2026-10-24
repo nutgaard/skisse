@@ -7,6 +7,7 @@ import {
   currentInteraction,
   exportSvg,
   gridSize,
+  labelLayout,
   noModifiers,
   pansOnPress,
   pathData,
@@ -20,16 +21,22 @@ import {
   update,
   viewport,
   type Dependencies,
+  type EditorState,
+  type FontSize,
+  type Input,
   type KeyInput,
+  type LabelAlignment,
   type PointerInput,
   type Size,
   type Sketch,
+  type LabelView,
   type ToolInfo,
   type Viewport,
   type WheelInput,
 } from "../engine";
 import { useAutosave } from "./autosave";
 import { downloadPng, downloadSvg } from "./download";
+import { LabelEditor } from "./LabelEditor";
 import { SvgElementView } from "./SvgElementView";
 
 function modifiersOf(event: KeyboardEvent | PointerEvent | WheelEvent) {
@@ -90,9 +97,9 @@ function isSelectAll(event: KeyboardEvent) {
   return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a";
 }
 
-// Keys typed into a text field, such as when renaming a Sketch, are not editor shortcuts.
+// Keys typed into a text field, such as when renaming a Sketch or editing a Label, are not editor shortcuts.
 function isTyping(event: KeyboardEvent) {
-  return event.target instanceof HTMLInputElement;
+  return event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
 }
 
 function isSpace(event: KeyboardEvent) {
@@ -170,6 +177,65 @@ function ToolButton({ info, active, onSelect }: ToolButtonProps) {
   );
 }
 
+const alignments: readonly { readonly alignment: LabelAlignment; readonly name: string }[] = [
+  { alignment: "center", name: "Centre" },
+  { alignment: "topLeft", name: "Top left" },
+];
+
+const fontSizes: readonly { readonly fontSize: FontSize; readonly name: string; readonly title: string }[] = [
+  { fontSize: "small", name: "S", title: "Small text" },
+  { fontSize: "medium", name: "M", title: "Medium text" },
+  { fontSize: "large", name: "L", title: "Large text" },
+];
+
+// What the selected Shapes' Labels have in common, such as their font size, or `undefined` when they differ.
+function shared<T>(state: EditorState, of: (label: LabelView) => T): T | undefined {
+  const values = new Set(selection(state).flatMap((id) => {
+    const label = labelLayout(state, id);
+    return label ? [of(label)] : [];
+  }));
+  return values.size === 1 ? [...values][0] : undefined;
+}
+
+type LabelControlsProps = { readonly state: EditorState; readonly dispatch: (input: Input) => void };
+
+// Shown while Shapes are selected. The buttons keep the focus where it is, so they change a Label being edited without
+// finishing the editing.
+function LabelControls({ state, dispatch }: LabelControlsProps) {
+  if (selection(state).length === 0) return null;
+  const alignment = shared(state, (label) => label.alignment);
+  const fontSize = shared(state, (label) => label.fontSize);
+  return (
+    <div className="toolbar label-controls" role="toolbar" aria-label="Label">
+      {alignments.map((option) => (
+        <button
+          key={option.alignment}
+          type="button"
+          aria-pressed={option.alignment === alignment}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => dispatch({ type: "setLabelAlignment", alignment: option.alignment })}
+        >
+          {option.name}
+        </button>
+      ))}
+      <span className="toolbar-separator" />
+      {fontSizes.map((option) => (
+        <button
+          key={option.fontSize}
+          type="button"
+          aria-pressed={option.fontSize === fontSize}
+          aria-label={option.title}
+          title={option.title}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => dispatch({ type: "changeStyle", style: { fontSize: option.fontSize } })}
+        >
+          {option.name}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 type EditorProps = {
   readonly deps: Dependencies;
   /** The open Sketch's name, which exports are named after. */
@@ -187,8 +253,9 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const selected = new Set(selection(state));
   const view = viewport(state);
   const finishedSketch = sketch(state);
+  const editedLabel = interaction.kind === "editingLabel" ? labelLayout(state, interaction.shapeId) : undefined;
   // Only a finished change to the Sketch changes the export, not every pointer move.
-  const exportedSvg = useMemo(() => exportSvg(finishedSketch), [finishedSketch]);
+  const exportedSvg = useMemo(() => exportSvg(finishedSketch, deps.measureText), [finishedSketch, deps]);
 
   useAutosave(finishedSketch, onSave);
 
@@ -287,6 +354,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
         onPointerMove={onPointer("pointerMove")}
         onPointerUp={onPointer("pointerUp")}
         onPointerCancel={onPointer("pointerCancel")}
+        onDoubleClick={(event) => dispatch({ type: "doubleClick", position: { x: event.clientX, y: event.clientY } })}
       >
         <Grid viewport={view} />
         <g transform={`scale(${view.zoom}) translate(${-view.x} ${-view.y})`}>
@@ -310,6 +378,8 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
           {interaction.kind === "marqueeSelecting" && <rect {...interaction.bounds} className="selection-box" />}
         </g>
       </svg>
+      {editedLabel && <LabelEditor label={editedLabel} viewport={view} dispatch={dispatch} />}
+      <LabelControls state={state} dispatch={dispatch} />
       <div ref={toolbarRef} className="toolbar" role="toolbar">
         {tools.map((info) => (
           <ToolButton

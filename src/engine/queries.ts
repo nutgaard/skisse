@@ -1,16 +1,20 @@
 import {
   creationBounds,
+  defaultStyle,
   resizableShape,
   type EditorState,
+  type FontSize,
   type ShapeId,
   type Sketch,
 } from "./editor";
 import { boundsBetween, type Bounds, type Point } from "./geometry";
 import * as history from "./history";
-import { onScreen, renderShapes } from "./render";
+import { displayedBounds, shapeLayout, type LabelLine } from "./label";
+import { onScreen, renderShapes, type ShapeToRender } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
 import type { SvgElement } from "./svg";
-import type { SymbolId } from "./symbols";
+import { symbolDefinition, type SymbolId } from "./symbols";
+import type { LabelAlignment } from "./symbols/symbol";
 import type { Tool } from "./tools";
 import type { Viewport } from "./viewport";
 
@@ -24,8 +28,42 @@ export type ShapeView = {
   readonly bounds: Bounds;
 };
 
+export type LabelView = {
+  readonly text: string;
+  readonly alignment: LabelAlignment;
+  readonly fontSize: FontSize;
+  /** The size of the font, in Sketch units. */
+  readonly fontPixels: number;
+  readonly lineHeight: number;
+  /** Where the Label's text goes, in the Shape as displayed. */
+  readonly area: Bounds;
+  /** The text as wrapped, each line where it is drawn. */
+  readonly lines: readonly LabelLine[];
+};
+
+/** The Label of a Shape, laid out as it is drawn. */
+export function labelLayout(state: EditorState, id: ShapeId): LabelView | undefined {
+  const shape = state.sketch.shapes[id];
+  if (!shape) return undefined;
+  const { labelArea, fontPixels, lineHeight, lines } = shapeLayout(shape, state.deps.measureText);
+  return {
+    text: shape.label.text,
+    alignment: shape.label.alignment,
+    fontSize: shape.style.fontSize,
+    fontPixels,
+    lineHeight,
+    area: labelArea,
+    lines,
+  };
+}
+
+/** Every Shape, with its Bounds as displayed: grown to fit its Label. */
 export function shapes(state: EditorState): readonly ShapeView[] {
-  return Object.values(state.sketch.shapes).map(({ id, symbol, bounds }) => ({ id, symbol, bounds }));
+  return Object.values(state.sketch.shapes).map((shape) => ({
+    id: shape.id,
+    symbol: shape.symbol,
+    bounds: displayedBounds(shape, state.deps.measureText),
+  }));
 }
 
 /** The Sketch as of the last finished change, leaving out any gesture still in progress. This is what to save. */
@@ -41,7 +79,7 @@ export type HandleView = { readonly handle: ResizeHandle; readonly position: Poi
 
 export function resizeHandles(state: EditorState): readonly HandleView[] {
   const shape = resizableShape(state);
-  return shape ? handlePositions(shape.bounds) : [];
+  return shape ? handlePositions(displayedBounds(shape, state.deps.measureText)) : [];
 }
 
 export function canUndo(state: EditorState): boolean {
@@ -69,7 +107,8 @@ export type InteractionView =
   | { readonly kind: "marqueeSelecting"; readonly bounds: Bounds }
   | { readonly kind: "moving" }
   | { readonly kind: "resizing"; readonly handle: ResizeHandle }
-  | { readonly kind: "panning" };
+  | { readonly kind: "panning" }
+  | { readonly kind: "editingLabel"; readonly shapeId: ShapeId };
 
 export function currentInteraction(state: EditorState): InteractionView {
   const { interaction } = state;
@@ -88,6 +127,8 @@ export function currentInteraction(state: EditorState): InteractionView {
       return { kind: "resizing", handle: interaction.handle };
     case "panning":
       return { kind: "panning" };
+    case "editingLabel":
+      return { kind: "editingLabel", shapeId: interaction.shapeId };
   }
 }
 
@@ -97,6 +138,19 @@ export function currentInteraction(state: EditorState): InteractionView {
  */
 export function rendering(state: EditorState): SvgElement {
   const interaction = currentInteraction(state);
-  const beingDrawn = interaction.kind === "creatingShape" ? [interaction] : [];
-  return renderShapes([...Object.values(state.sketch.shapes), ...beingDrawn], onScreen);
+  const beingDrawn: readonly ShapeToRender[] =
+    interaction.kind === "creatingShape"
+      ? [
+          {
+            symbol: interaction.symbol,
+            bounds: interaction.bounds,
+            label: { text: "", alignment: symbolDefinition(interaction.symbol).defaultLabelAlignment },
+            style: defaultStyle,
+          },
+        ]
+      : [];
+  return renderShapes([...Object.values(state.sketch.shapes), ...beingDrawn], state.deps.measureText, {
+    ...onScreen,
+    hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,
+  });
 }

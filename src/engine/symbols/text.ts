@@ -8,6 +8,7 @@ export const text: SymbolDefinition = {
   defaultSize: { width: 120, height: 40 },
   canBeContainer: false,
   defaultLabelAlignment: "center",
+  labelOnly: true,
   outline: rectangle,
   lines: () => [],
   labelArea: (box) => inset(box, 4),
