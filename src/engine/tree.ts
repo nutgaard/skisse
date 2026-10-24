@@ -45,3 +45,10 @@ export function withDescendants(sketch: Sketch, ids: readonly ShapeId[]): readon
 export function onTopIn(sketch: Sketch, parent: ShapeId | undefined): Placement {
   return { parent, z: (childrenOf(sketch, parent).at(-1)?.z ?? -1) + 1 };
 }
+
+/** Every Shape as drawn, but with the Shapes of `ids` and the Shapes inside them lifted above all the others. */
+export function drawOrderLifting(sketch: Sketch, ids: readonly ShapeId[]): readonly SymbolShape[] {
+  const lifted = withDescendants(sketch, ids);
+  const all = drawOrder(sketch);
+  return [...all.filter(({ id }) => !lifted.includes(id)), ...all.filter(({ id }) => lifted.includes(id))];
+}

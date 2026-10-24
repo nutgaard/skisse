@@ -16,7 +16,7 @@ import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
 import type { LabelAlignment } from "./symbols/symbol";
 import type { Tool } from "./tools";
-import { childrenOf, drawOrder } from "./tree";
+import { childrenOf, drawOrder, drawOrderLifting } from "./tree";
 import type { Viewport } from "./viewport";
 
 export { pansOnPress } from "./editor";
@@ -203,14 +203,17 @@ export function currentInteraction(state: EditorState): InteractionView {
 }
 
 /**
- * The Sketch as rendered on screen, in Sketch coordinates, including a Shape being drawn. The selection and resize
- * handles are not part of it.
+ * The Sketch as rendered on screen, in Sketch coordinates, including a Shape being drawn, and with Shapes being dragged
+ * in front. The selection and resize handles are not part of it.
  */
 export function rendering(state: EditorState): SvgElement {
   const interaction = currentInteraction(state);
   const beingDrawn: readonly ShapeToRender[] =
     interaction.kind === "creatingShape" ? [newShape(interaction.symbol, interaction.bounds, state.style)] : [];
-  return renderShapes([...drawOrder(state.sketch), ...beingDrawn], state.deps.measureText, {
+  // Shapes being dragged are drawn above all the others until dropped, so they never pass behind a Shape they cross.
+  const placed =
+    interaction.kind === "moving" ? drawOrderLifting(state.sketch, state.selection) : drawOrder(state.sketch);
+  return renderShapes([...placed, ...beingDrawn], state.deps.measureText, {
     ...onScreen,
     hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,
   });
