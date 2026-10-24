@@ -81,21 +81,22 @@ type Candidate = {
 };
 
 // Where the middle segment goes on its own: at `preferred`, unless the path would then run back over itself or through
-// the Shape of an end. It then goes just outside one of those Shapes instead, the nearest place to `preferred` that
-// keeps clear of both and leaves the path clean, or the top or left on a tie. With no such place, it stays.
+// the Shape of an end. It then goes just outside one of those Shapes instead, the nearest place to `preferred`, or the
+// top or left on a tie, that keeps clear of both Shapes and leaves the path clean. Failing that, the nearest such place
+// where the path at least doesn't run back over itself, as when the Shapes are too close together to keep clear of.
 function placed(start: ElbowEnd, end: ElbowEnd, axis: Axis, within: Extent, preferred: number): number {
   const extents = [start, end].flatMap(({ box }) => (box ? [extentOf(box, axis)] : []));
-  const isClean = (at: number) => {
-    const { points } = layoutAt(start, end, axis, at);
-    return !turnsBack(points) && !crossesShapes(start, end, points);
-  };
+  const pointsAt = (at: number) => layoutAt(start, end, axis, at).points;
+  const goesOn = (at: number) => !turnsBack(pointsAt(at));
+  const isClean = (at: number) => goesOn(at) && !crossesShapes(start, end, pointsAt(at));
   if (isClean(preferred)) return preferred;
-  const clear = (at: number) => extents.every(({ start, end }) => at <= start - stub || end + stub <= at);
-  const [nearest] = extents
-    .flatMap(({ start, end }) => [start - stub, end + stub])
-    .filter((at) => within.start < at && at < within.end && clear(at) && isClean(at))
+  const clear = (at: number) => extents.every((extent) => at <= extent.start - stub || extent.end + stub <= at);
+  const beside = extents
+    .flatMap((extent) => [extent.start - stub, extent.end + stub])
+    .filter((at) => within.start < at && at < within.end)
     .toSorted((a, b) => Math.abs(a - preferred) - Math.abs(b - preferred) || a - b);
-  return nearest ?? preferred;
+  const fallback = goesOn(preferred) ? preferred : (beside.find(goesOn) ?? preferred);
+  return beside.find((at) => clear(at) && isClean(at)) ?? fallback;
 }
 
 // An end that leaves along the axis must not have the middle segment behind it, or the path would double back there.
@@ -252,7 +253,8 @@ const shortestEnd = 10;
 /**
  * The offset that moves `middle` by how far it was dragged, `moved`, along its axis, as far as it can go while the
  * segments joining it to the ends stay at least `shortestEnd` long. Where it would line up with an end, it stops short
- * of it, on the nearer side. `undefined` when that leaves it where it is on its own.
+ * of it, on the nearer side if it may go there, or else on the other. `undefined` when that leaves it where it is on
+ * its own.
  */
 export function offsetDraggedBy(middle: MiddleSegment, moved: Point): ElbowOffset | undefined {
   const { axis, natural, min, max, levels } = middle;

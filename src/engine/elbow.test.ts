@@ -185,6 +185,20 @@ describe("elbow paths between Ports", () => {
     ]);
   });
 
+  test("between two right sides less than 20 apart go around, rather than back over the nearer Shape", () => {
+    // shape-2 at (210,100)–(310,180), just right of shape-1, its right Port at (310,140).
+    const state = elbowArrow([{ x: 210, y: 100 }, { x: 310, y: 180 }], { x: 308, y: 140 }, { x: 198, y: 140 });
+
+    expect(onlyArrow(state).path).toEqual([
+      { x: 310, y: 140 },
+      { x: 330, y: 140 },
+      { x: 330, y: 80 },
+      { x: 220, y: 80 },
+      { x: 220, y: 140 },
+      { x: 200, y: 140 },
+    ]);
+  });
+
   test("between two right sides run out past the further one", () => {
     // shape-2 at (300,200)–(400,280), its right Port at (400,240).
     const state = elbowArrow([{ x: 300, y: 200 }, { x: 400, y: 280 }], { x: 198, y: 140 }, { x: 398, y: 240 });
