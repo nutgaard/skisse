@@ -4,6 +4,7 @@ import type { Point } from "./geometry";
 import { arrows, rendering, selection, shapeTree, type ShapeTree } from "./queries";
 import { svgText } from "./svg";
 import {
+  apply,
   boundsById,
   click,
   drag,
@@ -12,7 +13,10 @@ import {
   drawSymbol,
   drawWithLabelOpen,
   newEditor,
+  pointerDown,
+  pointerMove,
   press,
+  selectTool,
 } from "./test-helpers";
 
 // A Shape in the Shape tree, with the Shapes directly inside it.
@@ -484,7 +488,7 @@ describe("stacking order of Arrows", () => {
     ]);
   });
 
-  test("bringing a Shape an Arrow connects to to the front leaves the Arrow above it", () => {
+  test("bringing a Shape an Arrow is bound to to the front leaves the Arrow above it", () => {
     const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 1000, y: 140 });
 
     const state = press(click(withArrow, { x: 1050, y: 140 }), "]");
@@ -522,5 +526,26 @@ describe("stacking order of Arrows", () => {
       "shape-4",
       "shape-5",
     ]);
+  });
+
+  test("a Container being dragged keeps the Arrows bound to the Shapes inside it above them", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 1000, y: 140 });
+
+    const state = apply(withArrow, selectTool("select"), pointerDown({ x: 50, y: 50 }), pointerMove({ x: 60, y: 60 }));
+
+    expect(shapesIn(svgText(rendering(state)))).toEqual(["shape-4", "shape-1", "shape-2", "shape-3", "shape-5"]);
+  });
+
+  test("a Shape being dragged keeps the Arrows bound to it above it", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 400, y: 140 });
+
+    const state = apply(
+      withArrow,
+      selectTool("select"),
+      pointerDown({ x: 150, y: 160 }),
+      pointerMove({ x: 160, y: 170 }),
+    );
+
+    expect(shapesIn(svgText(rendering(state)))).toEqual(["shape-1", "shape-3", "shape-4", "shape-2", "shape-5"]);
   });
 });

@@ -1,5 +1,5 @@
 import type { ShapeId, Sketch } from "./editor";
-import { stackedWith } from "./tree";
+import { stackedTogether, stackedWith } from "./tree";
 
 /** A new order for siblings, given from bottom to top, that moves the selected ones. */
 export type Reorder = (siblings: readonly ShapeId[], isSelected: (id: ShapeId) => boolean) => readonly ShapeId[];
@@ -38,13 +38,13 @@ export const bringForward: Reorder = (siblings, isSelected) =>
  * Shapes already in the new order keep their z-positions.
  */
 export function restack(sketch: Sketch, ids: readonly ShapeId[], reorder: Reorder): Sketch {
-  const stacks = ids.flatMap((id) => {
-    const shape = sketch.shapes[id];
-    return shape ? [stackedWith(sketch, shape).map((stacked) => stacked.id)] : [];
-  });
-  // Each stack once, by the Shape at its bottom.
-  const distinct = stacks.filter((stack, index) => stacks.findIndex((other) => other[0] === stack[0]) === index);
-  return distinct.reduce((restacked, stack) => {
+  const selected = ids.flatMap((id) => sketch.shapes[id] ?? []);
+  // One selected Shape of each stack, as reordering a stack moves all the selected Shapes in it at once.
+  const ofEachStack = selected.filter(
+    (shape, index) => !selected.slice(0, index).some((earlier) => stackedTogether(earlier, shape)),
+  );
+  return ofEachStack.reduce((restacked, shape) => {
+    const stack = stackedWith(restacked, shape).map(({ id }) => id);
     const order = reorder(stack, (id) => ids.includes(id));
     if (order.every((id, index) => id === stack[index])) return restacked;
     return {

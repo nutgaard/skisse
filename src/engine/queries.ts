@@ -1,4 +1,4 @@
-import { isArrow, isSymbolShape, type ArrowEnd, type EndName, type Routing } from "./arrow";
+import { arrowsBoundTo, type ArrowEnd, type EndName, type Routing } from "./arrow";
 import {
   arrowBeingDrawn,
   creationBounds,
@@ -16,12 +16,13 @@ import { displayedBounds, shapeLayout, type LabelLine } from "./label";
 import { arrowToRender, onScreen, renderShapes, shapesToRender, type Renderable } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
 import { shapeGeometry } from "./shape-geometry";
+import { isArrow, isSymbolShape } from "./shape-kind";
 import { lineColor, type FontSize, type Style } from "./style";
 import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
 import type { LabelAlignment } from "./symbols/symbol";
 import type { Tool } from "./tools";
-import { childrenOf, drawOrder, drawOrderLifting } from "./tree";
+import { childrenOf, drawOrder, drawOrderLifting, withDescendants } from "./tree";
 import type { Viewport } from "./viewport";
 
 export { arrowEndHandles, middleSegmentHandle, pansOnPress } from "./editor";
@@ -318,8 +319,12 @@ export function rendering(state: EditorState): SvgElement {
         ? arrowToRender(state.sketch, arrow, measureText)
         : [];
   // Shapes being dragged are drawn above all the others until dropped, so they never pass behind a Shape they cross.
+  // The Arrows bound to them are lifted with them, so those still never pass behind a Shape they are bound to.
+  const dragged = interaction.kind === "moving" ? withDescendants(state.sketch, state.selection) : [];
   const placed =
-    interaction.kind === "moving" ? drawOrderLifting(state.sketch, state.selection) : drawOrder(state.sketch);
+    interaction.kind === "moving"
+      ? drawOrderLifting(state.sketch, [...dragged, ...arrowsBoundTo(state.sketch, dragged)])
+      : drawOrder(state.sketch);
   return renderShapes([...shapesToRender(state.sketch, placed, measureText), ...beingDrawn], measureText, {
     ...onScreen,
     hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,

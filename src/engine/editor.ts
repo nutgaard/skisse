@@ -1,8 +1,6 @@
 import {
   boundTo,
   endLetGoAt,
-  isArrow,
-  isSymbolShape,
   resolveArrow,
   unbindFrom,
   withoutOffset,
@@ -35,6 +33,7 @@ import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
 import { displayedBounds } from "./label";
 import { distanceToPolyline } from "./path";
 import { hitsOutline } from "./shape-geometry";
+import { isArrow, isSymbolShape } from "./shape-kind";
 import { bringForward, bringToFront, restack, sendBackward, sendToBack, type Reorder } from "./stacking";
 import { defaultStyle, validStyle, type Style } from "./style";
 import { symbolDefinition, type SymbolId } from "./symbols";
@@ -373,8 +372,8 @@ function symbolShapes(shapes: readonly Shape[]): readonly SymbolShape[] {
 // other, the topmost counts as the innermost.
 function containerAt(
   sketch: Sketch,
-  measure: TextMeasurer,
   point: Point,
+  measure: TextMeasurer,
   eligible: (container: SymbolShape) => boolean = () => true,
 ): SymbolShape | undefined {
   return symbolShapes(drawOrder(sketch)).findLast(
@@ -385,14 +384,14 @@ function containerAt(
 
 // Where an Arrow end counts as being: in the Container its Shape is in when bound, or in the innermost Container under
 // it when floating.
-function endLocation(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): ShapeId | undefined {
-  return end.kind === "floating" ? containerAt(sketch, measure, end.at)?.id : sketch.shapes[end.shape]?.parent;
+function endContainer(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): ShapeId | undefined {
+  return end.kind === "floating" ? containerAt(sketch, end.at, measure)?.id : sketch.shapes[end.shape]?.parent;
 }
 
 // An Arrow belongs to the innermost Container holding both its ends, or to the top level when there is none, such as
 // when it crosses a Container's boundary.
 function arrowParent(sketch: Sketch, arrow: ArrowWithoutId, measure: TextMeasurer): ShapeId | undefined {
-  return innermostCommon(sketch, endLocation(sketch, arrow.start, measure), endLocation(sketch, arrow.end, measure));
+  return innermostCommon(sketch, endContainer(sketch, arrow.start, measure), endContainer(sketch, arrow.end, measure));
 }
 
 // Each Arrow joins the Container it belongs to, on top of the Shapes there, unless it is in there already.
@@ -415,12 +414,12 @@ function moveInto(sketch: Sketch, id: ShapeId, parent: ShapeId | undefined): Ske
 function settleMoved(state: EditorState, ids: readonly ShapeId[]): EditorState {
   return outermost(state.sketch, ids).reduce((settled, id) => {
     const shape = settled.sketch.shapes[id];
-    // Arrows stay where they are among the Shapes.
+    // Arrows join their Containers by their ends instead, once the editor is idle again.
     if (!shape || isArrow(shape)) return settled;
     const container = containerAt(
       settled.sketch,
-      settled.deps.measureText,
       centre(displayed(settled, shape)),
+      settled.deps.measureText,
       (candidate) => !isWithin(settled.sketch, candidate.id, id),
     );
     return { ...settled, sketch: moveInto(settled.sketch, id, container?.id) };
@@ -1011,8 +1010,8 @@ function containerForNew(state: EditorState, shape: ShapeWithoutId): ShapeId | u
     : [];
   return containerAt(
     state.sketch,
-    state.deps.measureText,
     centre(bounds),
+    state.deps.measureText,
     (candidate) => !covered.some(({ id }) => isWithin(state.sketch, candidate.id, id)),
   )?.id;
 }

@@ -1,9 +1,10 @@
-import type { Shape, ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
+import type { ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
 import { elbowRoute, type ElbowEnd, type ElbowOffset, type MiddleSegment } from "./elbow";
 import { contains, distance, type Bounds, type Point } from "./geometry";
 import { displayedBounds } from "./label";
 import { insidePath, nearestOnPath } from "./path";
 import { shapeGeometry, type ShapeGeometry } from "./shape-geometry";
+import { isArrow, isSymbolShape } from "./shape-kind";
 import type { Style } from "./style";
 import { drawOrder } from "./tree";
 
@@ -38,16 +39,6 @@ export type Arrow = {
 
 /** An Arrow but for its ID and its place among the other Shapes, such as one still being drawn. */
 export type ArrowWithoutId = Omit<Arrow, "id" | "parent" | "z">;
-
-/** Whether the Shape is an Arrow. Every other Shape is made from a Symbol. */
-export function isArrow(shape: Shape): shape is Arrow {
-  return "routing" in shape;
-}
-
-/** Whether the Shape is made from a Symbol, which every Shape but an Arrow is. */
-export function isSymbolShape(shape: Shape): shape is SymbolShape {
-  return !isArrow(shape);
-}
 
 // The Shape made from a Symbol that an end is bound to, if it is still there.
 function boundShape(sketch: Sketch, id: ShapeId): SymbolShape | undefined {
@@ -188,6 +179,17 @@ export function endLetGoAt(sketch: Sketch, point: Point, reach: Reach, measure: 
 /** The Shape an end is bound to, or `undefined` when it floats. */
 export function boundTo(end: ArrowEnd): ShapeId | undefined {
   return end.kind === "floating" ? undefined : end.shape;
+}
+
+/** The Arrows with an end bound to one of `ids`. */
+export function arrowsBoundTo(sketch: Sketch, ids: readonly ShapeId[]): readonly ShapeId[] {
+  const boundToOne = (end: ArrowEnd) => {
+    const shape = boundTo(end);
+    return shape !== undefined && ids.includes(shape);
+  };
+  return Object.values(sketch.shapes)
+    .filter((shape) => isArrow(shape) && (boundToOne(shape.start) || boundToOne(shape.end)))
+    .map(({ id }) => id);
 }
 
 /**

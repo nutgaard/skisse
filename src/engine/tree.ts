@@ -1,4 +1,4 @@
-import { isArrow } from "./arrow";
+import { isArrow } from "./shape-kind";
 import type { Shape, ShapeId, Sketch } from "./editor";
 
 /** Where a Shape is among the others: in which Container, and where among its siblings. */
@@ -6,7 +6,7 @@ export type Placement = Pick<Shape, "parent" | "z">;
 
 /**
  * The Shapes directly inside `parent`, or at the top level for `undefined`, from bottom to top. The Arrows are above
- * the other Shapes, so they never pass behind a Shape they connect to.
+ * the other Shapes, so they never pass behind a Shape they are bound to.
  */
 export function childrenOf(sketch: Sketch, parent: ShapeId | undefined): readonly Shape[] {
   const children = Object.values(sketch.shapes)
@@ -15,12 +15,14 @@ export function childrenOf(sketch: Sketch, parent: ShapeId | undefined): readonl
   return [...children.filter((shape) => !isArrow(shape)), ...children.filter(isArrow)];
 }
 
-/**
- * The Shapes stacked with `shape`, itself included, from bottom to top: the Arrows in its Container when it is an
- * Arrow, and the other Shapes there when it isn't.
- */
+/** Whether `a` and `b` are stacked among each other: in the same Container, and both Arrows or neither. */
+export function stackedTogether(a: Shape, b: Shape): boolean {
+  return a.parent === b.parent && isArrow(a) === isArrow(b);
+}
+
+/** The Shapes stacked with `shape`, itself included, from bottom to top. */
 export function stackedWith(sketch: Sketch, shape: Shape): readonly Shape[] {
-  return childrenOf(sketch, shape.parent).filter((other) => isArrow(other) === isArrow(shape));
+  return childrenOf(sketch, shape.parent).filter((other) => stackedTogether(other, shape));
 }
 
 /** Every Shape inside `parent`, or every Shape for `undefined`, as drawn: each just before its children. */
@@ -65,7 +67,10 @@ export function withDescendants(sketch: Sketch, ids: readonly ShapeId[]): readon
   return idsAsDrawn(sketch, (id) => ids.some((ancestor) => isWithin(sketch, id, ancestor)));
 }
 
-/** In `parent`, on top of the Shapes directly inside it. */
+/**
+ * In `parent`, on top of the Shapes directly inside it. Arrows and the other Shapes are stacked apart, so the highest
+ * z-position there need not be the last Shape's.
+ */
 export function onTopIn(sketch: Sketch, parent: ShapeId | undefined): Placement {
   return { parent, z: Math.max(-1, ...childrenOf(sketch, parent).map(({ z }) => z)) + 1 };
 }

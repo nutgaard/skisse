@@ -1,8 +1,9 @@
-import { isArrow, resolveArrow, type ArrowWithoutId } from "./arrow";
+import { resolveArrow, type ArrowWithoutId } from "./arrow";
 import type { Shape, ShapeId, ShapeWithoutId, Sketch, TextMeasurer } from "./editor";
 import { labelFontFamily, shapeLayout, shareOfSpace, type ShapeLayout } from "./label";
 import { isClosed, pathData, pathPieces, pieceLength, polyline, type Path } from "./path";
 import { shapeGeometry } from "./shape-geometry";
+import { isArrow } from "./shape-kind";
 import { lineColor, shades, type Style, type StrokePattern, type StrokeWidth } from "./style";
 import { svgElement, type SvgElement } from "./svg";
 import { drawOrder } from "./tree";
