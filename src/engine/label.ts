@@ -67,12 +67,20 @@ function wrapParagraph(paragraph: string, fits: Fits): readonly string[] {
   }, []);
 }
 
+// A line of wrapped text, and whether it was broken off to fit, rather than ending its paragraph.
+type WrappedLine = { readonly text: string; readonly broken: boolean };
+
 // The lines of `text` wrapped by words. Explicit line breaks are kept. Empty text has no lines.
-function wrapText(text: string, fits: Fits): readonly string[] {
-  return text === "" ? [] : text.split("\n").flatMap((paragraph) => wrapParagraph(paragraph, fits));
+function wrapText(text: string, fits: Fits): readonly WrappedLine[] {
+  return text === ""
+    ? []
+    : text.split("\n").flatMap((paragraph) => {
+        const lines = wrapParagraph(paragraph, fits);
+        return lines.map((line, index) => ({ text: line, broken: index < lines.length - 1 }));
+      });
 }
 
-function wrapLabel(shape: ShapeWithoutId, area: Bounds, measure: TextMeasurer): readonly string[] {
+function wrapLabel(shape: ShapeWithoutId, area: Bounds, measure: TextMeasurer): readonly WrappedLine[] {
   const pixels = fontPixels[shape.style.fontSize];
   return wrapText(shape.label.text, (line) => measure(line, pixels) <= area.width);
 }
@@ -91,30 +99,34 @@ export const shareOfSpace: Readonly<Record<HorizontalAlignment | VerticalAlignme
   bottom: 1,
 };
 
-// The width a line takes up when it is aligned. As in the browser, that is its text and the spaces at its end that
-// still fit beside it, while the others hang past the end of the line.
-function alignedWidth(line: string, area: Bounds, pixels: number, measure: TextMeasurer): number {
-  const text = line.trimEnd();
-  const fitting = Array.from({ length: line.length - text.length + 1 }, (_, index) => line.length - index)
-    .map((length) => line.slice(0, length))
-    .find((withSpaces) => measure(withSpaces, pixels) <= area.width);
-  return measure(fitting ?? text, pixels);
+// The width a line takes up when it is aligned, given `textWidth`, its width without the spaces at its end. As in the
+// browser, a line broken off to fit lets those spaces hang past its end. A line that ends its paragraph is aligned
+// with them, but at most as wide as the Label area.
+function alignedWidth(
+  line: WrappedLine,
+  textWidth: number,
+  areaWidth: number,
+  measureLine: (text: string) => number,
+): number {
+  return line.broken ? textWidth : Math.max(textWidth, Math.min(measureLine(line.text), areaWidth));
 }
 
 function layoutIn(shape: ShapeWithoutId, bounds: Bounds, measure: TextMeasurer): ShapeLayout {
   const labelArea = symbolDefinition(shape.symbol).labelArea(bounds);
   const pixels = fontPixels[shape.style.fontSize];
   const lineHeight = lineHeightOf(shape);
-  const texts = wrapLabel(shape, labelArea, measure);
+  const wrapped = wrapLabel(shape, labelArea, measure);
   const { horizontal, vertical } = shape.label.alignment;
-  const blockHeight = Math.max(1, texts.length) * lineHeight;
+  const blockHeight = Math.max(1, wrapped.length) * lineHeight;
   const top = labelArea.y + (labelArea.height - blockHeight) * shareOfSpace[vertical];
-  const lines = texts.map((text, index) => {
-    const width = measure(text.trimEnd(), pixels);
+  const measureLine = (text: string) => measure(text, pixels);
+  const lines = wrapped.map((line, index) => {
+    const width = measureLine(line.text.trimEnd());
+    const spaceLeft = labelArea.width - alignedWidth(line, width, labelArea.width, measureLine);
     return {
-      text,
+      text: line.text,
       bounds: {
-        x: labelArea.x + (labelArea.width - alignedWidth(text, labelArea, pixels, measure)) * shareOfSpace[horizontal],
+        x: labelArea.x + spaceLeft * shareOfSpace[horizontal],
         y: top + index * lineHeight,
         width,
         height: lineHeight,

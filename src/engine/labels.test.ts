@@ -208,11 +208,14 @@ describe("wrapping a Label", () => {
     expect(labelLayout(state, "shape-1")?.lines[0]?.bounds).toEqual({ x: 180, y: 137.5, width: 30, height: 25 });
   });
 
+  // As in the browser: a line that ends the text, or a paragraph, is aligned with the spaces at its end, up to the
+  // width of the line. A line broken to fit lets them hang.
   test.each([
     ["Ab   ", 242, 20],
-    // Not even one of the spaces fits beside the 18 characters, so they all hang.
-    ["abcdefghijklmnopqr  ", 112, 180],
-  ])("aligns %o to the right with only the spaces at its end that fit", (text, x, width) => {
+    ["abcdefghijklmnopq    ", 108, 170],
+    ["abcdefghijklmnopq     xyz", 122, 170],
+    ["abcdefghijklmnopq     xyz\nAb   ", 122, 170],
+  ])("aligns %o to the right with the spaces at its end as the browser does", (text, x, width) => {
     const state = apply(click(labelledRectangle(text), { x: 200, y: 150 }), {
       type: "changeLabelAlignment",
       alignment: { horizontal: "right" },
@@ -359,15 +362,15 @@ describe("a Shape grown to fit its Label", () => {
 
 describe("alignment and font size", () => {
   const topLeft = { horizontal: "left", vertical: "top" } as const;
-  const centred = { horizontal: "center", vertical: "middle" } as const;
+  const inTheMiddle = { horizontal: "center", vertical: "middle" } as const;
 
   test.each([
     ["rectangle", topLeft],
     ["roundedRectangle", topLeft],
     ["cloud", topLeft],
-    ["ellipse", centred],
-    ["cylinder", centred],
-    ["text", centred],
+    ["ellipse", inTheMiddle],
+    ["cylinder", inTheMiddle],
+    ["text", inTheMiddle],
   ] as const)("a new %s's Label is aligned %o", (symbol, alignment) => {
     const created = drawWithLabelOpen(newEditor(), symbol, { x: 100, y: 100 }, { x: 300, y: 200 });
 

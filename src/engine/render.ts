@@ -43,12 +43,12 @@ const textAnchors: Readonly<Record<HorizontalAlignment, string>> = { left: "star
 // One text element per line, leaving out blank lines. Spaces are drawn as typed, as they were measured, except those
 // hanging at the end of a line.
 function renderLabel({ lines, fontPixels }: ShapeLayout, horizontal: HorizontalAlignment): readonly SvgElement[] {
-  const along = shareOfSpace[horizontal];
+  const share = shareOfSpace[horizontal];
   return lines.filter(({ text }) => text.trim() !== "").map(({ text, bounds }) =>
     svgElement(
       "text",
       {
-        x: bounds.x + bounds.width * along,
+        x: bounds.x + bounds.width * share,
         y: bounds.y + bounds.height / 2,
         "font-family": labelFontFamily,
         "font-size": fontPixels,
