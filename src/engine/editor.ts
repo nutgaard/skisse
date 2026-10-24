@@ -1,7 +1,7 @@
 import {
   arrowheads,
   boundTo,
-  defaultArrowheads,
+  defaultHeads,
   endLetGoAt,
   labelPoint,
   layoutArrowLabel,
@@ -13,7 +13,7 @@ import {
   type Arrow,
   type ArrowEnd,
   type Arrowhead,
-  type Arrowheads,
+  type EndHeads,
   type ArrowWithoutId,
   type EndName,
   type ResolvedArrow,
@@ -216,7 +216,7 @@ export type EditorState = {
   // The Routing most recently chosen, which new Arrows get.
   readonly routing: Routing;
   // The heads most recently chosen for each end, which new Arrows get.
-  readonly heads: Arrowheads;
+  readonly heads: EndHeads;
   readonly selection: readonly ShapeId[];
   readonly interaction: Interaction;
   readonly viewport: viewport.Viewport;
@@ -301,7 +301,7 @@ function completeShapes(sketch: Sketch): Sketch {
     style: { ...defaultStyle, ...shape.style },
   });
   const completeArrow = (arrow: Omit<Arrow, "heads" | "label"> & Partial<Pick<Arrow, "heads" | "label">>): Arrow => ({
-    heads: defaultArrowheads,
+    heads: defaultHeads,
     label: newArrowLabel,
     ...arrow,
   });
@@ -329,7 +329,7 @@ export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): E
     tool: "select",
     style: defaultStyle,
     routing: "straight",
-    heads: defaultArrowheads,
+    heads: defaultHeads,
     selection: [],
     interaction: idle,
     viewport: viewport.initialViewport,
@@ -1034,7 +1034,7 @@ function chooseRouting(state: EditorState, routing: Routing): EditorState {
 }
 
 // A head chosen for an end applies to that end of every selected Arrow, and to the Arrows drawn from now on, as a
-// Routing does. Only the heads there are are taken.
+// Routing does. An arrowhead that isn't one of `arrowheads` is ignored.
 function chooseArrowhead(state: EditorState, end: EndName, arrowhead: Arrowhead): EditorState {
   if (!canChangeSelected(state) || !arrowheads.includes(arrowhead)) return state;
   const changed = changeSelected(state, (shape) =>

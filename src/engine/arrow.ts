@@ -31,10 +31,10 @@ export const arrowheads = ["none", "arrow", "openArrow", "diamond", "circle"] as
 export type Arrowhead = (typeof arrowheads)[number];
 
 /** The head at each end of an Arrow. */
-export type Arrowheads = Readonly<Record<EndName, Arrowhead>>;
+export type EndHeads = Readonly<Record<EndName, Arrowhead>>;
 
 /** The heads of Arrows until others are chosen: none at the start, and an arrow at the end. */
-export const defaultArrowheads: Arrowheads = { start: "none", end: "arrow" };
+export const defaultHeads: EndHeads = { start: "none", end: "arrow" };
 
 /** An Arrow's Label: its text, and where it sits along the Arrow's path, as a share of the path's length. */
 export type ArrowLabel = { readonly text: string; readonly along: number };
@@ -51,7 +51,7 @@ export type Arrow = {
   readonly routing: Routing;
   readonly start: ArrowEnd;
   readonly end: ArrowEnd;
-  readonly heads: Arrowheads;
+  readonly heads: EndHeads;
   readonly label: ArrowLabel;
   // For an elbow Arrow, how far the user dragged its middle segment from where it would be on its own.
   readonly elbowOffset?: ElbowOffset;

@@ -181,7 +181,7 @@ function renderArrowhead({ heads, points, style }: ArrowToRender, end: EndName):
   const head = arrowheadAt(heads[end], toward, arrowheadLength(style.strokeWidth));
   if (!head) return [];
   const color = lineColor(style);
-  const stroke = {
+  const attributes = {
     "data-arrowhead": end,
     stroke: color,
     "stroke-width": strokePixels[style.strokeWidth],
@@ -190,8 +190,8 @@ function renderArrowhead({ heads, points, style }: ArrowToRender, end: EndName):
   };
   return [
     head.kind === "circle"
-      ? svgElement("circle", { ...stroke, cx: head.center.x, cy: head.center.y, r: head.radius, fill: color })
-      : svgElement("path", { ...stroke, d: pathData(head.path), fill: head.filled ? color : "none" }),
+      ? svgElement("circle", { ...attributes, cx: head.center.x, cy: head.center.y, r: head.radius, fill: color })
+      : svgElement("path", { ...attributes, d: pathData(head.path), fill: head.filled ? color : "none" }),
   ];
 }
 

@@ -4,7 +4,7 @@ import {
   layoutArrowLabel,
   type ArrowEnd,
   type Arrowhead,
-  type Arrowheads,
+  type EndHeads,
   type EndName,
   type Routing,
 } from "./arrow";
@@ -120,7 +120,7 @@ export type ArrowView = {
   readonly routing: Routing;
   readonly start: ArrowEndView;
   readonly end: ArrowEndView;
-  readonly heads: Arrowheads;
+  readonly heads: EndHeads;
   /** The points the Arrow's line runs through, from its start to its end. */
   readonly path: readonly Point[];
   readonly label: ArrowLabelView;
