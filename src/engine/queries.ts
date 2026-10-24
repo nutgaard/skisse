@@ -7,9 +7,9 @@ import {
 } from "./editor";
 import { boundsBetween, type Bounds, type Point } from "./geometry";
 import * as history from "./history";
-import { onScreen, renderShape, renderSketch } from "./render";
+import { onScreen, renderShapes } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
-import { svgElement, type SvgElement } from "./svg";
+import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
 import type { Tool } from "./tools";
 import type { Viewport } from "./viewport";
@@ -96,9 +96,7 @@ export function currentInteraction(state: EditorState): InteractionView {
  * handles are not part of it.
  */
 export function rendering(state: EditorState): SvgElement {
-  const shown = renderSketch(state.sketch, onScreen);
   const interaction = currentInteraction(state);
-  return interaction.kind === "creatingShape"
-    ? svgElement(shown.tag, shown.attributes, [...shown.children, renderShape(interaction, onScreen)])
-    : shown;
+  const beingDrawn = interaction.kind === "creatingShape" ? [interaction] : [];
+  return renderShapes([...Object.values(state.sketch.shapes), ...beingDrawn], onScreen);
 }

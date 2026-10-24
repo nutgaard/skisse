@@ -34,7 +34,7 @@ const placeholderStyle = {
 type ShapeToRender = { readonly id?: ShapeId; readonly symbol: SymbolId; readonly bounds: Bounds };
 
 /** A Shape drawn from its Symbol's geometry: the outline as its fill, and the Symbol's lines on top. */
-export function renderShape({ id, symbol, bounds }: ShapeToRender, options: RenderOptions): SvgElement {
+function renderShape({ id, symbol, bounds }: ShapeToRender, options: RenderOptions): SvgElement {
   const { outline, lines } = shapeGeometry(symbol, bounds);
   const placeholder = options.placeholders && lines.length === 0;
   return svgElement("g", { ...(id === undefined ? {} : { "data-shape": id }), "data-symbol": symbol }, [
@@ -43,11 +43,12 @@ export function renderShape({ id, symbol, bounds }: ShapeToRender, options: Rend
   ]);
 }
 
+/** The Shapes, in Sketch coordinates, in the order given. */
+export function renderShapes(shapes: readonly ShapeToRender[], options: RenderOptions): SvgElement {
+  return svgElement("g", {}, shapes.map((shape) => renderShape(shape, options)));
+}
+
 /** Every Shape of the Sketch, in Sketch coordinates. */
 export function renderSketch(sketch: Sketch, options: RenderOptions): SvgElement {
-  return svgElement(
-    "g",
-    {},
-    Object.values(sketch.shapes).map((shape) => renderShape(shape, options)),
-  );
+  return renderShapes(Object.values(sketch.shapes), options);
 }

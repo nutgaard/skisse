@@ -30,7 +30,7 @@ import {
 } from "../engine";
 import { useAutosave } from "./autosave";
 import { downloadPng, downloadSvg } from "./download";
-import { SvgNode } from "./SvgNode";
+import { SvgElementView } from "./SvgElementView";
 
 function modifiersOf(event: KeyboardEvent | PointerEvent | WheelEvent) {
   return {
@@ -186,11 +186,11 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const interaction = currentInteraction(state);
   const selected = new Set(selection(state));
   const view = viewport(state);
-  const finished = sketch(state);
+  const finishedSketch = sketch(state);
   // Only a finished change to the Sketch changes the export, not every pointer move.
-  const exportedSvg = useMemo(() => exportSvg(finished), [finished]);
+  const exportedSvg = useMemo(() => exportSvg(finishedSketch), [finishedSketch]);
 
-  useAutosave(finished, onSave);
+  useAutosave(finishedSketch, onSave);
 
   const screenSize = (): Size => {
     const { width, height } = svgRef.current?.getBoundingClientRect() ?? { width: 0, height: 0 };
@@ -290,7 +290,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
       >
         <Grid viewport={view} />
         <g transform={`scale(${view.zoom}) translate(${-view.x} ${-view.y})`}>
-          <SvgNode element={rendering(state)} />
+          <SvgElementView element={rendering(state)} />
           {shapes(state)
             .filter(({ id }) => selected.has(id))
             .map(({ id, bounds }) => (

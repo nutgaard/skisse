@@ -9,14 +9,14 @@ function reactName(name: string) {
 }
 
 /** An element the engine rendered, shown as React SVG. */
-export function SvgNode({ element }: { readonly element: SvgElement }) {
+export function SvgElementView({ element }: { readonly element: SvgElement }) {
   const { tag, attributes, children } = element;
   return createElement(
     tag,
     Object.fromEntries(Object.entries(attributes).map(([name, value]) => [reactName(name), value])),
     // Elements carry no IDs, but they are drawn afresh from the engine's state and keep no state of their own.
     ...children.map((child, index) =>
-      typeof child === "string" ? child : <SvgNode key={index} element={child} />,
+      typeof child === "string" ? child : <SvgElementView key={index} element={child} />,
     ),
   );
 }
