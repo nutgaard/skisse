@@ -40,6 +40,7 @@ export const person: SymbolDefinition = {
   shortcut: "p",
   defaultSize: { width: 80, height: 120 },
   canBeContainer: false,
+  labelOnly: false,
   defaultLabelAlignment: "center",
   outline,
   // The lower half of the torso, below the shoulders.

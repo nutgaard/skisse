@@ -34,6 +34,7 @@ export const cylinder: SymbolDefinition = {
   shortcut: "c",
   defaultSize: { width: 100, height: 120 },
   canBeContainer: false,
+  labelOnly: false,
   defaultLabelAlignment: "center",
   outline,
   lines: (box) => [...outline(box), ...lidEdge(box)],

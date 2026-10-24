@@ -6,6 +6,7 @@ export const ellipse: SymbolDefinition = {
   shortcut: "o",
   defaultSize: { width: 120, height: 80 },
   canBeContainer: false,
+  labelOnly: false,
   defaultLabelAlignment: "center",
   outline: ellipsePath,
   // The largest rectangle inside the ellipse, whose corners touch it.

@@ -5,6 +5,7 @@ import { fixedWidthTextMeasurer } from "./fakes";
 import { labelFontFamily } from "./label";
 import { rendering, sketch } from "./queries";
 import { svgText } from "./svg";
+import type { SymbolId } from "./symbols";
 import {
   apply,
   click,
@@ -78,19 +79,22 @@ function textElements(element: Element): readonly Element[] {
 
 // A text Shape at (100,100)–(220,140), with its Label being edited.
 function editingText(text = ""): EditorState {
-  return typeLabel(
-    apply(newEditor(), selectTool("text"), pointerDown({ x: 100, y: 100 }), pointerMove({ x: 220, y: 140 }), pointerUp({ x: 220, y: 140 })),
-    text,
-  );
+  return typeLabel(apply(newEditor(), selectTool("text"), pointerDown({ x: 100, y: 100 }), pointerUp({ x: 220, y: 140 })), text);
 }
 
 function textShape(): EditorState {
   return press(editingText("Title"), "Escape");
 }
 
-// A rectangle at (100,100)–(300,200), its Label area inset by 8, with a Label of two lines.
+// A Shape of `symbol` at (100,100)–(300,200) with the Label `text`, and nothing selected.
+function labelled(symbol: SymbolId, text: string): EditorState {
+  const created = apply(newEditor(), selectTool(symbol), pointerDown({ x: 100, y: 100 }), pointerUp({ x: 300, y: 200 }));
+  return press(press(typeLabel(created, text), "Escape"), "Escape");
+}
+
+// A rectangle, its Label area inset by 8 at (108,108)–(292,192), with a Label of two lines.
 function labelledRectangle(): EditorState {
-  return press(press(typeLabel(apply(newEditor(), selectTool("rectangle"), pointerDown({ x: 100, y: 100 }), pointerUp({ x: 300, y: 200 })), "the quick brown fox"), "Escape"), "Escape");
+  return labelled("rectangle", "the quick brown fox");
 }
 
 function strokedElements(element: Element): readonly Element[] {
@@ -182,7 +186,7 @@ describe("SVG export", () => {
   });
 
   test("escapes the text of a Label", () => {
-    const state = press(press(typeLabel(apply(newEditor(), selectTool("ellipse"), pointerDown({ x: 100, y: 100 }), pointerUp({ x: 300, y: 200 })), "A <b> & C"), "Escape"), "Escape");
+    const state = labelled("ellipse", "A <b> & C");
 
     expect(textElements(exported(state)).map(({ text }) => text)).toEqual(["A &lt;b&gt; &amp; C"]);
   });
@@ -191,8 +195,17 @@ describe("SVG export", () => {
     expect(textElements(exported(twoRectangles()))).toEqual([]);
   });
 
+  test("draws no text for a blank line, though it takes up its room", () => {
+    const state = labelled("rectangle", "API\n\nGo");
+
+    expect(textElements(exported(state)).map(({ attributes, text }) => [text, attributes.y])).toEqual([
+      ["API", "120.5"],
+      ["Go", "170.5"],
+    ]);
+  });
+
   test("is cropped to a Shape grown to fit its Label", () => {
-    const grown = press(press(typeLabel(apply(newEditor(), selectTool("rectangle"), pointerDown({ x: 100, y: 100 }), pointerUp({ x: 300, y: 200 })), "1\n2\n3\n4\n5"), "Escape"), "Escape");
+    const grown = labelled("rectangle", "1\n2\n3\n4\n5");
 
     expect(exported(grown).attributes).toMatchObject({ viewBox: "80 80 240 181" });
   });

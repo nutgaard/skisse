@@ -32,6 +32,7 @@ export const documentSymbol: SymbolDefinition = {
   shortcut: "f",
   defaultSize: { width: 120, height: 80 },
   canBeContainer: false,
+  labelOnly: false,
   defaultLabelAlignment: "center",
   outline,
   // Above the wave.

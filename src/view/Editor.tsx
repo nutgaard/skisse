@@ -36,31 +36,15 @@ import {
 } from "../engine";
 import { useAutosave } from "./autosave";
 import { downloadPng, downloadSvg } from "./download";
+import { keyInput, modifiersOf } from "./inputs";
 import { LabelEditor } from "./LabelEditor";
 import { SvgElementView } from "./SvgElementView";
-
-function modifiersOf(event: KeyboardEvent | PointerEvent | WheelEvent) {
-  return {
-    shift: event.shiftKey,
-    alt: event.altKey,
-    ctrl: event.ctrlKey,
-    meta: event.metaKey,
-  };
-}
 
 function pointerInput(type: PointerInput["type"], event: PointerEvent): PointerInput {
   return {
     type,
     position: { x: event.clientX, y: event.clientY },
     button: event.button,
-    modifiers: modifiersOf(event),
-  };
-}
-
-function keyInput(type: KeyInput["type"], event: KeyboardEvent): KeyInput {
-  return {
-    type,
-    key: event.key,
     modifiers: modifiersOf(event),
   };
 }
@@ -104,6 +88,12 @@ function isTyping(event: KeyboardEvent) {
 
 function isSpace(event: KeyboardEvent) {
   return event.key === " ";
+}
+
+// Enter edits the selected Shape's Label. Its text field opens and takes focus while the key is still down, so the
+// browser must not also type the Enter into it. A focused button outside the Sketch still gets pressed by Enter.
+function editsLabel(event: KeyboardEvent) {
+  return event.key === "Enter" && !(event.target instanceof HTMLButtonElement);
 }
 
 // Space presses a button outside the editor's toolbar, such as in the Sketch list, when the keyboard moved focus to it.
@@ -189,7 +179,7 @@ const fontSizes: readonly { readonly fontSize: FontSize; readonly name: string; 
 ];
 
 // What the selected Shapes' Labels have in common, such as their font size, or `undefined` when they differ.
-function shared<T>(state: EditorState, of: (label: LabelView) => T): T | undefined {
+function commonToSelection<T>(state: EditorState, of: (label: LabelView) => T): T | undefined {
   const values = new Set(selection(state).flatMap((id) => {
     const label = labelLayout(state, id);
     return label ? [of(label)] : [];
@@ -203,8 +193,8 @@ type LabelControlsProps = { readonly state: EditorState; readonly dispatch: (inp
 // finishing the editing.
 function LabelControls({ state, dispatch }: LabelControlsProps) {
   if (selection(state).length === 0) return null;
-  const alignment = shared(state, (label) => label.alignment);
-  const fontSize = shared(state, (label) => label.fontSize);
+  const alignment = commonToSelection(state, (label) => label.alignment);
+  const fontSize = commonToSelection(state, (label) => label.fontSize);
   return (
     <div className="toolbar label-controls" role="toolbar" aria-label="Label">
       {alignments.map((option) => (
@@ -278,7 +268,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
         if (!pans(event)) return;
         event.preventDefault();
       }
-      if (isSelectAll(event)) event.preventDefault();
+      if (isSelectAll(event) || editsLabel(event)) event.preventDefault();
       dispatch(keyInput("keyDown", event));
     };
     // Releases still reach the editor, so a modifier let go while typing doesn't stay held.

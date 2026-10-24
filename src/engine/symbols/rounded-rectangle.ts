@@ -32,6 +32,7 @@ export const roundedRectangle: SymbolDefinition = {
   shortcut: "u",
   defaultSize: { width: 160, height: 80 },
   canBeContainer: true,
+  labelOnly: false,
   defaultLabelAlignment: "topLeft",
   outline,
   labelArea: (box) => inset(box, labelMargin),

@@ -5,8 +5,8 @@ import { symbolDefinition } from "./symbols";
 /** The font Labels are drawn in. Text must be measured in it too, so it wraps where it is drawn. */
 export const labelFontFamily = "system-ui, sans-serif";
 
-/** The size, in Sketch units, of each font size. */
-export const fontPixels: Readonly<Record<FontSize, number>> = { small: 14, medium: 20, large: 28 };
+// The size, in Sketch units, of each font size.
+const fontPixels: Readonly<Record<FontSize, number>> = { small: 14, medium: 20, large: 28 };
 
 // The height of a line, as a multiple of the font size.
 const lineSpacing = 1.25;
@@ -23,8 +23,8 @@ export type ShapeLayout = {
   readonly lines: readonly LabelLine[];
 };
 
-// What laying out a Shape needs. A Shape being drawn has no ID yet.
-type ShapeToLayout = Omit<SymbolShape, "id">;
+/** What laying out a Shape needs: all of it but its ID, which a Shape being drawn doesn't have yet. */
+export type ShapeToLayout = Omit<SymbolShape, "id">;
 
 // Whether a line of text fits the width of the Label area.
 type Fits = (line: string) => boolean;
@@ -38,13 +38,27 @@ function breakWord(word: string, fits: Fits): readonly string[] {
   return [characters.slice(0, length).join(""), ...breakWord(characters.slice(length).join(""), fits)];
 }
 
-// Greedy wrapping: each word goes on the current line if it fits there, and starts a new line otherwise.
+// The pieces of a paragraph that a line may break between: words, which are separated by a space that a break takes
+// the place of, and parts of words after a hyphen, which stays at the end of the line. Browsers break lines in the
+// same places, so the Label's text field wraps as the Label does.
+type Piece = { readonly text: string; readonly afterSpace: boolean };
+
+function pieces(paragraph: string): readonly Piece[] {
+  return paragraph
+    .split(" ")
+    .flatMap((word, index) =>
+      (word.match(/[^-]*-+|[^-]+/g) ?? [""]).map((text, part) => ({ text, afterSpace: index > 0 && part === 0 })),
+    );
+}
+
+// Greedy wrapping: each piece goes on the current line if it fits there, and starts a new line otherwise.
 function wrapParagraph(paragraph: string, fits: Fits): readonly string[] {
-  return paragraph.split(" ").reduce<readonly string[]>((lines, word) => {
+  return pieces(paragraph).reduce<readonly string[]>((lines, { text, afterSpace }) => {
     const current = lines.at(-1);
-    return current !== undefined && fits(`${current} ${word}`)
-      ? [...lines.slice(0, -1), `${current} ${word}`]
-      : [...lines, ...breakWord(word, fits)];
+    const joined = current === undefined ? undefined : `${current}${afterSpace ? " " : ""}${text}`;
+    return joined !== undefined && fits(joined)
+      ? [...lines.slice(0, -1), joined]
+      : [...lines, ...breakWord(text, fits)];
   }, []);
 }
 

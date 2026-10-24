@@ -1,5 +1,6 @@
 import { useEffect, useRef, type KeyboardEvent } from "react";
-import { labelFontFamily, type Input, type KeyInput, type LabelView, type Viewport } from "../engine";
+import { labelFontFamily, type Input, type LabelView, type Viewport } from "../engine";
+import { keyInput } from "./inputs";
 
 type LabelEditorProps = {
   readonly label: LabelView;
@@ -7,17 +8,10 @@ type LabelEditorProps = {
   readonly dispatch: (input: Input) => void;
 };
 
-// Escape and Enter finish editing, which the engine decides. Shift+Enter is left to the field, for a line break.
+// Escape and Enter go to the engine, which finishes editing on them, instead of into the field. Shift+Enter is left
+// to the field, for a line break.
 function finishesEditing(event: KeyboardEvent) {
   return event.key === "Escape" || (event.key === "Enter" && !event.shiftKey);
-}
-
-function keyDownInput(event: KeyboardEvent): KeyInput {
-  return {
-    type: "keyDown",
-    key: event.key,
-    modifiers: { shift: event.shiftKey, alt: event.altKey, ctrl: event.ctrlKey, meta: event.metaKey },
-  };
 }
 
 /**
@@ -61,11 +55,14 @@ export function LabelEditor({ label, viewport, dispatch }: LabelEditorProps) {
       onKeyDown={(event) => {
         if (!finishesEditing(event)) return;
         event.preventDefault();
-        dispatch(keyDownInput(event));
+        dispatch(keyInput("keyDown", event));
       }}
       // Leaving the field, such as for the toolbar, finishes editing too. After Escape, Enter or a press on the Sketch,
-      // editing has finished already, and committing again changes nothing.
-      onBlur={() => dispatch({ type: "commitLabel" })}
+      // editing has finished already, and committing again changes nothing. Leaving the window, such as for another
+      // tab, keeps it open, and the field gets the focus back on return.
+      onBlur={() => {
+        if (document.hasFocus()) dispatch({ type: "commitLabel" });
+      }}
     />
   );
 }

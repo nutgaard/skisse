@@ -182,6 +182,10 @@ describe("wrapping a Label", () => {
     ]);
   });
 
+  test("may also break a word after a hyphen, as the browser does", () => {
+    expect(lineTexts(labelledRectangle("client-server-architecture"))).toEqual(["client-server-", "architecture"]);
+  });
+
   test("keeps explicit line breaks, including empty lines", () => {
     expect(lineTexts(labelledRectangle("API\n\nGo, gRPC"))).toEqual(["API", "", "Go, gRPC"]);
   });
@@ -278,6 +282,14 @@ describe("a Shape grown to fit its Label", () => {
     const resized = drag(click(grown(), { x: 200, y: 150 }), { x: 200, y: 241 }, { x: 200, y: 261 });
 
     expect(shapes(resized)[0]?.bounds).toEqual({ x: 100, y: 100, width: 200, height: 161 });
+  });
+
+  test("resized from its bottom without becoming taller than its Label needs, keeps its own height", () => {
+    const resized = drag(click(grown(), { x: 200, y: 150 }), { x: 200, y: 241 }, { x: 200, y: 236 });
+    const shortened = press(typeLabel(press(resized, "Enter"), "1"), "Escape");
+
+    expect(shapes(resized)[0]?.bounds).toEqual({ x: 100, y: 100, width: 200, height: 141 });
+    expect(shapes(shortened)[0]?.bounds).toEqual({ x: 100, y: 100, width: 200, height: 100 });
   });
 
   test("resized from its side, keeps its own height, so it still shrinks back when its Label gets shorter", () => {

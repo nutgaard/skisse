@@ -6,6 +6,7 @@ export const rectangle: SymbolDefinition = {
   shortcut: "r",
   defaultSize: { width: 160, height: 80 },
   canBeContainer: true,
+  labelOnly: false,
   defaultLabelAlignment: "topLeft",
   outline: rectanglePath,
   labelArea: (box) => inset(box, labelMargin),

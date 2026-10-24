@@ -1,6 +1,7 @@
 import {
   creationBounds,
   defaultStyle,
+  emptyLabel,
   resizableShape,
   type EditorState,
   type FontSize,
@@ -13,7 +14,7 @@ import { displayedBounds, shapeLayout, type LabelLine } from "./label";
 import { onScreen, renderShapes, type ShapeToRender } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
 import type { SvgElement } from "./svg";
-import { symbolDefinition, type SymbolId } from "./symbols";
+import type { SymbolId } from "./symbols";
 import type { LabelAlignment } from "./symbols/symbol";
 import type { Tool } from "./tools";
 import type { Viewport } from "./viewport";
@@ -144,7 +145,7 @@ export function rendering(state: EditorState): SvgElement {
           {
             symbol: interaction.symbol,
             bounds: interaction.bounds,
-            label: { text: "", alignment: symbolDefinition(interaction.symbol).defaultLabelAlignment },
+            label: emptyLabel(interaction.symbol),
             style: defaultStyle,
           },
         ]

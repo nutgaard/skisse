@@ -6,6 +6,7 @@ export const diamond: SymbolDefinition = {
   shortcut: "d",
   defaultSize: { width: 140, height: 100 },
   canBeContainer: false,
+  labelOnly: false,
   defaultLabelAlignment: "center",
   outline: (box) => polygon(sideMidpoints(box)),
   // The largest rectangle inside the diamond, whose corners touch its sides.

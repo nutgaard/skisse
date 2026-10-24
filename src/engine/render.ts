@@ -1,5 +1,5 @@
-import type { ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
-import { labelFontFamily, shapeLayout, type ShapeLayout } from "./label";
+import type { ShapeId, Sketch, TextMeasurer } from "./editor";
+import { labelFontFamily, shapeLayout, type ShapeLayout, type ShapeToLayout } from "./label";
 import { pathData } from "./path";
 import { shapeGeometry } from "./shape-geometry";
 import { svgElement, type SvgElement } from "./svg";
@@ -33,12 +33,12 @@ const placeholderStyle = {
 };
 
 /** A Shape to render. A Shape being drawn has no ID yet. */
-export type ShapeToRender = Omit<SymbolShape, "id"> & { readonly id?: ShapeId };
+export type ShapeToRender = ShapeToLayout & { readonly id?: ShapeId };
 
-// One text element per line. A centred line is drawn from its middle, so it stays centred even if the font is drawn
-// slightly wider or narrower than measured.
+// One text element per line, leaving out blank lines. A centred line is drawn from its middle, so it stays centred
+// even if the font is drawn slightly wider or narrower than measured.
 function renderLabel({ lines, fontPixels }: ShapeLayout, centred: boolean): readonly SvgElement[] {
-  return lines.map(({ text, bounds }) =>
+  return lines.filter(({ text }) => text.trim() !== "").map(({ text, bounds }) =>
     svgElement(
       "text",
       {

@@ -88,6 +88,11 @@ export const defaultStyle: Style = { fontSize: "medium" };
 
 export type Label = { readonly text: string; readonly alignment: LabelAlignment };
 
+/** The Label a new Shape of `symbol` starts with: empty, and aligned as the Symbol's Labels are by default. */
+export function emptyLabel(symbol: SymbolId): Label {
+  return { text: "", alignment: symbolDefinition(symbol).defaultLabelAlignment };
+}
+
 export type SymbolShape = {
   readonly id: ShapeId;
   readonly symbol: SymbolId;
@@ -201,7 +206,7 @@ export const emptySketch: Sketch = { shapes: {} };
 function withLabels(sketch: Sketch): Sketch {
   const complete = (shape: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds">): SymbolShape => ({
     ...shape,
-    label: shape.label ?? { text: "", alignment: symbolDefinition(shape.symbol).defaultLabelAlignment },
+    label: shape.label ?? emptyLabel(shape.symbol),
     style: shape.style ?? defaultStyle,
   });
   return { ...sketch, shapes: Object.fromEntries(Object.entries(sketch.shapes).map(([id, shape]) => [id, complete(shape)])) };
@@ -385,16 +390,20 @@ function resizeShape(
   if (!shape || !interaction.dragged) return { ...state, sketch: before, interaction };
   // The resize starts from the Shape as displayed, so its handles move the edges the user sees. A resize that leaves
   // the top and bottom where they were keeps the Shape's own height, so it still shrinks back when its Label does.
+  // So does one that leaves the Shape shorter than its Label needs, unless it went below its own height.
   const from = displayed(state, shape);
   const resized = resizeBounds(from, handle, pointerOffset(interaction, pointer), {
     snap: snapperFor(snapsToGrid(pointer.modifiers)),
     keepAspectRatio: pointer.modifiers.shift,
     minimumSize: minimumShapeSize,
   });
+  const labelNeedsMore = displayed(state, { ...shape, bounds: resized }).height > resized.height;
   const bounds =
     resized.y === from.y && resized.height === from.height
       ? { ...resized, y: shape.bounds.y, height: shape.bounds.height }
-      : resized;
+      : labelNeedsMore
+        ? { ...resized, height: Math.min(resized.height, shape.bounds.height) }
+        : resized;
   return {
     ...state,
     sketch: { ...before, shapes: { ...before.shapes, [shapeId]: { ...shape, bounds } } },
@@ -559,7 +568,7 @@ function createShape(state: EditorState, symbol: SymbolId, bounds: Bounds): Edit
     id: state.deps.generateId(sequence),
     symbol,
     bounds,
-    label: { text: "", alignment: symbolDefinition(symbol).defaultLabelAlignment },
+    label: emptyLabel(symbol),
     style: defaultStyle,
   };
   return {

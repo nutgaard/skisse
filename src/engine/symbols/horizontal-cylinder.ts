@@ -39,6 +39,7 @@ export const horizontalCylinder: SymbolDefinition = {
   shortcut: "q",
   defaultSize: { width: 160, height: 80 },
   canBeContainer: false,
+  labelOnly: false,
   defaultLabelAlignment: "center",
   outline,
   lines: (box) => [...outline(box), ...lidEdge(box)],

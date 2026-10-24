@@ -62,6 +62,7 @@ export const cloud: SymbolDefinition = {
   shortcut: "k",
   defaultSize: { width: 160, height: 100 },
   canBeContainer: true,
+  labelOnly: false,
   defaultLabelAlignment: "topLeft",
   outline,
   // Inside the dips between the bumps.
