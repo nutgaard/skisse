@@ -14,6 +14,7 @@ import {
   rendering,
   resizeHandles,
   selection,
+  selectionStyle,
   shapes,
   sketch,
   symbolIcon,
@@ -22,7 +23,6 @@ import {
   viewport,
   type Dependencies,
   type EditorState,
-  type FontSize,
   type HorizontalAlignment,
   type Input,
   type KeyInput,
@@ -36,9 +36,11 @@ import {
   type WheelInput,
 } from "../engine";
 import { useAutosave } from "./autosave";
+import { Choices, type Choice } from "./Choices";
 import { downloadPng, downloadSvg } from "./download";
 import { keyInput, modifiersOf } from "./inputs";
 import { LabelEditor } from "./LabelEditor";
+import { StylePanel } from "./StylePanel";
 import { SvgElementView } from "./SvgElementView";
 
 function pointerInput(type: PointerInput["type"], event: PointerEvent): PointerInput {
@@ -168,9 +170,6 @@ function ToolButton({ info, active, onSelect }: ToolButtonProps) {
   );
 }
 
-// One of a few values to choose, as a button: its short name, and what it does in full.
-type Choice<T> = { readonly value: T; readonly name: string; readonly title: string };
-
 const horizontalAlignments: readonly Choice<HorizontalAlignment>[] = [
   { value: "left", name: "Left", title: "Align left" },
   { value: "center", name: "Centre", title: "Align centre" },
@@ -183,37 +182,7 @@ const verticalAlignments: readonly Choice<VerticalAlignment>[] = [
   { value: "bottom", name: "Bottom", title: "Align bottom" },
 ];
 
-const fontSizes: readonly Choice<FontSize>[] = [
-  { value: "small", name: "S", title: "Small text" },
-  { value: "medium", name: "M", title: "Medium text" },
-  { value: "large", name: "L", title: "Large text" },
-];
-
-type ChoicesProps<T> = {
-  readonly choices: readonly Choice<T>[];
-  /** The value chosen, or `undefined` when the selected Shapes differ. */
-  readonly chosen: T | undefined;
-  readonly onChoose: (value: T) => void;
-};
-
-// The buttons keep the focus where it is, so they change a Label being edited without finishing the editing.
-function Choices<T extends string>({ choices, chosen, onChoose }: ChoicesProps<T>) {
-  return choices.map((choice) => (
-    <button
-      key={choice.value}
-      type="button"
-      aria-pressed={choice.value === chosen}
-      aria-label={choice.title}
-      title={choice.title}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={() => onChoose(choice.value)}
-    >
-      {choice.name}
-    </button>
-  ));
-}
-
-// What the selected Shapes' Labels have in common, such as their font size, or `undefined` when they differ.
+// What the selected Shapes' Labels have in common, such as their alignment, or `undefined` when they differ.
 function commonToSelection<T>(state: EditorState, of: (label: LabelView) => T): T | undefined {
   const values = new Set(selection(state).flatMap((id) => {
     const label = labelLayout(state, id);
@@ -239,12 +208,6 @@ function LabelControls({ state, dispatch }: LabelControlsProps) {
         choices={verticalAlignments}
         chosen={commonToSelection(state, (label) => label.alignment.vertical)}
         onChoose={(vertical) => dispatch({ type: "changeLabelAlignment", alignment: { vertical } })}
-      />
-      <span className="toolbar-separator" />
-      <Choices
-        choices={fontSizes}
-        chosen={commonToSelection(state, (label) => label.fontSize)}
-        onChoose={(fontSize) => dispatch({ type: "changeStyle", style: { fontSize } })}
       />
     </div>
   );
@@ -399,6 +362,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
         </svg>
         {editedLabel && <LabelEditor label={editedLabel} viewport={view} dispatch={dispatch} />}
       </div>
+      <StylePanel style={selectionStyle(state)} dispatch={dispatch} />
       <LabelControls state={state} dispatch={dispatch} />
       <div ref={toolbarRef} className="toolbar" role="toolbar">
         {tools.map((info) => (

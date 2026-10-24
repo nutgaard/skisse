@@ -134,6 +134,33 @@ function polygons(path: Path): readonly (readonly Point[])[] {
   }, []);
 }
 
+/** The pieces of the Path, each from a `move` to just before the next. */
+export function pathPieces(path: Path): readonly Path[] {
+  return path.reduce<readonly Path[]>(
+    (pieces, command) =>
+      command.type === "move" || pieces.length === 0
+        ? [...pieces, [command]]
+        : [...pieces.slice(0, -1), [...(pieces.at(-1) ?? []), command]],
+    [],
+  );
+}
+
+/** Whether a piece of a Path is joined back to its start. */
+export function isClosed(piece: Path): boolean {
+  return piece.at(-1)?.type === "close";
+}
+
+/** How long a piece of a Path is, back to its start too when it is closed. */
+export function pieceLength(piece: Path): number {
+  const [corners = []] = polygons(piece);
+  const [start] = corners;
+  const points = isClosed(piece) && start ? [...corners, start] : corners;
+  return points.slice(1).reduce((length, point, index) => {
+    const previous = points[index] ?? point;
+    return length + Math.hypot(point.x - previous.x, point.y - previous.y);
+  }, 0);
+}
+
 // Even-odd ray casting: a ray from the point crosses the polygon's edges an odd number of times when it is inside.
 function insidePolygon(corners: readonly Point[], point: Point): boolean {
   return corners.reduce((inside, corner, index) => {

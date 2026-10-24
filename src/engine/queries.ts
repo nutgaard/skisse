@@ -3,7 +3,6 @@ import {
   newShape,
   resizableShape,
   type EditorState,
-  type FontSize,
   type ShapeId,
   type Sketch,
 } from "./editor";
@@ -12,6 +11,7 @@ import * as history from "./history";
 import { displayedBounds, shapeLayout, type LabelLine } from "./label";
 import { onScreen, renderShapes, type ShapeToRender } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
+import { shades, type FontSize, type Style } from "./style";
 import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
 import type { LabelAlignment } from "./symbols/symbol";
@@ -32,6 +32,8 @@ export type LabelView = {
   readonly text: string;
   readonly alignment: LabelAlignment;
   readonly fontSize: FontSize;
+  /** The colour the text is drawn in, which is that of the Shape's lines. */
+  readonly color: string;
   /** The size of the font, in Sketch units. */
   readonly fontPixels: number;
   readonly lineHeight: number;
@@ -52,6 +54,7 @@ export function labelLayout(state: EditorState, id: ShapeId): LabelView | undefi
     text: shape.label.text,
     alignment: shape.label.alignment,
     fontSize: shape.style.fontSize,
+    color: shades[shape.style.strokeColor].stroke,
     fontPixels,
     lineHeight,
     area: labelArea,
@@ -67,6 +70,31 @@ export function shapes(state: EditorState): readonly ShapeView[] {
     symbol: shape.symbol,
     bounds: displayedBounds(shape, state.deps.measureText),
   }));
+}
+
+export function shapeStyle(state: EditorState, id: ShapeId): Style | undefined {
+  return state.sketch.shapes[id]?.style;
+}
+
+/** A style as the style panel shows it, where each property can be mixed among the selected Shapes. */
+export type SelectionStyle = { readonly [Property in keyof Style]: Style[Property] | "mixed" };
+
+/**
+ * The style of the selected Shapes, each property `mixed` where they differ. With nothing selected, it is the style new
+ * Shapes get, which choosing a style changes.
+ */
+export function selectionStyle(state: EditorState): SelectionStyle {
+  const styles = state.selection.flatMap((id) => state.sketch.shapes[id]?.style ?? []);
+  const [first = state.style, ...others] = styles;
+  const common = <Property extends keyof Style>(property: Property): Style[Property] | "mixed" =>
+    others.every((style) => style[property] === first[property]) ? first[property] : "mixed";
+  return {
+    strokeColor: common("strokeColor"),
+    fill: common("fill"),
+    strokePattern: common("strokePattern"),
+    strokeWidth: common("strokeWidth"),
+    fontSize: common("fontSize"),
+  };
 }
 
 /** The Sketch as of the last finished change, leaving out any gesture still in progress. This is what to save. */
@@ -142,7 +170,7 @@ export function currentInteraction(state: EditorState): InteractionView {
 export function rendering(state: EditorState): SvgElement {
   const interaction = currentInteraction(state);
   const beingDrawn: readonly ShapeToRender[] =
-    interaction.kind === "creatingShape" ? [newShape(interaction.symbol, interaction.bounds)] : [];
+    interaction.kind === "creatingShape" ? [newShape(interaction.symbol, interaction.bounds, state.style)] : [];
   return renderShapes([...Object.values(state.sketch.shapes), ...beingDrawn], state.deps.measureText, {
     ...onScreen,
     hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,
