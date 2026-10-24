@@ -77,7 +77,7 @@ export function resolveArrow(sketch: Sketch, arrow: ArrowWithoutId, measure: Tex
 // A Shape an end can bind to, as displayed.
 type Candidate = { readonly shape: SymbolShape; readonly box: Bounds; readonly geometry: ShapeGeometry };
 
-// Of `items`, the one nearest to the point by `distanceOf`, if it is within `reach`. A tie goes to the first.
+// Of `items`, the one with the least `distanceOf`, if that is within `reach`. A tie goes to the first.
 function nearestWithin<T>(items: readonly T[], distanceOf: (item: T) => number, reach: number): T | undefined {
   return items
     .map((item) => ({ item, distance: distanceOf(item) }))
@@ -96,8 +96,24 @@ function outlineEnd({ shape, box }: Candidate, onOutline: Point): ArrowEnd {
   };
 }
 
+// The Shapes an end at `point` can bind to, topmost first: the topmost Shape under it and those drawn above it, such
+// as its children. The Shapes it covers are hidden there, as Shapes are hit as if filled. Over empty space, all of
+// them.
+function candidatesAt(sketch: Sketch, point: Point, measure: TextMeasurer): readonly Candidate[] {
+  const all = drawOrder(sketch)
+    .filter(isSymbolShape)
+    .toReversed()
+    .map((shape) => {
+      const box = displayedBounds(shape, measure);
+      return { shape, box, geometry: shapeGeometry(shape.symbol, box) };
+    });
+  const under = all.findIndex(({ geometry }) => insidePath(geometry.outline, point));
+  return under === -1 ? all : all.slice(0, under + 1);
+}
+
 /**
- * The end an Arrow gets when it is let go at `point`. Arrows never bind to other Arrows. In order:
+ * The end an Arrow gets when it is let go at `point`. Arrows never bind to other Arrows, nor to a Shape hidden at
+ * `point` under the topmost Shape there. In order:
  * - Within `reach` of a Port, it snaps to the nearest such Port.
  * - Within `reach` of a Shape's outline, it binds to the nearest point on the nearest such outline, so an end let go
  *   on the line drawn around a Shape binds to that Shape, even inside a Container.
@@ -105,14 +121,8 @@ function outlineEnd({ shape, box }: Candidate, onOutline: Point): ArrowEnd {
  * - Over empty space, it floats.
  * A tie goes to the Shape on top.
  */
-export function endAt(sketch: Sketch, point: Point, reach: number, measure: TextMeasurer): ArrowEnd {
-  const candidates: readonly Candidate[] = drawOrder(sketch)
-    .filter(isSymbolShape)
-    .toReversed()
-    .map((shape) => {
-      const box = displayedBounds(shape, measure);
-      return { shape, box, geometry: shapeGeometry(shape.symbol, box) };
-    });
+export function endLetGoAt(sketch: Sketch, point: Point, reach: number, measure: TextMeasurer): ArrowEnd {
+  const candidates = candidatesAt(sketch, point, measure);
   const ports = candidates.flatMap((candidate) =>
     candidate.geometry.ports.map((position, port) => ({ shape: candidate.shape.id, port, position })),
   );

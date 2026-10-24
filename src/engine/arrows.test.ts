@@ -95,7 +95,7 @@ describe("drawing an Arrow", () => {
     expect(onlyArrow(state).end.binding).toEqual({ shape: "shape-2", port: 3 });
   });
 
-  test("letting go on a Shape's right edge, away from a Port, binds the end to the outline there", () => {
+  test("letting go on a Shape's right side, away from a Port, binds the end to the outline there", () => {
     const state = drawArrow(twoRectangles(), { x: 250, y: 300 }, { x: 400, y: 115 });
 
     expect(onlyArrow(state).end).toEqual({ point: { x: 400, y: 115 }, binding: { shape: "shape-2" } });
@@ -141,10 +141,25 @@ describe("drawing an Arrow", () => {
     expect(onlyArrow(state).end.binding).toEqual({ shape: "shape-1", port: 3 });
   });
 
-  test("letting go on a child's edge inside a Container binds to the child", () => {
+  test("letting go on a child's side inside a Container binds to the child", () => {
     const state = drawArrow(childNearContainerSide(), { x: 250, y: 400 }, { x: 207, y: 170 });
 
     expect(onlyArrow(state).end).toEqual({ point: { x: 207, y: 170 }, binding: { shape: "shape-2" } });
+  });
+
+  test("letting go on a Shape ignores the Ports and outlines of the Shapes it covers there", () => {
+    // shape-1 at (100,100)–(200,180), partly covered by shape-2 at (180,120)–(330,250).
+    const overlapping = drawRectangle(
+      drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 }),
+      { x: 180, y: 120 },
+      { x: 330, y: 250 },
+    );
+
+    const nearSide = drawArrow(overlapping, { x: 250, y: 400 }, { x: 195, y: 160 });
+    const nearPort = drawArrow(overlapping, { x: 250, y: 400 }, { x: 195, y: 140 });
+
+    expect(onlyArrow(nearSide).end).toEqual({ point: { x: 180, y: 160 }, binding: { shape: "shape-2" } });
+    expect(onlyArrow(nearPort).end.binding).toEqual({ shape: "shape-2" });
   });
 
   test("letting go over empty space leaves the end floating there", () => {

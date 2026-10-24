@@ -88,8 +88,10 @@ export function arrowToRender(
   arrow: ArrowWithoutId & { readonly id?: ShapeId },
   measure: TextMeasurer,
 ): readonly ArrowToRender[] {
-  const placed = resolveArrow(sketch, arrow, measure);
-  return placed ? [{ id: arrow.id, style: arrow.style, routing: arrow.routing, path: polyline(placed.path) }] : [];
+  const resolvedArrow = resolveArrow(sketch, arrow, measure);
+  return resolvedArrow
+    ? [{ id: arrow.id, style: arrow.style, routing: arrow.routing, path: polyline(resolvedArrow.path) }]
+    : [];
 }
 
 /** The Shapes of `sketch` to render, in the order given, with each Arrow's path resolved. */

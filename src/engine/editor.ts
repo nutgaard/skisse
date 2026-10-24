@@ -1,6 +1,6 @@
 import {
   boundTo,
-  endAt,
+  endLetGoAt,
   isArrow,
   isSymbolShape,
   resolveArrow,
@@ -295,7 +295,7 @@ export function resolved(state: EditorState, arrow: ArrowWithoutId): ResolvedArr
 }
 
 // The smallest Bounds around any Shape as displayed: one made from a Symbol grown to fit its Label, or an Arrow's path.
-// `undefined` for an Arrow that can't be placed.
+// `undefined` for an Arrow that can't be resolvedArrow.
 function shapeBounds(sketch: Sketch, shape: Shape, measure: TextMeasurer): Bounds | undefined {
   if (isSymbolShape(shape)) return displayedBounds(shape, measure);
   const arrow = resolveArrow(sketch, shape, measure);
@@ -428,11 +428,11 @@ export type ArrowEndHandleView = { readonly end: EndName; readonly position: Poi
 /** The handles on the ends of the one selected Shape, when it is an Arrow. */
 export function arrowEndHandles(state: EditorState): readonly ArrowEndHandleView[] {
   const arrow = selectedArrow(state);
-  const placed = arrow && resolved(state, arrow);
-  return placed
+  const resolvedArrow = arrow && resolved(state, arrow);
+  return resolvedArrow
     ? [
-        { end: "start", position: placed.start },
-        { end: "end", position: placed.end },
+        { end: "start", position: resolvedArrow.start },
+        { end: "end", position: resolvedArrow.end },
       ]
     : [];
 }
@@ -636,8 +636,8 @@ function resizeShape(
 const portReach = 10;
 
 // The end an Arrow gets when it is let go at `point` on `sketch`.
-function placedEnd(state: EditorState, sketch: Sketch, point: Point): ArrowEnd {
-  return endAt(sketch, point, sketchDistance(state, portReach), state.deps.measureText);
+function endLetGo(state: EditorState, sketch: Sketch, point: Point): ArrowEnd {
+  return endLetGoAt(sketch, point, sketchDistance(state, portReach), state.deps.measureText);
 }
 
 // The dragged end is placed wherever the pointer is, once the pointer has travelled past the drag threshold.
@@ -648,7 +648,7 @@ function dragArrowEnd(
   const { before, arrowId, end, current } = interaction;
   const arrow = before.shapes[arrowId];
   if (!arrow || !isArrow(arrow) || !interaction.dragged) return { ...state, sketch: before, interaction };
-  const replaced: Arrow = { ...arrow, [end]: placedEnd(state, before, current) };
+  const replaced: Arrow = { ...arrow, [end]: endLetGo(state, before, current) };
   return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: replaced } }, interaction };
 }
 
@@ -693,7 +693,7 @@ function pointerDown(state: EditorState, input: PointerInput): EditorState {
         ...state,
         interaction: {
           kind: "drawingArrow",
-          start: placedEnd(state, state.sketch, input.position),
+          start: endLetGo(state, state.sketch, input.position),
           origin: input.position,
           current: input.position,
           dragged: false,
@@ -907,7 +907,7 @@ function arrowEndBeingPlaced(state: EditorState): Point | undefined {
 export function portTarget(state: EditorState): { shape: SymbolShape; snapsTo: number | undefined } | undefined {
   const point = arrowEndBeingPlaced(state);
   if (!point) return undefined;
-  const end = placedEnd(state, state.sketch, point);
+  const end = endLetGo(state, state.sketch, point);
   const id = boundTo(end);
   const shape = id === undefined ? undefined : state.sketch.shapes[id];
   return shape && isSymbolShape(shape) ? { shape, snapsTo: end.kind === "port" ? end.port : undefined } : undefined;
@@ -924,10 +924,10 @@ export function arrowBeingDrawn(state: EditorState): ArrowWithoutId | undefined 
     style: state.style,
     routing: "straight",
     start: interaction.start,
-    end: placedEnd(state, state.sketch, interaction.current),
+    end: endLetGo(state, state.sketch, interaction.current),
   };
-  const placed = resolved(state, arrow);
-  return placed && distance(placed.start, placed.end) > 0 ? arrow : undefined;
+  const resolvedArrow = resolved(state, arrow);
+  return resolvedArrow && distance(resolvedArrow.start, resolvedArrow.end) > 0 ? arrow : undefined;
 }
 
 // A new Arrow goes on top of the Shapes at the top level and becomes the selection, so it can be adjusted straight

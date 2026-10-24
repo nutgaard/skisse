@@ -114,15 +114,15 @@ export function arrows(state: EditorState): readonly ArrowView[] {
   return drawOrder(state.sketch)
     .filter(isArrow)
     .flatMap((arrow) => {
-      const placed = resolved(state, arrow);
-      return placed
+      const resolvedArrow = resolved(state, arrow);
+      return resolvedArrow
         ? [
             {
               id: arrow.id,
               routing: arrow.routing,
-              start: endView(arrow.start, placed.start),
-              end: endView(arrow.end, placed.end),
-              path: placed.path,
+              start: endView(arrow.start, resolvedArrow.start),
+              end: endView(arrow.end, resolvedArrow.end),
+              path: resolvedArrow.path,
             },
           ]
         : [];
