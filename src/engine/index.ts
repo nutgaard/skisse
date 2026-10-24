@@ -19,9 +19,12 @@ export { labelFontFamily } from "./label";
 export type { LabelLine } from "./label";
 export { pathData } from "./path";
 export type { Path, PathCommand } from "./path";
+export type { EndName, Routing } from "./arrow";
 export type { ResizeHandle } from "./resize";
 export {
   activeTool,
+  arrowEndHandles,
+  arrows,
   canRedo,
   canUndo,
   currentInteraction,
@@ -37,11 +40,17 @@ export {
   shapes,
   sketch,
   viewport,
+  visiblePorts,
 } from "./queries";
 export type {
+  ArrowEndHandleView,
+  ArrowEndView,
+  ArrowView,
+  BindingView,
   HandleView,
   InteractionView,
   LabelView,
+  PortsView,
   SelectionAlignment,
   SelectionStyle,
   ShapeTree,

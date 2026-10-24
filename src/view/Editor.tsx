@@ -1,6 +1,8 @@
 import { useEffect, useId, useMemo, useReducer, useRef, type PointerEvent } from "react";
 import {
   activeTool,
+  arrowEndHandles,
+  arrows,
   canRedo,
   canUndo,
   createEditor,
@@ -22,6 +24,7 @@ import {
   tools,
   update,
   viewport,
+  visiblePorts,
   type Dependencies,
   type KeyInput,
   type PointerInput,
@@ -73,6 +76,10 @@ const spaceReleased: KeyInput = { type: "keyUp", key: " ", modifiers: noModifier
 
 // Size, in screen pixels, of the square drawn for each resize handle.
 const handleSize = 8;
+
+// Radius, in screen pixels, of the circle drawn for each Port, and for the Port an Arrow end would snap to.
+const portRadius = 4;
+const snapPortRadius = 6;
 
 // Cmd/Ctrl+A is select all in the editor, so the browser must not also select the page's text.
 function isSelectAll(event: KeyboardEvent) {
@@ -190,6 +197,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const selected = new Set(selection(state));
   const view = viewport(state);
   const finishedSketch = sketch(state);
+  const ports = visiblePorts(state);
   const editedLabel = interaction.kind === "editingLabel" ? labelLayout(state, interaction.shapeId) : undefined;
   // Only a finished change to the Sketch changes the export, not every pointer move.
   const exportedSvg = useMemo(() => exportSvg(finishedSketch, deps.measureText), [finishedSketch, deps]);
@@ -292,6 +300,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
           onPointerMove={onPointer("pointerMove")}
           onPointerUp={onPointer("pointerUp")}
           onPointerCancel={onPointer("pointerCancel")}
+          onPointerLeave={() => dispatch({ type: "pointerLeave" })}
           onDoubleClick={(event) =>
             dispatch({ type: "doubleClick", position: { x: event.clientX, y: event.clientY } })
           }
@@ -304,6 +313,36 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
               .map(({ id, bounds }) => (
                 <rect key={id} data-selected={id} {...bounds} className="selection-outline" />
               ))}
+            {arrows(state)
+              .filter(({ id }) => selected.has(id))
+              .map(({ id, path }) => (
+                <polyline
+                  key={id}
+                  data-selected={id}
+                  points={path.map(({ x, y }) => `${x},${y}`).join(" ")}
+                  className="arrow-selection"
+                />
+              ))}
+            {ports?.ports.map((port, index) => (
+              <circle
+                key={index}
+                cx={port.x}
+                cy={port.y}
+                r={(index === ports.snapsTo ? snapPortRadius : portRadius) / view.zoom}
+                data-snaps={index === ports.snapsTo || undefined}
+                className="port"
+              />
+            ))}
+            {arrowEndHandles(state).map(({ end, position }) => (
+              <circle
+                key={end}
+                data-arrow-end={end}
+                cx={position.x}
+                cy={position.y}
+                r={handleSize / view.zoom / 2}
+                className="arrow-end-handle"
+              />
+            ))}
             {resizeHandles(state).map(({ handle, position }) => (
               <rect
                 key={handle}

@@ -318,3 +318,32 @@ body,
   color: #555;
   font-size: 0.85em;
 }
+
+.arrow-selection {
+  vector-effect: non-scaling-stroke;
+  fill: none;
+  stroke: rgb(79 70 229 / 0.35);
+  stroke-width: 6;
+  stroke-linecap: round;
+  pointer-events: none;
+}
+
+.arrow-end-handle {
+  vector-effect: non-scaling-stroke;
+  fill: #fff;
+  stroke: #4f46e5;
+  stroke-width: 1;
+  cursor: move;
+}
+
+.port {
+  vector-effect: non-scaling-stroke;
+  fill: #fff;
+  stroke: #4f46e5;
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.port[data-snaps] {
+  fill: #4f46e5;
+}

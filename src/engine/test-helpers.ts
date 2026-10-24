@@ -109,6 +109,11 @@ export function sketchPointUnder(state: EditorState, at: Point): Point {
   return { x: shape.bounds.x + shape.bounds.width / 2, y: shape.bounds.y + shape.bounds.height / 2 };
 }
 
+/** Draws an Arrow with the Arrow tool by dragging from `from` to `to`. */
+export function drawArrow(state: EditorState, from: Point, to: Point): EditorState {
+  return apply(state, selectTool("arrow"), pointerDown(from), pointerMove(to), pointerUp(to));
+}
+
 export function click(state: EditorState, at: Point, modifiers: Partial<Modifiers> = {}): EditorState {
   return apply(state, selectTool("select"), pointerDown(at, modifiers), pointerUp(at, modifiers));
 }

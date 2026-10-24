@@ -1,6 +1,7 @@
-import type { ShapeId, ShapeWithoutId, Sketch, TextMeasurer } from "./editor";
+import { isArrow, resolveArrow, type ArrowWithoutId } from "./arrow";
+import type { Shape, ShapeId, ShapeWithoutId, Sketch, TextMeasurer } from "./editor";
 import { labelFontFamily, shapeLayout, shareOfSpace, type ShapeLayout } from "./label";
-import { isClosed, pathData, pathPieces, pieceLength, type Path } from "./path";
+import { isClosed, pathData, pathPieces, pieceLength, polyline, type Path } from "./path";
 import { shapeGeometry } from "./shape-geometry";
 import { lineColor, shades, type Style, type StrokePattern, type StrokeWidth } from "./style";
 import { svgElement, type SvgElement } from "./svg";
@@ -69,8 +70,36 @@ const placeholderStyle = {
   "vector-effect": "non-scaling-stroke",
 };
 
-/** A Shape to render. A Shape being drawn has no ID yet. */
+/** A Shape made from a Symbol to render. A Shape being drawn has no ID yet. */
 export type ShapeToRender = ShapeWithoutId & { readonly id?: ShapeId };
+
+/** An Arrow to render, with its path already resolved. An Arrow being drawn has no ID yet. */
+export type ArrowToRender = Pick<ArrowWithoutId, "style" | "routing"> & {
+  readonly id?: ShapeId;
+  readonly path: Path;
+};
+
+/** A Shape made from a Symbol or an Arrow, ready to render. */
+export type Renderable = ShapeToRender | ArrowToRender;
+
+/** An Arrow to render, its path resolved on `sketch`, or nothing when it can't be placed. */
+export function arrowToRender(
+  sketch: Sketch,
+  arrow: ArrowWithoutId & { readonly id?: ShapeId },
+  measure: TextMeasurer,
+): readonly ArrowToRender[] {
+  const resolvedArrow = resolveArrow(sketch, arrow, measure);
+  return resolvedArrow
+    ? [{ id: arrow.id, style: arrow.style, routing: arrow.routing, path: polyline(resolvedArrow.path) }]
+    : [];
+}
+
+/** The Shapes of `sketch` to render, in the order given, with each Arrow's path resolved. */
+export function shapesToRender(sketch: Sketch, shapes: readonly Shape[], measure: TextMeasurer): readonly Renderable[] {
+  return shapes.flatMap((shape): readonly Renderable[] =>
+    isArrow(shape) ? arrowToRender(sketch, shape, measure) : [shape],
+  );
+}
 
 // Where each line of a Label is drawn from: its start, middle or end, so it stays aligned even if the font is drawn
 // slightly wider or narrower than measured.
@@ -127,16 +156,28 @@ function renderShape(shape: ShapeToRender, measure: TextMeasurer, options: Rende
   ]);
 }
 
+// An Arrow drawn as its line, in the Arrow's lines' style.
+function renderArrow({ id, style, routing, path }: ArrowToRender): SvgElement {
+  return svgElement("g", { ...(id === undefined ? {} : { "data-shape": id }), "data-routing": routing }, [
+    ...renderLines(path, style),
+  ]);
+}
+
 /** The Shapes, in Sketch coordinates, in the order given. */
 export function renderShapes(
-  shapes: readonly ShapeToRender[],
+  shapes: readonly Renderable[],
   measure: TextMeasurer,
   options: RenderOptions,
 ): SvgElement {
-  return svgElement("g", {}, shapes.map((shape) => renderShape(shape, measure, options)));
+  // An Arrow has a Routing, as it does when stored.
+  return svgElement(
+    "g",
+    {},
+    shapes.map((shape) => ("routing" in shape ? renderArrow(shape) : renderShape(shape, measure, options))),
+  );
 }
 
 /** Every Shape of the Sketch, in Sketch coordinates, each Container below the Shapes inside it. */
 export function renderSketch(sketch: Sketch, measure: TextMeasurer, options: RenderOptions): SvgElement {
-  return renderShapes(drawOrder(sketch), measure, options);
+  return renderShapes(shapesToRender(sketch, drawOrder(sketch), measure), measure, options);
 }

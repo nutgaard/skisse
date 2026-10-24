@@ -1,7 +1,11 @@
+import { isArrow, isSymbolShape, type ArrowEnd, type EndName, type Routing } from "./arrow";
 import {
+  arrowBeingDrawn,
   creationBounds,
   newShape,
+  portTarget,
   resizableShape,
+  resolved,
   type EditorState,
   type ShapeId,
   type Sketch,
@@ -9,8 +13,9 @@ import {
 import { boundsBetween, type Bounds, type Point } from "./geometry";
 import * as history from "./history";
 import { displayedBounds, shapeLayout, type LabelLine } from "./label";
-import { onScreen, renderShapes, type ShapeToRender } from "./render";
+import { arrowToRender, onScreen, renderShapes, shapesToRender, type Renderable } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
+import { shapeGeometry } from "./shape-geometry";
 import { lineColor, type FontSize, type Style } from "./style";
 import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
@@ -19,10 +24,11 @@ import type { Tool } from "./tools";
 import { childrenOf, drawOrder, drawOrderLifting } from "./tree";
 import type { Viewport } from "./viewport";
 
-export { pansOnPress } from "./editor";
+export { arrowEndHandles, pansOnPress } from "./editor";
+export type { ArrowEndHandleView } from "./editor";
 
-// What queries return about a Shape. Kept apart from the stored SymbolShape so the stored model can change
-// without changing what the view and the tests see.
+// What queries return about a Shape made from a Symbol. Kept apart from the stored SymbolShape so the stored model can
+// change without changing what the view and the tests see.
 export type ShapeView = {
   readonly id: ShapeId;
   readonly symbol: SymbolId;
@@ -49,7 +55,7 @@ export type LabelView = {
 /** The Label of a Shape, laid out as it is drawn. */
 export function labelLayout(state: EditorState, id: ShapeId): LabelView | undefined {
   const shape = state.sketch.shapes[id];
-  if (!shape) return undefined;
+  if (!shape || isArrow(shape)) return undefined;
   const { labelArea, textBlock, fontPixels, lineHeight, lines } = shapeLayout(shape, state.deps.measureText);
   return {
     text: shape.label.text,
@@ -64,13 +70,82 @@ export function labelLayout(state: EditorState, id: ShapeId): LabelView | undefi
   };
 }
 
-/** Every Shape, with its Bounds as displayed: grown to fit its Label. In the order drawn, from bottom to top. */
+/**
+ * Every Shape made from a Symbol, with its Bounds as displayed: grown to fit its Label. In the order drawn, from bottom
+ * to top.
+ */
 export function shapes(state: EditorState): readonly ShapeView[] {
-  return drawOrder(state.sketch).map((shape) => ({
+  return drawOrder(state.sketch).filter(isSymbolShape).map((shape) => ({
     id: shape.id,
     symbol: shape.symbol,
     bounds: displayedBounds(shape, state.deps.measureText),
   }));
+}
+
+/** What an Arrow end is bound to: a Shape, and one of its Ports, by its place in the Symbol's list, if at a Port. */
+export type BindingView = { readonly shape: ShapeId; readonly port?: number };
+
+/** Where an Arrow end is, and what it is bound to, if anything. A floating end has no Binding. */
+export type ArrowEndView = { readonly point: Point; readonly binding?: BindingView };
+
+/** What queries return about an Arrow: where it is, and what its ends are bound to. */
+export type ArrowView = {
+  readonly id: ShapeId;
+  readonly routing: Routing;
+  readonly start: ArrowEndView;
+  readonly end: ArrowEndView;
+  /** The points the Arrow's line runs through, from its start to its end. */
+  readonly path: readonly Point[];
+};
+
+function endView(end: ArrowEnd, point: Point): ArrowEndView {
+  switch (end.kind) {
+    case "floating":
+      return { point };
+    case "port":
+      return { point, binding: { shape: end.shape, port: end.port } };
+    case "outline":
+      return { point, binding: { shape: end.shape } };
+  }
+}
+
+/** Every Arrow, with its path resolved and its Bindings. In the order drawn, from bottom to top. */
+export function arrows(state: EditorState): readonly ArrowView[] {
+  return drawOrder(state.sketch)
+    .filter(isArrow)
+    .flatMap((arrow) => {
+      const resolvedArrow = resolved(state, arrow);
+      return resolvedArrow
+        ? [
+            {
+              id: arrow.id,
+              routing: arrow.routing,
+              start: endView(arrow.start, resolvedArrow.start),
+              end: endView(arrow.end, resolvedArrow.end),
+              path: resolvedArrow.path,
+            },
+          ]
+        : [];
+    });
+}
+
+/** The Ports shown on a Shape, and which of them an Arrow end would snap to, if any. */
+export type PortsView = {
+  readonly shape: ShapeId;
+  readonly ports: readonly Point[];
+  readonly snapsTo: number | undefined;
+};
+
+/**
+ * The Ports of the Shape under the pointer while hovering with the Arrow tool, or under an Arrow end being drawn or
+ * dragged. `undefined` when no Ports are shown.
+ */
+export function visiblePorts(state: EditorState): PortsView | undefined {
+  const target = portTarget(state);
+  if (!target) return undefined;
+  const { shape, snapsTo } = target;
+  const { ports } = shapeGeometry(shape.symbol, displayedBounds(shape, state.deps.measureText));
+  return { shape: shape.id, ports, snapsTo };
 }
 
 /** A Shape and the Shapes directly inside it, from bottom to top. */
@@ -128,7 +203,10 @@ export type SelectionAlignment = {
  * selected, as Shapes are created with their Symbol's own alignment.
  */
 export function selectionAlignment(state: EditorState): SelectionAlignment | undefined {
-  const [first, ...others] = state.selection.flatMap((id) => state.sketch.shapes[id]?.label.alignment ?? []);
+  const [first, ...others] = state.selection.flatMap((id) => {
+    const shape = state.sketch.shapes[id];
+    return shape && isSymbolShape(shape) ? [shape.label.alignment] : [];
+  });
   if (!first) return undefined;
   return {
     horizontal: commonOrMixed(first, others, "horizontal"),
@@ -177,6 +255,8 @@ export type InteractionView =
   | { readonly kind: "marqueeSelecting"; readonly bounds: Bounds }
   | { readonly kind: "moving" }
   | { readonly kind: "resizing"; readonly handle: ResizeHandle }
+  | { readonly kind: "drawingArrow" }
+  | { readonly kind: "draggingArrowEnd"; readonly arrowId: ShapeId; readonly end: EndName }
   | { readonly kind: "panning" }
   | { readonly kind: "editingLabel"; readonly shapeId: ShapeId };
 
@@ -195,6 +275,10 @@ export function currentInteraction(state: EditorState): InteractionView {
       return { kind: "moving" };
     case "resizing":
       return { kind: "resizing", handle: interaction.handle };
+    case "drawingArrow":
+      return { kind: "drawingArrow" };
+    case "draggingArrowEnd":
+      return { kind: "draggingArrowEnd", arrowId: interaction.arrowId, end: interaction.end };
     case "panning":
       return { kind: "panning" };
     case "editingLabel":
@@ -203,17 +287,23 @@ export function currentInteraction(state: EditorState): InteractionView {
 }
 
 /**
- * The Sketch as rendered on screen, in Sketch coordinates, including a Shape being drawn, and with Shapes being dragged
- * in front. The selection and resize handles are not part of it.
+ * The Sketch as rendered on screen, in Sketch coordinates, including a Shape or Arrow being drawn, and with Shapes
+ * being dragged in front. The selection, handles and Ports are not part of it.
  */
 export function rendering(state: EditorState): SvgElement {
   const interaction = currentInteraction(state);
-  const beingDrawn: readonly ShapeToRender[] =
-    interaction.kind === "creatingShape" ? [newShape(interaction.symbol, interaction.bounds, state.style)] : [];
+  const { measureText } = state.deps;
+  const arrow = arrowBeingDrawn(state);
+  const beingDrawn: readonly Renderable[] =
+    interaction.kind === "creatingShape"
+      ? [newShape(interaction.symbol, interaction.bounds, state.style)]
+      : arrow
+        ? arrowToRender(state.sketch, arrow, measureText)
+        : [];
   // Shapes being dragged are drawn above all the others until dropped, so they never pass behind a Shape they cross.
   const placed =
     interaction.kind === "moving" ? drawOrderLifting(state.sketch, state.selection) : drawOrder(state.sketch);
-  return renderShapes([...placed, ...beingDrawn], state.deps.measureText, {
+  return renderShapes([...shapesToRender(state.sketch, placed, measureText), ...beingDrawn], measureText, {
     ...onScreen,
     hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,
   });
