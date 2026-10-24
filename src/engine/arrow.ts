@@ -27,6 +27,7 @@ export type EndName = "start" | "end";
 /** The heads an Arrow end can have, in the order the style panel shows them. */
 export const arrowheads = ["none", "arrow", "openArrow", "diamond", "circle"] as const;
 
+/** What an Arrow end shows: nothing, or a head of some kind. */
 export type Arrowhead = (typeof arrowheads)[number];
 
 /** The head at each end of an Arrow. */

@@ -238,11 +238,13 @@ function segmentsOf(points: readonly Point[]): readonly Segment[] {
   }, []);
 }
 
+// How long the line made of `segments` is.
 function lengthOf(segments: readonly Segment[]): number {
   const last = segments.at(-1);
   return last ? last.start + last.length : 0;
 }
 
+// The point `along` the segment, measured from its start.
 function pointOnSegment({ from, to, length }: Segment, along: number): Point {
   const t = length === 0 ? 0 : along / length;
   return { x: from.x + t * (to.x - from.x), y: from.y + t * (to.y - from.y) };
@@ -261,12 +263,12 @@ export function pointAlongPolyline(points: readonly Point[], share: number): Poi
 
 /**
  * How far along the line through `points` the point on it closest to `point` is, as a share of its length from 0 at
- * its first point to 1 at its last. A line with no length counts as 0.
+ * its first point to 1 at its last. `undefined` for a line with no length, which has no shares along it.
  */
-export function shareAlongPolyline(points: readonly Point[], point: Point): number {
+export function shareAlongPolyline(points: readonly Point[], point: Point): number | undefined {
   const segments = segmentsOf(points);
   const total = lengthOf(segments);
-  if (total === 0) return 0;
+  if (total === 0) return undefined;
   const nearest = segments
     .map((segment) => {
       const onSegment = nearestOnSegment(segment.from, segment.to, point);

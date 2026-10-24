@@ -3,7 +3,7 @@ import { distance, type Point } from "./geometry";
 import { polygon, polyline, type Path } from "./path";
 
 /** An arrowhead as drawn: lines, filled or not, or a filled circle. */
-export type ArrowheadShape =
+export type ArrowheadGeometry =
   | { readonly kind: "lines"; readonly path: Path; readonly filled: boolean }
   | { readonly kind: "circle"; readonly center: Point; readonly radius: number };
 
@@ -11,7 +11,7 @@ export type ArrowheadShape =
  * The head at the last of `points`, lined up with the line running into it, `length` long along the line and half as
  * wide across it. `undefined` for no head, or when the line has no length to give it a direction.
  */
-export function arrowheadAt(head: Arrowhead, points: readonly Point[], length: number): ArrowheadShape | undefined {
+export function arrowheadAt(head: Arrowhead, points: readonly Point[], length: number): ArrowheadGeometry | undefined {
   const tip = points.at(-1);
   // An elbow path can run through the same point twice, which gives no direction.
   const from = tip && points.findLast((point) => distance(point, tip) > 0);

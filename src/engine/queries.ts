@@ -1,4 +1,13 @@
-import { arrowsBoundTo, labelPoint, layoutArrowLabel, type ArrowEnd, type Arrowhead, type Arrowheads, type EndName, type Routing } from "./arrow";
+import {
+  arrowsBoundTo,
+  labelPoint,
+  layoutArrowLabel,
+  type ArrowEnd,
+  type Arrowhead,
+  type Arrowheads,
+  type EndName,
+  type Routing,
+} from "./arrow";
 import {
   arrowBeingDrawn,
   creationBounds,
@@ -252,7 +261,7 @@ export type SelectionArrowheads = { readonly [End in EndName]: Arrowhead | "mixe
  * no heads.
  */
 export function selectionArrowheads(state: EditorState): SelectionArrowheads | undefined {
-  if (state.selection.length === 0) return state.arrowheads;
+  if (state.selection.length === 0) return state.heads;
   const [first, ...others] = state.selection.flatMap((id) => {
     const shape = state.sketch.shapes[id];
     return shape && isArrow(shape) ? [shape.heads] : [];

@@ -6,6 +6,7 @@ import { arrows, currentInteraction, labelLayout, rendering, selection, sketch, 
 import { svgText, type SvgElement } from "./svg";
 import {
   apply,
+  boundsById,
   click,
   doubleClick,
   drag,
@@ -274,6 +275,22 @@ describe("dragging an Arrow's Label", () => {
     expect(onlyArrow(state).label.along).toBe(0.5);
   });
 
+  test("on an Arrow selected with other Shapes moves them all, as a drag anywhere on the Arrow does", () => {
+    const both = click(labelledElbow(), { x: 150, y: 140 }, { shift: true });
+
+    const state = drag(both, onLabelBesideLine, { x: 270, y: 280 });
+
+    expect(selection(state)).toEqual(["shape-3", "shape-1"]);
+    expect(boundsById(state)["shape-1"]).toEqual({ x: 100, y: 200, width: 100, height: 80 });
+    expect(onlyArrow(state).label.along).toBe(0.5);
+  });
+
+  test("a click on it, on an Arrow selected with other Shapes, selects the Arrow alone", () => {
+    const both = click(labelledElbow(), { x: 150, y: 140 }, { shift: true });
+
+    expect(selection(click(both, onLabelBesideLine))).toEqual(["shape-3"]);
+  });
+
   test("an empty Label can't be grabbed, so a press where it would be, away from the line, hits nothing", () => {
     const state = click(press(elbowCrossing(), "Escape"), onLabelBesideLine);
 
@@ -308,6 +325,27 @@ describe("an Arrow's Label when the Arrow changes", () => {
     const state = drag(draggedAlong(), { x: 380, y: 260 }, { x: 380, y: 360 });
 
     expect(onlyArrow(state).label).toMatchObject({ along: 0.625, at: { x: 250, y: 277.5 } });
+  });
+
+  test("stays at the same share of the path when an Arrow with both ends floating is moved", () => {
+    // A floating Arrow from (100,100) right to (300,100), with its Label dragged a quarter of the way along, to (150,100).
+    const drawn = withLabel(drawArrow(newEditor(), { x: 100, y: 100 }, { x: 300, y: 100 }), "HTTPS");
+    const labelled = drag(drawn, { x: 200, y: 110 }, { x: 150, y: 110 });
+
+    const state = drag(labelled, { x: 250, y: 100 }, { x: 250, y: 160 });
+
+    expect(onlyArrow(state).label).toMatchObject({ along: 0.25, at: { x: 150, y: 160 } });
+  });
+
+  test("a floating Arrow dragged with snapping on snaps by its line, not by its Label", () => {
+    // A floating Arrow from (103,104) to (503,104), with a Label 100 wide dragged a tenth of the way along, to
+    // (143,104), so its background reaches left past the Arrow's start, to 89.
+    const drawn = withLabel(drawArrow(newEditor(), { x: 103, y: 104 }, { x: 503, y: 104 }), "a".repeat(10));
+    const labelled = drag(drawn, { x: 303, y: 104 }, { x: 143, y: 104 });
+
+    const state = drag(labelled, { x: 400, y: 104 }, { x: 400, y: 154 }, { alt: true });
+
+    expect(onlyArrow(state).start.point).toEqual({ x: 100, y: 150 });
   });
 
   test("stays at the same share of the path when its Routing changes", () => {

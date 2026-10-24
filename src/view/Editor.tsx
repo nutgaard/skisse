@@ -166,7 +166,7 @@ function ArrowSelection({ arrow, zoom }: { readonly arrow: ArrowView; readonly z
   const points = arrow.path.map(({ x, y }) => `${x},${y}`).join(" ");
   const { background } = arrow.label;
   if (!background) return <polyline data-selected={arrow.id} points={points} className="arrow-selection" />;
-  // A frame around the whole highlight, with a hole for the Label. It reaches past the line by more than the highlight
+  // A region around the whole highlight, with a hole for the Label. It reaches past the line by more than the highlight
   // is wide, which is in screen pixels.
   const margin = handleSize / zoom;
   const xs = [...arrow.path.map(({ x }) => x), background.x, background.x + background.width];

@@ -195,13 +195,16 @@ function renderArrowhead({ heads, points, style }: ArrowToRender, end: EndName):
   ];
 }
 
+// The white the Sketch is drawn on.
+const sketchBackground = "#ffffff";
+
 // An Arrow's Label, its lines centred, on a background of the Sketch's own white, so the line doesn't run through the
 // text. A Label that shows nothing has no background either. While the Label is being edited, its text field shows the
 // text, but the background stays, so the line doesn't run through the field either.
 function renderArrowLabel({ label, style }: ArrowToRender, textHidden: boolean): readonly SvgElement[] {
   if (!label.background) return [];
   return [
-    svgElement("rect", { "data-label-background": "", ...label.background, fill: "#ffffff" }),
+    svgElement("rect", { "data-label-background": "", ...label.background, fill: sketchBackground }),
     ...(textHidden ? [] : renderLabel(label, "center", style)),
   ];
 }
