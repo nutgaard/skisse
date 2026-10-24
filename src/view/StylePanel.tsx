@@ -12,6 +12,7 @@ import {
   type HorizontalAlignment,
   type Input,
   type LabelAlignment,
+  type Routing,
   type SelectionAlignment,
   type SelectionStyle,
   type StrokePattern,
@@ -102,6 +103,21 @@ const verticalAlignmentChoices: readonly Choice<VerticalAlignment>[] = [
   { value: "bottom", content: <AlignmentIcon path="M 5 11 H 11" framed />, title: "Align bottom" },
 ];
 
+// A line from the bottom left to the top right of a 24 by 16 box, as each Routing runs it.
+function RoutingIcon({ path }: { readonly path: string }) {
+  return (
+    <svg className="routing-icon" width="24" height="16" aria-hidden="true">
+      <path d={path} />
+    </svg>
+  );
+}
+
+// Curved Routing is in the model, but not built yet, so it isn't offered.
+const routingChoices: readonly Choice<Routing>[] = [
+  { value: "straight", content: <RoutingIcon path="M 4 13 L 20 3" />, title: "Straight" },
+  { value: "elbow", content: <RoutingIcon path="M 4 13 H 12 V 3 H 20" />, title: "Elbow" },
+];
+
 // What a group shows as chosen when the selected Shapes differ in it: nothing.
 function unlessMixed<T>(value: T | "mixed"): T | undefined {
   return value === "mixed" ? undefined : value;
@@ -176,17 +192,37 @@ function AlignmentGroup({ alignment, onAlign }: AlignmentGroupProps) {
   );
 }
 
+type RoutingGroupProps = {
+  readonly routing: Routing | "mixed" | undefined;
+  readonly onRoute: (routing: Routing) => void;
+};
+
+// How the selected Arrows run. With only Shapes made from a Symbol selected there is nothing to route.
+function RoutingGroup({ routing, onRoute }: RoutingGroupProps) {
+  return (
+    <PanelGroup name="Routing" mixed={routing === "mixed"} columns={4}>
+      <Choices
+        choices={routingChoices}
+        chosen={routing && unlessMixed(routing)}
+        disabled={!routing}
+        onChoose={onRoute}
+      />
+    </PanelGroup>
+  );
+}
+
 type StylePanelProps = {
   readonly style: SelectionStyle;
   readonly alignment: SelectionAlignment | undefined;
+  readonly routing: Routing | "mixed" | undefined;
   readonly dispatch: (input: Input) => void;
 };
 
 /**
- * The style and Label alignment of the selected Shapes, to see and change. With nothing selected, it shows and changes
- * the style of the Shapes drawn next.
+ * The style, Label alignment and Routing of the selected Shapes, to see and change. With nothing selected, it shows and
+ * changes the style of the Shapes drawn next, and the Routing of the Arrows drawn next.
  */
-export function StylePanel({ style, alignment, dispatch }: StylePanelProps) {
+export function StylePanel({ style, alignment, routing, dispatch }: StylePanelProps) {
   const choose = (chosen: Partial<Style>) => dispatch({ type: "changeStyle", style: chosen });
   const align = (aligned: Partial<LabelAlignment>) => dispatch({ type: "changeLabelAlignment", alignment: aligned });
   return (
@@ -217,6 +253,7 @@ export function StylePanel({ style, alignment, dispatch }: StylePanelProps) {
         onChoose={(fontSize) => choose({ fontSize })}
       />
       <AlignmentGroup alignment={alignment} onAlign={align} />
+      <RoutingGroup routing={routing} onRoute={(chosen) => dispatch({ type: "changeRouting", routing: chosen })} />
     </div>
   );
 }

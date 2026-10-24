@@ -5,12 +5,15 @@ import {
   isSymbolShape,
   resolveArrow,
   unbindFrom,
+  withoutStaleOffsets,
   type Arrow,
   type ArrowEnd,
   type ArrowWithoutId,
   type EndName,
   type ResolvedArrow,
+  type Routing,
 } from "./arrow";
+import { offsetDraggedBy, type Axis } from "./elbow";
 import {
   boundsBetween,
   boundsOfPoints,
@@ -87,7 +90,8 @@ export type Input =
   // Change the selected Shapes.
   | { readonly type: "changeStyle"; readonly style: Partial<Style> }
   // Either direction alone keeps each Shape's alignment in the other.
-  | { readonly type: "changeLabelAlignment"; readonly alignment: Partial<LabelAlignment> };
+  | { readonly type: "changeLabelAlignment"; readonly alignment: Partial<LabelAlignment> }
+  | { readonly type: "changeRouting"; readonly routing: Routing };
 
 export type TextMeasurer = (text: string, fontSize: number) => number;
 
@@ -176,6 +180,8 @@ type Interaction =
       readonly end: EndName;
       readonly binds: boolean;
     } & Drag)
+  // The middle segment of an elbow Arrow, dragged sideways.
+  | ({ readonly kind: "draggingElbowSegment"; readonly arrowId: ShapeId } & Drag)
   // The viewport follows the pointer so that the Sketch point it grabbed stays under it.
   | { readonly kind: "panning"; readonly grabbed: Point }
   // The text the Label had before, which cancelling puts back.
@@ -187,6 +193,8 @@ export type EditorState = {
   readonly tool: Tool;
   // The style most recently chosen, which new Shapes get.
   readonly style: Style;
+  // The Routing most recently chosen, which new Arrows get.
+  readonly routing: Routing;
   readonly selection: readonly ShapeId[];
   readonly interaction: Interaction;
   readonly viewport: viewport.Viewport;
@@ -287,6 +295,7 @@ export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): E
     sketch,
     tool: "select",
     style: defaultStyle,
+    routing: "straight",
     selection: [],
     interaction: idle,
     viewport: viewport.initialViewport,
@@ -450,6 +459,21 @@ export function arrowEndHandles(state: EditorState): readonly ArrowEndHandleView
     : [];
 }
 
+/** The handle on the middle segment of the selected elbow Arrow, which is dragged along `axis` to move it sideways. */
+export type MiddleSegmentHandleView = { readonly position: Point; readonly axis: Axis };
+
+/** The handle on the middle segment of the one selected Shape, when it is an elbow Arrow with a middle segment. */
+export function middleSegmentHandle(state: EditorState): MiddleSegmentHandleView | undefined {
+  const arrow = selectedArrow(state);
+  const middle = arrow && resolved(state, arrow)?.middle;
+  return middle
+    ? {
+        position: { x: (middle.from.x + middle.to.x) / 2, y: (middle.from.y + middle.to.y) / 2 },
+        axis: middle.axis,
+      }
+    : undefined;
+}
+
 // A distance in screen pixels, such as the drag threshold, as a distance on the Sketch at the current zoom.
 function sketchDistance(state: EditorState, screenDistance: number): number {
   return screenDistance / state.viewport.zoom;
@@ -485,6 +509,21 @@ function pressWithSelectTool(state: EditorState, input: PointerInput): EditorSta
         arrowId: grabbedEnd.arrow.id,
         end: grabbedEnd.end,
         binds: bindsEnds(input.modifiers),
+        origin: input.position,
+        current: input.position,
+        before: state.sketch,
+        dragged: false,
+      },
+    };
+  }
+  const segment = middleSegmentHandle(state);
+  const arrow = selectedArrow(state);
+  if (arrow && segment && grabsHandle(state, segment.position, input.position)) {
+    return {
+      ...state,
+      interaction: {
+        kind: "draggingElbowSegment",
+        arrowId: arrow.id,
         origin: input.position,
         current: input.position,
         before: state.sketch,
@@ -672,9 +711,25 @@ function dragArrowEnd(
   return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: replaced } }, interaction };
 }
 
+// The middle segment moves along its axis as far as the pointer has, but stops short of the ends.
+function dragElbowSegment(
+  state: EditorState,
+  interaction: Extract<Interaction, { kind: "draggingElbowSegment" }>,
+  pointer: PointerState,
+): EditorState {
+  const { before, arrowId } = interaction;
+  const arrow = before.shapes[arrowId];
+  const middle = arrow && isArrow(arrow) ? resolveArrow(before, arrow, state.deps.measureText)?.middle : undefined;
+  if (!arrow || !isArrow(arrow) || !middle) return { ...state, sketch: before, interaction };
+  const { elbowOffset, ...rest } = arrow;
+  const offset = offsetDraggedBy(middle, pointerOffset(interaction, pointer));
+  const replaced: Arrow = offset ? { ...rest, elbowOffset: offset } : rest;
+  return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: replaced } }, interaction };
+}
+
 function dragTo(
   state: EditorState,
-  interaction: Extract<Interaction, { kind: "moving" | "resizing" | "draggingArrowEnd" }>,
+  interaction: Extract<Interaction, { kind: "moving" | "resizing" | "draggingArrowEnd" | "draggingElbowSegment" }>,
   pointer: PointerState,
 ): EditorState {
   switch (interaction.kind) {
@@ -693,6 +748,8 @@ function dragTo(
         ...continuePress(state, interaction, pointer),
         binds: bindsEnds(pointer.modifiers),
       });
+    case "draggingElbowSegment":
+      return dragElbowSegment(state, continuePress(state, interaction, pointer), pointer);
   }
 }
 
@@ -767,6 +824,7 @@ function pointerMove(state: EditorState, input: PointerInput): EditorState {
     case "moving":
     case "resizing":
     case "draggingArrowEnd":
+    case "draggingElbowSegment":
       return dragTo(state, interaction, input);
     case "panning":
       return { ...state, viewport: viewport.keepUnderPointer(state.viewport, interaction.grabbed, input.position) };
@@ -830,6 +888,18 @@ function chooseStyle(state: EditorState, style: Partial<Style>): EditorState {
   const chosen = validStyle(style);
   const changed = changeSelected(state, (shape) => ({ ...shape, style: { ...shape.style, ...chosen } }));
   return { ...changed, style: { ...state.style, ...chosen } };
+}
+
+// A Routing chosen applies to every selected Arrow, and to the Arrows drawn from now on, as a style does. An offset
+// dragged into an elbow path goes with the old Routing.
+function chooseRouting(state: EditorState, routing: Routing): EditorState {
+  if (!canChangeSelected(state)) return state;
+  const changed = changeSelected(state, (shape) => {
+    if (!isArrow(shape) || shape.routing === routing) return shape;
+    const { elbowOffset, ...rest } = shape;
+    return { ...rest, routing };
+  });
+  return { ...changed, routing };
 }
 
 // Removes a Shape that is nothing but its Label once that Label is left empty, as nothing of it would show. Text that
@@ -956,7 +1026,7 @@ export function arrowBeingDrawn(state: EditorState): ArrowWithoutId | undefined 
   if (interaction.kind !== "drawingArrow" || !interaction.dragged) return undefined;
   const arrow: ArrowWithoutId = {
     style: state.style,
-    routing: "straight",
+    routing: state.routing,
     start: interaction.start,
     end: endLetGo(state, state.sketch, interaction.current, interaction.binds),
   };
@@ -1000,6 +1070,7 @@ function pointerUp(state: EditorState, input: PointerInput): EditorState {
     case "marqueeSelecting":
     case "resizing":
     case "draggingArrowEnd":
+    case "draggingElbowSegment":
     case "panning":
       return finished;
     case "editingLabel":
@@ -1024,6 +1095,7 @@ function cancelGesture(state: EditorState): EditorState {
     case "moving":
     case "resizing":
     case "draggingArrowEnd":
+    case "draggingElbowSegment":
       return { ...cancelled, sketch: interaction.before };
   }
 }
@@ -1096,6 +1168,7 @@ function updateDragModifiers(state: EditorState, modifiers: Modifiers): EditorSt
       return dragTo(state, interaction, { position: interaction.current, modifiers });
     case "idle":
     case "marqueeSelecting":
+    case "draggingElbowSegment":
     case "panning":
     case "editingLabel":
       return state;
@@ -1244,12 +1317,19 @@ function applyInput(state: EditorState, input: Input): EditorState {
           label: { ...shape.label, alignment: { ...shape.label.alignment, ...input.alignment } },
         })),
       );
+    case "changeRouting":
+      return chooseRouting(state, input.routing);
   }
 }
 
 // A change to the Sketch is recorded once the editor is idle again, so a whole gesture, or any longer interaction,
-// is one step, and a cancelled one, which puts the Sketch back, records nothing.
+// is one step, and a cancelled one, which puts the Sketch back, records nothing. Offsets that the change made no longer
+// fit their elbow paths are dropped then, so they stay dropped, even if the Shapes move back. Until then, such as while
+// the Shapes are still being dragged, the paths only leave them out.
 export function update(state: EditorState, input: Input): EditorState {
   const next = applyInput(state, input);
-  return isIdle(next) ? { ...next, history: history.record(next.history, next.sketch) } : next;
+  if (!isIdle(next)) return next;
+  const sketch =
+    next.sketch === next.history.present ? next.sketch : withoutStaleOffsets(next.sketch, next.deps.measureText);
+  return { ...next, sketch, history: history.record(next.history, sketch) };
 }

@@ -10,6 +10,7 @@ import {
   exportSvg,
   gridSize,
   labelLayout,
+  middleSegmentHandle,
   noModifiers,
   pansOnPress,
   pathData,
@@ -17,6 +18,7 @@ import {
   resizeHandles,
   selection,
   selectionAlignment,
+  selectionRouting,
   selectionStyle,
   shapes,
   sketch,
@@ -198,6 +200,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const view = viewport(state);
   const finishedSketch = sketch(state);
   const ports = visiblePorts(state);
+  const segmentHandle = middleSegmentHandle(state);
   const editedLabel = interaction.kind === "editingLabel" ? labelLayout(state, interaction.shapeId) : undefined;
   // Only a finished change to the Sketch changes the export, not every pointer move.
   const exportedSvg = useMemo(() => exportSvg(finishedSketch, deps.measureText), [finishedSketch, deps]);
@@ -343,6 +346,17 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
                 className="arrow-end-handle"
               />
             ))}
+            {segmentHandle && (
+              <rect
+                data-segment-axis={segmentHandle.axis}
+                x={segmentHandle.position.x - handleSize / view.zoom / 2}
+                y={segmentHandle.position.y - handleSize / view.zoom / 2}
+                width={handleSize / view.zoom}
+                height={handleSize / view.zoom}
+                rx={handleSize / view.zoom / 4}
+                className="segment-handle"
+              />
+            )}
             {resizeHandles(state).map(({ handle, position }) => (
               <rect
                 key={handle}
@@ -359,7 +373,12 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
         </svg>
         {editedLabel && <LabelEditor label={editedLabel} viewport={view} dispatch={dispatch} />}
       </div>
-      <StylePanel style={selectionStyle(state)} alignment={selectionAlignment(state)} dispatch={dispatch} />
+      <StylePanel
+        style={selectionStyle(state)}
+        alignment={selectionAlignment(state)}
+        routing={selectionRouting(state)}
+        dispatch={dispatch}
+      />
       <div ref={toolbarRef} className="toolbar" role="toolbar">
         {tools.map((info) => (
           <ToolButton

@@ -24,8 +24,8 @@ import type { Tool } from "./tools";
 import { childrenOf, drawOrder, drawOrderLifting } from "./tree";
 import type { Viewport } from "./viewport";
 
-export { arrowEndHandles, pansOnPress } from "./editor";
-export type { ArrowEndHandleView } from "./editor";
+export { arrowEndHandles, middleSegmentHandle, pansOnPress } from "./editor";
+export type { ArrowEndHandleView, MiddleSegmentHandleView } from "./editor";
 
 // What queries return about a Shape made from a Symbol. Kept apart from the stored SymbolShape so the stored model can
 // change without changing what the view and the tests see.
@@ -193,6 +193,20 @@ export function selectionStyle(state: EditorState): SelectionStyle {
   };
 }
 
+/**
+ * The Routing of the selected Arrows, `mixed` where they differ. With nothing selected, it is the Routing new Arrows
+ * get, which choosing a Routing changes. `undefined` when only Shapes made from a Symbol are selected, as they have no
+ * Routing.
+ */
+export function selectionRouting(state: EditorState): Routing | "mixed" | undefined {
+  if (state.selection.length === 0) return state.routing;
+  const [first, ...others] = state.selection.flatMap((id) => {
+    const shape = state.sketch.shapes[id];
+    return shape && isArrow(shape) ? [shape] : [];
+  });
+  return first && commonOrMixed(first, others, "routing");
+}
+
 /** A Label alignment as the style panel shows it, where each direction can be mixed among the selected Shapes. */
 export type SelectionAlignment = {
   readonly [Direction in keyof LabelAlignment]: LabelAlignment[Direction] | "mixed";
@@ -257,6 +271,7 @@ export type InteractionView =
   | { readonly kind: "resizing"; readonly handle: ResizeHandle }
   | { readonly kind: "drawingArrow" }
   | { readonly kind: "draggingArrowEnd"; readonly arrowId: ShapeId; readonly end: EndName }
+  | { readonly kind: "draggingElbowSegment"; readonly arrowId: ShapeId }
   | { readonly kind: "panning" }
   | { readonly kind: "editingLabel"; readonly shapeId: ShapeId };
 
@@ -279,6 +294,8 @@ export function currentInteraction(state: EditorState): InteractionView {
       return { kind: "drawingArrow" };
     case "draggingArrowEnd":
       return { kind: "draggingArrowEnd", arrowId: interaction.arrowId, end: interaction.end };
+    case "draggingElbowSegment":
+      return { kind: "draggingElbowSegment", arrowId: interaction.arrowId };
     case "panning":
       return { kind: "panning" };
     case "editingLabel":
