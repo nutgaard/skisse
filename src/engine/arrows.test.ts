@@ -37,7 +37,7 @@ import {
 
 // In twoRectangles(), shape-1 at (100,100)–(200,180) has its Ports at (150,100), (200,140), (150,180) and (100,140),
 // and shape-2 at (300,100)–(400,180) at (350,100), (400,140), (350,180) and (300,140). Ports are snapped to within 10
-// screen pixels, and outlines within 6.
+// screen pixels, and outlines are bound to within 6.
 
 // An Arrow, shape-3, from the right side of shape-1 at (200,130) to the left Port of shape-2 at (300,140). It is
 // selected.
@@ -97,7 +97,7 @@ describe("drawing an Arrow", () => {
     expect(onlyArrow(state).end).toEqual({ point: { x: 310, y: 160 } });
   });
 
-  test("letting go inside a Container, beside a child, leaves the end floating rather than bound to the Container", () => {
+  test("letting go inside a Container, beside a child, leaves the end floating", () => {
     // A Container at (0,0)–(600,400), with children A at (50,50)–(150,130) and B at (400,200)–(500,280).
     const container = drawRectangle(newEditor(), { x: 0, y: 0 }, { x: 600, y: 400 });
     const children = drawRectangle(
@@ -215,6 +215,12 @@ describe("drawing an Arrow", () => {
     expect(onlyArrow(state).end).toEqual({ point: { x: 250, y: 300 } });
   });
 
+  test("starting inside a Shape, away from its sides and Ports, leaves the start floating there", () => {
+    const state = drawArrow(twoRectangles(), { x: 150, y: 140 }, { x: 305, y: 140 });
+
+    expect(onlyArrow(state).start).toEqual({ point: { x: 150, y: 140 } });
+  });
+
   test("starting over empty space leaves the start floating there", () => {
     const state = drawArrow(twoRectangles(), { x: 250, y: 300 }, { x: 305, y: 140 });
 
@@ -317,6 +323,24 @@ describe("holding Alt", () => {
     expect(onlyArrow(state).end).toEqual({ point: { x: 306, y: 146 } });
   });
 
+  test("let go in the middle of dragging an end lets it snap again at once", () => {
+    const dragging = apply(
+      boundArrow(),
+      pointerDown({ x: 300, y: 140 }, { alt: true }),
+      pointerMove({ x: 306, y: 146 }, { alt: true }),
+    );
+
+    const state = apply(dragging, keyUp("Alt"));
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 300, y: 140 }, binding: { shape: "shape-2", port: 3 } });
+  });
+
+  test("let go while hovering shows the Port to snap to again", () => {
+    const hovering = apply(twoRectangles(), selectTool("arrow"), pointerMove({ x: 196, y: 142 }, { alt: true }));
+
+    expect(visiblePorts(apply(hovering, keyUp("Alt")))?.snapsTo).toBe(1);
+  });
+
   test("while hovering shows the Ports, but none to snap to", () => {
     const hovering = apply(twoRectangles(), selectTool("arrow"), pointerMove({ x: 196, y: 142 }));
 
@@ -327,7 +351,7 @@ describe("holding Alt", () => {
   });
 });
 
-describe("snapping to Ports at any zoom", () => {
+describe("reach at any zoom", () => {
   // At 2×, a screen point is twice the Sketch point.
   function zoomedIn(): EditorState {
     return apply(twoRectangles(), pinch({ x: 0, y: 0 }, 2));

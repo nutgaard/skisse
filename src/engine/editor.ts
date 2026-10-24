@@ -711,18 +711,20 @@ function pointerDown(state: EditorState, input: PointerInput): EditorState {
     case "pan":
       // Already panning, as pansOnPress covers the pan tool.
       return state;
-    case "arrow":
+    case "arrow": {
+      const binds = bindsEnds(input.modifiers);
       return {
         ...state,
         interaction: {
           kind: "drawingArrow",
-          start: endLetGo(state, state.sketch, input.position, bindsEnds(input.modifiers)),
-          binds: bindsEnds(input.modifiers),
+          start: endLetGo(state, state.sketch, input.position, binds),
+          binds,
           origin: input.position,
           current: input.position,
           dragged: false,
         },
       };
+    }
     default:
       return {
         ...state,
@@ -941,8 +943,7 @@ export function portTarget(state: EditorState): { shape: SymbolShape; snapsTo: n
   if (!placing) return undefined;
   const end = endLetGo(state, state.sketch, placing.point, placing.binds);
   const bound = boundTo(end);
-  const shape =
-    bound === undefined ? shapeAt(state, placing.point, isSymbolShape) : state.sketch.shapes[bound];
+  const shape = bound === undefined ? shapeAt(state, placing.point, isSymbolShape) : state.sketch.shapes[bound];
   return shape && isSymbolShape(shape) ? { shape, snapsTo: end.kind === "port" ? end.port : undefined } : undefined;
 }
 
