@@ -93,7 +93,13 @@ describe("loading a Sketch", () => {
       symbol: "rectangle",
       bounds: { x, y: 100, width: 100, height: 80 },
       label: { text: "", alignment: { horizontal: "left", vertical: "top" } },
-      style: { strokeColor: "black", fill: "transparent", strokePattern: "solid", strokeWidth: "thin", fontSize: "medium" },
+      style: {
+        strokeColor: "black",
+        fill: "transparent",
+        strokePattern: "solid",
+        strokeWidth: "thin",
+        fontSize: "medium",
+      },
     });
     const saved = {
       shapes: { "shape-2": shape("shape-2", 300), "shape-1": shape("shape-1", 100) },
@@ -111,7 +117,8 @@ describe("loading a Sketch", () => {
   test("a saved Sketch opens with its Containers and stacking order", () => {
     // A Container with a Shape inside it, and a Shape beside it sent to the back.
     const inContainer = drawRectangle(newEditor(), { x: 0, y: 0 }, { x: 400, y: 300 });
-    const drawn = drawRectangle(drawRectangle(inContainer, { x: 100, y: 100 }, { x: 200, y: 180 }), { x: 500, y: 0 }, { x: 600, y: 80 });
+    const withChild = drawRectangle(inContainer, { x: 100, y: 100 }, { x: 200, y: 180 });
+    const drawn = drawRectangle(withChild, { x: 500, y: 0 }, { x: 600, y: 80 });
     const edited = press(drawn, "[");
     const saved = JSON.parse(JSON.stringify(sketch(edited))) as Sketch;
 

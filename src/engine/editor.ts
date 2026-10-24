@@ -15,12 +15,12 @@ import * as history from "./history";
 import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
 import { displayedBounds } from "./label";
 import { hitsOutline } from "./shape-geometry";
-import { bringForward, bringToFront, sendBackward, sendToBack, type Reorder } from "./stacking";
+import { bringForward, bringToFront, restack, sendBackward, sendToBack, type Reorder } from "./stacking";
 import { defaultStyle, validStyle, type Style } from "./style";
 import { symbolDefinition, type SymbolId } from "./symbols";
 import type { LabelAlignment } from "./symbols/symbol";
 import { toolOfShortcut, type Tool } from "./tools";
-import { childrenOf, drawOrder, isWithin, topMost, topZ, withDescendants } from "./tree";
+import { childrenOf, drawOrder, isWithin, onTopIn, outermost, withDescendants, type Placement } from "./tree";
 import * as viewport from "./viewport";
 
 export type Modifiers = {
@@ -99,7 +99,7 @@ export function newShape(symbol: SymbolId, bounds: Bounds, style: Style): ShapeW
 }
 
 /** A Shape but for its ID and its place among the other Shapes, such as one still being drawn. */
-export type ShapeWithoutId = Omit<SymbolShape, "id" | "parent" | "z">;
+export type ShapeWithoutId = Omit<SymbolShape, "id" | keyof Placement>;
 
 export type SymbolShape = {
   readonly id: ShapeId;
@@ -262,9 +262,16 @@ function displayed(state: EditorState, shape: ShapeWithoutId): Bounds {
   return displayedBounds(shape, state.deps.measureText);
 }
 
-// Shapes are hit-tested by their Symbol's outline, as if filled, even with a transparent fill. The topmost Shape wins.
-function shapeAt(state: EditorState, point: Point): SymbolShape | undefined {
-  return drawOrder(state.sketch).findLast((shape) => hitsOutline(shape.symbol, displayed(state, shape), point));
+// Shapes are hit-tested by their Symbol's outline, as if filled, even with a transparent fill. The topmost Shape that
+// `eligible` allows wins.
+function shapeAt(
+  state: EditorState,
+  point: Point,
+  eligible: (shape: SymbolShape) => boolean = () => true,
+): SymbolShape | undefined {
+  return drawOrder(state.sketch).findLast(
+    (shape) => eligible(shape) && hitsOutline(shape.symbol, displayed(state, shape), point),
+  );
 }
 
 function centre(bounds: Bounds): Point {
@@ -282,23 +289,21 @@ function containerAt(
   point: Point,
   eligible: (container: SymbolShape) => boolean,
 ): SymbolShape | undefined {
-  return drawOrder(state.sketch).findLast(
-    (shape) => isContainer(shape) && eligible(shape) && hitsOutline(shape.symbol, displayed(state, shape), point),
-  );
+  return shapeAt(state, point, (shape) => isContainer(shape) && eligible(shape));
 }
 
 // Moves a Shape into `parent`, on top of the Shapes already there, unless it is in there already.
 function moveInto(sketch: Sketch, id: ShapeId, parent: ShapeId | undefined): Sketch {
   return sketch.shapes[id]?.parent === parent
     ? sketch
-    : updateShape(sketch, id, (shape) => ({ ...shape, parent, z: topZ(sketch, parent) }));
+    : updateShape(sketch, id, (shape) => ({ ...shape, ...onTopIn(sketch, parent) }));
 }
 
 // After a move, each moved Shape joins the innermost Container under its centre, or the top level when there is none.
 // The Shapes inside it come along, so it can't join one of them. Each is settled in turn, so two moved Containers
 // can't each join the other.
 function settleMoved(state: EditorState, ids: readonly ShapeId[]): EditorState {
-  const sketch = topMost(state.sketch, ids).reduce((sketch, id) => {
+  const sketch = outermost(state.sketch, ids).reduce((sketch, id) => {
     const shape = sketch.shapes[id];
     if (!shape) return sketch;
     const container = containerAt({ ...state, sketch }, centre(displayed(state, shape)), (candidate) =>
@@ -673,13 +678,16 @@ function adoptCovered(state: EditorState, container: SymbolShape): Sketch {
 
 // A new Shape joins the innermost Container under its centre, on top of the Shapes there. A new Container never joins
 // one it surrounds, as it adopts that one instead when it covers its centre, such as when drawn around a cluster with
-// its centre on the cluster.
+// its centre on the cluster. Nor does it join one inside a Container it surrounds, such as a child sticking out of it.
 function containerForNew(state: EditorState, shape: ShapeWithoutId): ShapeId | undefined {
   const bounds = displayed(state, shape);
+  const surrounded = isContainer(shape)
+    ? Object.values(state.sketch.shapes).filter((other) => containsBounds(bounds, displayed(state, other)))
+    : [];
   return containerAt(
     state,
     centre(bounds),
-    (candidate) => !isContainer(shape) || !containsBounds(bounds, displayed(state, candidate)),
+    (candidate) => !surrounded.some(({ id }) => isWithin(state.sketch, candidate.id, id)),
   )?.id;
 }
 
@@ -688,7 +696,7 @@ function createShape(state: EditorState, symbol: SymbolId, bounds: Bounds): Edit
   const sequence = freeIdSequence(state, state.nextIdSequence);
   const drawn = newShape(symbol, bounds, state.style);
   const parent = containerForNew(state, drawn);
-  const shape: SymbolShape = { id: state.deps.generateId(sequence), parent, z: topZ(state.sketch, parent), ...drawn };
+  const shape: SymbolShape = { id: state.deps.generateId(sequence), ...onTopIn(state.sketch, parent), ...drawn };
   return {
     ...state,
     sketch: adoptCovered({ ...state, sketch: addShape(state.sketch, shape) }, shape),
@@ -791,25 +799,6 @@ const reorderKeys: Readonly<Record<string, { readonly all: Reorder; readonly ste
   "[": { all: sendToBack, step: sendBackward },
 };
 
-// The selected Shapes are reordered among their siblings only, so a child stays inside its Container, above it, and a
-// Container takes its children along.
-function restack(state: EditorState, reorder: Reorder): EditorState {
-  const parents = new Set(
-    state.selection.flatMap((id) => {
-      const shape = state.sketch.shapes[id];
-      return shape ? [shape.parent] : [];
-    }),
-  );
-  const sketch = [...parents].reduce((sketch, parent) => {
-    const siblings = childrenOf(sketch, parent).map(({ id }) => id);
-    const order = reorder(siblings, (id) => state.selection.includes(id));
-    return order.every((id, index) => id === siblings[index])
-      ? sketch
-      : order.reduce((reordered, id, z) => updateShape(reordered, id, (shape) => ({ ...shape, z })), sketch);
-  }, state.sketch);
-  return { ...state, sketch };
-}
-
 // Pressing or releasing a modifier mid-drag, such as Alt for snapping, applies to the drag straight away,
 // without waiting for the pointer to move.
 function updateDragModifiers(state: EditorState, modifiers: Modifiers): EditorState {
@@ -856,7 +845,9 @@ function keyDown(state: EditorState, input: KeyInput): EditorState {
   const direction = nudgeDirections[input.key];
   if (direction) return nudge(state, direction, input.modifiers);
   const reorder = reorderKeys[input.key];
-  if (reorder) return restack(state, command ? reorder.step : reorder.all);
+  if (reorder) {
+    return { ...state, sketch: restack(state.sketch, state.selection, command ? reorder.step : reorder.all) };
+  }
   const tool = command || input.modifiers.alt ? undefined : toolOfShortcut(input.key);
   if (tool) return { ...state, tool };
   return state;

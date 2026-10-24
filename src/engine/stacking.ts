@@ -1,4 +1,5 @@
-import type { ShapeId } from "./editor";
+import type { ShapeId, Sketch } from "./editor";
+import { childrenOf } from "./tree";
 
 /** A new order for siblings, given from bottom to top, that moves the selected ones. */
 export type Reorder = (siblings: readonly ShapeId[], isSelected: (id: ShapeId) => boolean) => readonly ShapeId[];
@@ -30,3 +31,34 @@ export const sendBackward: Reorder = (siblings, isSelected) =>
 /** Each selected Shape above the Shape just above it, unless that one is selected too: sending backward upside down. */
 export const bringForward: Reorder = (siblings, isSelected) =>
   sendBackward(siblings.toReversed(), isSelected).toReversed();
+
+/**
+ * The Sketch with the Shapes of `ids` reordered by `reorder` among their siblings only, so a child stays inside its
+ * Container, above it, and a Container takes its children along. Siblings already in the new order keep their
+ * z-positions.
+ */
+export function restack(sketch: Sketch, ids: readonly ShapeId[], reorder: Reorder): Sketch {
+  const parents = new Set(
+    ids.flatMap((id) => {
+      const shape = sketch.shapes[id];
+      return shape ? [shape.parent] : [];
+    }),
+  );
+  return [...parents].reduce((restacked, parent) => {
+    const siblings = childrenOf(restacked, parent).map(({ id }) => id);
+    const order = reorder(siblings, (id) => ids.includes(id));
+    if (order.every((id, index) => id === siblings[index])) return restacked;
+    return {
+      ...restacked,
+      shapes: {
+        ...restacked.shapes,
+        ...Object.fromEntries(
+          order.flatMap((id, z) => {
+            const shape = restacked.shapes[id];
+            return shape ? [[id, { ...shape, z }]] : [];
+          }),
+        ),
+      },
+    };
+  }, sketch);
+}

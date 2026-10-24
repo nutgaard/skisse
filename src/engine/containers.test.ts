@@ -1,9 +1,10 @@
 import { describe, expect, test } from "vitest";
 import type { EditorState, ShapeId } from "./editor";
-import { shapeTree, sketch, type ShapeTree } from "./queries";
+import { selection, shapeTree, type ShapeTree } from "./queries";
 import { boundsById, click, drag, drawRectangle, drawSymbol, newEditor, press } from "./test-helpers";
 
-function node(id: ShapeId, ...children: readonly ShapeTree[]): ShapeTree {
+// A Shape in the Shape tree, with the Shapes directly inside it.
+function shape(id: ShapeId, ...children: readonly ShapeTree[]): ShapeTree {
   return { id, children };
 }
 
@@ -20,7 +21,7 @@ describe("dropping a Shape on a Container", () => {
   test("a Shape dropped with its centre inside a Container becomes its child", () => {
     const state = drag(containerAndShape(), { x: 650, y: 140 }, { x: 300, y: 250 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2"))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2"))]);
   });
 
   test("a child dragged out of its Container becomes a top-level Shape again", () => {
@@ -28,13 +29,13 @@ describe("dropping a Shape on a Container", () => {
 
     const state = drag(inside, { x: 300, y: 250 }, { x: 700, y: 250 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1"), node("shape-2")]);
+    expect(shapeTree(state)).toEqual([shape("shape-1"), shape("shape-2")]);
   });
 
   test("a Shape dropped with its centre just outside a Container stays at the top level", () => {
     const state = drag(containerAndShape(), { x: 650, y: 140 }, { x: 560, y: 250 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1"), node("shape-2")]);
+    expect(shapeTree(state)).toEqual([shape("shape-1"), shape("shape-2")]);
   });
 
   test("a Shape dropped on a cylinder is not nested in it", () => {
@@ -42,7 +43,7 @@ describe("dropping a Shape on a Container", () => {
 
     const state = drag(withCylinder, { x: 650, y: 140 }, { x: 300, y: 650 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1"), node("shape-2"), node("shape-3")]);
+    expect(shapeTree(state)).toEqual([shape("shape-1"), shape("shape-2"), shape("shape-3")]);
   });
 
   test("a Shape dropped on a cloud or a rounded rectangle becomes its child", () => {
@@ -52,18 +53,16 @@ describe("dropping a Shape on a Container", () => {
     const inCloud = drag(withBoth, { x: 650, y: 140 }, { x: 300, y: 650 });
     const inRounded = drag(inCloud, { x: 300, y: 650 }, { x: 1000, y: 250 });
 
-    expect(shapeTree(inCloud)).toEqual([node("shape-1"), node("shape-3", node("shape-2")), node("shape-4")]);
-    expect(shapeTree(inRounded)).toEqual([node("shape-1"), node("shape-3"), node("shape-4", node("shape-2"))]);
+    expect(shapeTree(inCloud)).toEqual([shape("shape-1"), shape("shape-3", shape("shape-2")), shape("shape-4")]);
+    expect(shapeTree(inRounded)).toEqual([shape("shape-1"), shape("shape-3"), shape("shape-4", shape("shape-2"))]);
   });
 });
 
 // A VPC at (0,0)–(800,600), a cluster at (900,0)–(1300,300), a service at (1400,0)–(1500,80), each drawn apart.
 function vpcClusterService(): EditorState {
-  return drawRectangle(
-    drawRectangle(drawRectangle(newEditor(), { x: 0, y: 0 }, { x: 800, y: 600 }), { x: 900, y: 0 }, { x: 1300, y: 300 }),
-    { x: 1400, y: 0 },
-    { x: 1500, y: 80 },
-  );
+  const vpc = drawRectangle(newEditor(), { x: 0, y: 0 }, { x: 800, y: 600 });
+  const cluster = drawRectangle(vpc, { x: 900, y: 0 }, { x: 1300, y: 300 });
+  return drawRectangle(cluster, { x: 1400, y: 0 }, { x: 1500, y: 80 });
 }
 
 // The cluster dragged into the middle of the VPC, at (200,150)–(600,450), and the service into the cluster, at
@@ -75,13 +74,13 @@ function nested(): EditorState {
 
 describe("nested Containers", () => {
   test("a Shape joins the innermost Container under its centre", () => {
-    expect(shapeTree(nested())).toEqual([node("shape-1", node("shape-2", node("shape-3")))]);
+    expect(shapeTree(nested())).toEqual([shape("shape-1", shape("shape-2", shape("shape-3")))]);
   });
 
   test("a Shape dragged from an inner Container to the outer one moves up a level", () => {
     const state = drag(nested(), { x: 400, y: 300 }, { x: 100, y: 100 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2"), node("shape-3"))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2"), shape("shape-3"))]);
   });
 
   test("moving a Container moves everything inside it, and they stay inside it", () => {
@@ -92,7 +91,7 @@ describe("nested Containers", () => {
       "shape-2": { x: 300, y: 200, width: 400, height: 300 },
       "shape-3": { x: 450, y: 310, width: 100, height: 80 },
     });
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2", node("shape-3")))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2", shape("shape-3")))]);
   });
 
   test("moving a Container moves what is inside it even when they are selected too", () => {
@@ -101,7 +100,7 @@ describe("nested Containers", () => {
     const state = drag(allSelected, { x: 50, y: 50 }, { x: 150, y: 100 });
 
     expect(boundsById(state)["shape-3"]).toEqual({ x: 450, y: 310, width: 100, height: 80 });
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2", node("shape-3")))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2", shape("shape-3")))]);
   });
 
   test("nudging a Container moves everything inside it", () => {
@@ -118,14 +117,14 @@ describe("nested Containers", () => {
       selected,
     );
 
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2"), node("shape-3"))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2"), shape("shape-3"))]);
   });
 
   test("a Container can't be dropped into a Shape inside it", () => {
     // The VPC's centre is on the service, and stays there.
     const state = drag(nested(), { x: 10, y: 10 }, { x: 20, y: 20 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2", node("shape-3")))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2", shape("shape-3")))]);
   });
 
   test("two Containers moved together can't each end up inside the other", () => {
@@ -142,9 +141,9 @@ describe("nested Containers", () => {
 
     const state = drag(bothSelected, { x: 1150, y: 150 }, { x: 1160, y: 160 });
 
-    expect(shapeTree(overlapping)).toEqual([node("shape-1"), node("shape-2")]);
+    expect(shapeTree(overlapping)).toEqual([shape("shape-1"), shape("shape-2")]);
 
-    expect(shapeTree(state)).toEqual([node("shape-2", node("shape-1"))]);
+    expect(shapeTree(state)).toEqual([shape("shape-2", shape("shape-1"))]);
   });
 });
 
@@ -152,26 +151,39 @@ describe("drawing a Container", () => {
   test("a new Container adopts the Shapes whose centres it covers", () => {
     const state = drawRectangle(vpcClusterService(), { x: 850, y: -50 }, { x: 1600, y: 400 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1"), node("shape-4", node("shape-2"), node("shape-3"))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1"), shape("shape-4", shape("shape-2"), shape("shape-3"))]);
   });
 
   test("a new Container leaves the Shapes whose centres it doesn't cover", () => {
     const state = drawRectangle(vpcClusterService(), { x: 850, y: -50 }, { x: 1420, y: 400 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1"), node("shape-3"), node("shape-4", node("shape-2"))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1"), shape("shape-3"), shape("shape-4", shape("shape-2"))]);
   });
 
   test("a Shape drawn inside a Container joins the innermost one", () => {
     const state = drawRectangle(nested(), { x: 220, y: 170 }, { x: 300, y: 230 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2", node("shape-3"), node("shape-4")))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2", shape("shape-3"), shape("shape-4")))]);
   });
 
   test("a Container drawn around a Container whose centre it covers adopts it, with what is inside it", () => {
     // Drawn around the cluster, with its own centre on the service.
     const state = drawRectangle(nested(), { x: 150, y: 100 }, { x: 650, y: 500 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-4", node("shape-2", node("shape-3"))))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-4", shape("shape-2", shape("shape-3"))))]);
+  });
+
+  test("a Container drawn around a Container never goes inside a child sticking out of it", () => {
+    // The cluster shrunk to (200,150)–(400,300), and the service widened to (350,260)–(700,340), sticking out of it.
+    const shrunk = drag(click(nested(), { x: 250, y: 200 }), { x: 600, y: 450 }, { x: 400, y: 300 });
+    const stickingOut = drag(click(shrunk, { x: 420, y: 320 }), { x: 450, y: 300 }, { x: 700, y: 300 });
+
+    // Around the cluster, with its centre on the service, but not around all of the service.
+    const state = drawRectangle(stickingOut, { x: 190, y: 140 }, { x: 600, y: 400 });
+
+    expect(boundsById(stickingOut)["shape-3"]).toEqual({ x: 350, y: 260, width: 350, height: 80 });
+    expect(shapeTree(stickingOut)).toEqual([shape("shape-1", shape("shape-2", shape("shape-3")))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-4", shape("shape-2", shape("shape-3"))))]);
   });
 
   test("a new Container only adopts Shapes at its own level", () => {
@@ -180,20 +192,20 @@ describe("drawing a Container", () => {
 
     const state = drawRectangle(serviceInVpc, { x: 690, y: 200 }, { x: 1090, y: 400 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-3")), node("shape-2"), node("shape-4")]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-3")), shape("shape-2"), shape("shape-4")]);
   });
 
   test("a Container drawn between nested Containers goes between them", () => {
     // Inside the cluster, around the service, all three with the same centre.
     const state = drawRectangle(nested(), { x: 250, y: 200 }, { x: 550, y: 400 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2", node("shape-4", node("shape-3"))))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2", shape("shape-4", shape("shape-3"))))]);
   });
 
   test("a Shape that can't be a Container adopts nothing", () => {
     const state = drawSymbol(vpcClusterService(), "cylinder", { x: 1050, y: -50 }, { x: 1600, y: 400 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1"), node("shape-2"), node("shape-3"), node("shape-4")]);
+    expect(shapeTree(state)).toEqual([shape("shape-1"), shape("shape-2"), shape("shape-3"), shape("shape-4")]);
   });
 });
 
@@ -203,13 +215,13 @@ describe("resizing a Container", () => {
     const state = drag(click(nested(), { x: 50, y: 50 }), { x: 800, y: 600 }, { x: 300, y: 250 });
 
     expect(boundsById(state)["shape-1"]).toEqual({ x: 0, y: 0, width: 300, height: 250 });
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2", node("shape-3")))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2", shape("shape-3")))]);
   });
 
   test("growing a Container over a Shape doesn't adopt it", () => {
     const state = drag(click(vpcClusterService(), { x: 50, y: 50 }), { x: 800, y: 600 }, { x: 1600, y: 600 });
 
-    expect(shapeTree(state)).toEqual([node("shape-1"), node("shape-2"), node("shape-3")]);
+    expect(shapeTree(state)).toEqual([shape("shape-1"), shape("shape-2"), shape("shape-3")]);
   });
 });
 
@@ -219,14 +231,14 @@ describe("deleting a Container", () => {
 
     const state = press(click(withOther, { x: 50, y: 50 }), "Delete");
 
-    expect(Object.keys(sketch(state).shapes)).toEqual(["shape-4"]);
+    expect(selection(press(state, "a", { meta: true }))).toEqual(["shape-4"]);
   });
 
   test("deleting a child leaves its Container", () => {
     const state = press(click(nested(), { x: 400, y: 300 }), "Delete");
 
-    expect(Object.keys(sketch(state).shapes)).toEqual(["shape-1", "shape-2"]);
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2"))]);
+    expect(selection(press(state, "a", { meta: true }))).toEqual(["shape-1", "shape-2"]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2"))]);
   });
 
   test("undo puts back the Container and everything that was inside it, in one step", () => {
@@ -234,7 +246,7 @@ describe("deleting a Container", () => {
 
     const state = press(deleted, "z", { meta: true });
 
-    expect(shapeTree(state)).toEqual([node("shape-1", node("shape-2", node("shape-3")))]);
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2", shape("shape-3")))]);
     expect(boundsById(state)).toEqual(boundsById(nested()));
   });
 });
@@ -249,7 +261,7 @@ describe("undoing containment", () => {
 
     const state = undo(dropped);
 
-    expect(shapeTree(state)).toEqual([node("shape-1"), node("shape-2")]);
+    expect(shapeTree(state)).toEqual([shape("shape-1"), shape("shape-2")]);
     expect(boundsById(state)).toEqual(boundsById(containerAndShape()));
     expect(shapeTree(press(state, "z", { meta: true, shift: true }))).toEqual(shapeTree(dropped));
   });
@@ -265,7 +277,7 @@ describe("undoing containment", () => {
     const inside = drag(containerAndShape(), { x: 650, y: 140 }, { x: 495, y: 250 });
     const nudged = press(inside, "ArrowRight", { shift: true });
 
-    expect(shapeTree(nudged)).toEqual([node("shape-1"), node("shape-2")]);
+    expect(shapeTree(nudged)).toEqual([shape("shape-1"), shape("shape-2")]);
     expect(shapeTree(undo(nudged))).toEqual(shapeTree(inside));
   });
 
