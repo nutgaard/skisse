@@ -1,8 +1,8 @@
 import type { ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
 import { elbowRoute, type ElbowEnd, type ElbowOffset, type MiddleSegment } from "./elbow";
 import { contains, distance, type Bounds, type Point } from "./geometry";
-import { displayedBounds } from "./label";
-import { insidePath, nearestOnPath } from "./path";
+import { arrowLabelLayout, displayedBounds, type ArrowLabelLayout } from "./label";
+import { insidePath, nearestOnPath, pointAlongPolyline } from "./path";
 import { shapeGeometry, type ShapeGeometry } from "./shape-geometry";
 import { isArrow, isSymbolShape } from "./shape-kind";
 import type { Style } from "./style";
@@ -24,6 +24,23 @@ export type ArrowEnd =
 /** Which end of an Arrow. */
 export type EndName = "start" | "end";
 
+/** The heads an Arrow end can have, in the order the style panel shows them. */
+export const arrowheads = ["none", "arrow", "openArrow", "diamond", "circle"] as const;
+
+export type Arrowhead = (typeof arrowheads)[number];
+
+/** The head at each end of an Arrow. */
+export type Arrowheads = Readonly<Record<EndName, Arrowhead>>;
+
+/** The heads of Arrows until others are chosen: none at the start, and an arrow at the end. */
+export const defaultArrowheads: Arrowheads = { start: "none", end: "arrow" };
+
+/** An Arrow's Label: its text, and where it sits along the Arrow's path, as a share of the path's length. */
+export type ArrowLabel = { readonly text: string; readonly along: number };
+
+/** The Label of a new Arrow: empty, and halfway along. */
+export const newArrowLabel: ArrowLabel = { text: "", along: 0.5 };
+
 /** A Shape that isn't made from a Symbol: a line between two ends. */
 export type Arrow = {
   readonly id: ShapeId;
@@ -33,6 +50,8 @@ export type Arrow = {
   readonly routing: Routing;
   readonly start: ArrowEnd;
   readonly end: ArrowEnd;
+  readonly heads: Arrowheads;
+  readonly label: ArrowLabel;
   // For an elbow Arrow, how far the user dragged its middle segment from where it would be on its own.
   readonly elbowOffset?: ElbowOffset;
 };
@@ -99,6 +118,16 @@ export function resolveArrow(sketch: Sketch, arrow: ArrowWithoutId, measure: Tex
     return { start: start.point, end: end.point, path: [start.point, end.point], followsOffset: false };
   }
   return { start: start.point, end: end.point, ...elbowRoute(start, end, arrow.elbowOffset) };
+}
+
+/** Where the Arrow's Label sits on its path, as resolved. */
+export function labelPoint(arrow: ResolvedArrow, label: ArrowLabel): Point {
+  return pointAlongPolyline(arrow.path, label.along) ?? arrow.start;
+}
+
+/** The Arrow's Label as displayed, at its place on the Arrow's path as resolved. */
+export function layoutArrowLabel(arrow: ArrowWithoutId, resolved: ResolvedArrow, measure: TextMeasurer): ArrowLabelLayout {
+  return arrowLabelLayout(arrow.label.text, arrow.style.fontSize, labelPoint(resolved, arrow.label), measure);
 }
 
 // A Shape an end can bind to, as displayed.

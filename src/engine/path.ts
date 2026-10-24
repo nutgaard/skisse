@@ -226,6 +226,56 @@ export function nearestOnPath(path: Path, point: Point): Point | undefined {
   );
 }
 
+// Each segment of the line through `points`, with how long it is and how far along the line it starts.
+type Segment = { readonly from: Point; readonly to: Point; readonly start: number; readonly length: number };
+
+function segmentsOf(points: readonly Point[]): readonly Segment[] {
+  return points.slice(1).reduce<readonly Segment[]>((segments, to, index) => {
+    const from = points[index] ?? to;
+    const previous = segments.at(-1);
+    const start = previous ? previous.start + previous.length : 0;
+    return [...segments, { from, to, start, length: distance(from, to) }];
+  }, []);
+}
+
+function lengthOf(segments: readonly Segment[]): number {
+  const last = segments.at(-1);
+  return last ? last.start + last.length : 0;
+}
+
+function pointOnSegment({ from, to, length }: Segment, along: number): Point {
+  const t = length === 0 ? 0 : along / length;
+  return { x: from.x + t * (to.x - from.x), y: from.y + t * (to.y - from.y) };
+}
+
+/**
+ * The point `share` of the way along the line through `points`, by length, from 0 at its first point to 1 at its last,
+ * or `undefined` when there are no points. A share outside 0–1 counts as the nearer of them.
+ */
+export function pointAlongPolyline(points: readonly Point[], share: number): Point | undefined {
+  const segments = segmentsOf(points);
+  const target = Math.max(0, Math.min(1, share)) * lengthOf(segments);
+  const segment = segments.find(({ start, length }) => target <= start + length);
+  return segment ? pointOnSegment(segment, target - segment.start) : points.at(-1);
+}
+
+/**
+ * How far along the line through `points` the point on it closest to `point` is, as a share of its length from 0 at
+ * its first point to 1 at its last. A line with no length counts as 0.
+ */
+export function shareAlongPolyline(points: readonly Point[], point: Point): number {
+  const segments = segmentsOf(points);
+  const total = lengthOf(segments);
+  if (total === 0) return 0;
+  const nearest = segments
+    .map((segment) => {
+      const onSegment = nearestOnSegment(segment.from, segment.to, point);
+      return { along: segment.start + distance(segment.from, onSegment), distance: distance(onSegment, point) };
+    })
+    .reduce((best, candidate) => (candidate.distance < best.distance ? candidate : best));
+  return Math.max(0, Math.min(1, nearest.along / total));
+}
+
 /** How far `point` is from the line through `points`, or infinitely far when there are no points. */
 export function distanceToPolyline(points: readonly Point[], point: Point): number {
   const nearest = nearestOnPolyline(points, point);

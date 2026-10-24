@@ -1,12 +1,15 @@
 import type { ReactNode } from "react";
 import {
+  arrowheads,
   fills,
   fontSizes,
   palette,
   shades,
   strokePatterns,
   strokeWidths,
+  type Arrowhead,
   type Color,
+  type EndName,
   type Fill,
   type FontSize,
   type HorizontalAlignment,
@@ -14,6 +17,7 @@ import {
   type LabelAlignment,
   type Routing,
   type SelectionAlignment,
+  type SelectionArrowheads,
   type SelectionStyle,
   type StrokePattern,
   type StrokeWidth,
@@ -118,6 +122,48 @@ const routingChoices: readonly Choice<Routing>[] = [
   { value: "elbow", content: <RoutingIcon path="M 4 13 H 12 V 3 H 20" />, title: "Elbow" },
 ];
 
+// Each arrowhead drawn at the right end of a line across a 16 by 16 box, filled or not.
+const arrowheadIcons: Readonly<Record<Arrowhead, ReactNode>> = {
+  none: null,
+  arrow: <path className="filled" d="M 14 8 L 8 5 L 8 11 Z" />,
+  openArrow: <path d="M 8 5 L 14 8 L 8 11" />,
+  diamond: <path className="filled" d="M 14 8 L 10.5 5.5 L 7 8 L 10.5 10.5 Z" />,
+  circle: <circle className="filled" cx="11.5" cy="8" r="2.5" />,
+};
+
+const arrowheadNames: Readonly<Record<Arrowhead, string>> = {
+  none: "No head",
+  arrow: "Arrow",
+  openArrow: "Open arrow",
+  diamond: "Diamond",
+  circle: "Circle",
+};
+
+// A line with the arrowhead at the end it is for, the left for the start and the right for the end.
+function ArrowheadIcon({ arrowhead, end }: { readonly arrowhead: Arrowhead; readonly end: EndName }) {
+  return (
+    <svg className="arrowhead-icon" width="16" height="16" aria-hidden="true">
+      <g transform={end === "start" ? "matrix(-1 0 0 1 16 0)" : undefined}>
+        <path d="M 2 8 H 14" />
+        {arrowheadIcons[arrowhead]}
+      </g>
+    </svg>
+  );
+}
+
+function arrowheadChoices(end: EndName): readonly Choice<Arrowhead>[] {
+  return arrowheads.map((arrowhead) => ({
+    value: arrowhead,
+    content: <ArrowheadIcon arrowhead={arrowhead} end={end} />,
+    title: `${arrowheadNames[arrowhead]} at the ${end}`,
+  }));
+}
+
+const arrowheadChoicesAt: Readonly<Record<EndName, readonly Choice<Arrowhead>[]>> = {
+  start: arrowheadChoices("start"),
+  end: arrowheadChoices("end"),
+};
+
 // What a group shows as chosen when the selected Shapes differ in it: nothing.
 function unlessMixed<T>(value: T | "mixed"): T | undefined {
   return value === "mixed" ? undefined : value;
@@ -128,7 +174,7 @@ type PanelGroupProps = {
   /** Whether the selected Shapes differ in what the group shows, which it then says. */
   readonly mixed: boolean;
   /** How many choices go on a row. */
-  readonly columns: 3 | 4;
+  readonly columns: 3 | 4 | 5;
   readonly children: ReactNode;
 };
 
@@ -211,18 +257,41 @@ function RoutingGroup({ routing, onRoute }: RoutingGroupProps) {
   );
 }
 
+type ArrowheadsGroupProps = {
+  readonly heads: SelectionArrowheads | undefined;
+  readonly onChoose: (end: EndName, arrowhead: Arrowhead) => void;
+};
+
+// The heads of the selected Arrows, a row for each end. With only Shapes made from a Symbol selected there are none.
+function ArrowheadsGroup({ heads, onChoose }: ArrowheadsGroupProps) {
+  return (
+    <PanelGroup name="Arrowheads" mixed={heads?.start === "mixed" || heads?.end === "mixed"} columns={5}>
+      {(["start", "end"] as const).map((end) => (
+        <Choices
+          key={end}
+          choices={arrowheadChoicesAt[end]}
+          chosen={heads && unlessMixed(heads[end])}
+          disabled={!heads}
+          onChoose={(arrowhead) => onChoose(end, arrowhead)}
+        />
+      ))}
+    </PanelGroup>
+  );
+}
+
 type StylePanelProps = {
   readonly style: SelectionStyle;
   readonly alignment: SelectionAlignment | undefined;
   readonly routing: Routing | "mixed" | undefined;
+  readonly heads: SelectionArrowheads | undefined;
   readonly dispatch: (input: Input) => void;
 };
 
 /**
- * The style, Label alignment and Routing of the selected Shapes, to see and change. With nothing selected, it shows and
- * changes the style of the Shapes drawn next, and the Routing of the Arrows drawn next.
+ * The style, Label alignment, Routing and arrowheads of the selected Shapes, to see and change. With nothing selected,
+ * it shows and changes the style of the Shapes drawn next, and the Routing and arrowheads of the Arrows drawn next.
  */
-export function StylePanel({ style, alignment, routing, dispatch }: StylePanelProps) {
+export function StylePanel({ style, alignment, routing, heads, dispatch }: StylePanelProps) {
   const choose = (chosen: Partial<Style>) => dispatch({ type: "changeStyle", style: chosen });
   const align = (aligned: Partial<LabelAlignment>) => dispatch({ type: "changeLabelAlignment", alignment: aligned });
   return (
@@ -254,6 +323,10 @@ export function StylePanel({ style, alignment, routing, dispatch }: StylePanelPr
       />
       <AlignmentGroup alignment={alignment} onAlign={align} />
       <RoutingGroup routing={routing} onRoute={(chosen) => dispatch({ type: "changeRouting", routing: chosen })} />
+      <ArrowheadsGroup
+        heads={heads}
+        onChoose={(end, arrowhead) => dispatch({ type: "changeArrowhead", end, arrowhead })}
+      />
     </div>
   );
 }

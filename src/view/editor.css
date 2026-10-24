@@ -181,7 +181,11 @@ body,
   grid-template-columns: repeat(3, auto);
 }
 
-.toolbar button:has(.swatch, .stroke-icon, .alignment-icon, .routing-icon) {
+.style-choices[data-columns="5"] {
+  grid-template-columns: repeat(5, auto);
+}
+
+.toolbar button:has(.swatch, .stroke-icon, .alignment-icon, .routing-icon, .arrowhead-icon) {
   display: flex;
   padding: 5px;
 }
@@ -218,6 +222,18 @@ body,
   stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.arrowhead-icon :is(path, circle) {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.arrowhead-icon .filled {
+  fill: currentColor;
 }
 
 .alignment-icon path {

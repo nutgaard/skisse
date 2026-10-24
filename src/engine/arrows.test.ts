@@ -71,10 +71,12 @@ describe("drawing an Arrow", () => {
         routing: "straight",
         start: { point: { x: 200, y: 130 }, binding: { shape: "shape-1" } },
         end: { point: { x: 300, y: 140 }, binding: { shape: "shape-2", port: 3 } },
+        heads: { start: "none", end: "arrow" },
         path: [
           { x: 200, y: 130 },
           { x: 300, y: 140 },
         ],
+        label: { text: "", along: 0.5, at: { x: 250, y: 135 } },
       },
     ]);
   });
@@ -619,16 +621,6 @@ describe("an Arrow is a Shape", () => {
 
   test("undoing drawing it removes it", () => {
     expect(arrows(undo(boundArrow()))).toEqual([]);
-  });
-
-  test("Enter doesn't open a Label on it", () => {
-    expect(currentInteraction(press(boundArrow(), "Enter"))).toEqual({ kind: "idle" });
-  });
-
-  test("double-clicking it doesn't open a Label on it", () => {
-    const state = apply(press(boundArrow(), "Escape"), { type: "doubleClick", position: middleOfArrow });
-
-    expect(currentInteraction(state)).toEqual({ kind: "idle" });
   });
 
   test("it is drawn in the style chosen", () => {

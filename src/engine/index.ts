@@ -19,7 +19,8 @@ export { labelFontFamily } from "./label";
 export type { LabelLine } from "./label";
 export { pathData } from "./path";
 export type { Path, PathCommand } from "./path";
-export type { EndName, Routing } from "./arrow";
+export { arrowheads } from "./arrow";
+export type { Arrowhead, EndName, Routing } from "./arrow";
 export type { Axis } from "./elbow";
 export type { ResizeHandle } from "./resize";
 export {
@@ -36,6 +37,7 @@ export {
   resizeHandles,
   selection,
   selectionAlignment,
+  selectionArrowheads,
   selectionRouting,
   selectionStyle,
   shapeStyle,
@@ -48,6 +50,7 @@ export {
 export type {
   ArrowEndHandleView,
   ArrowEndView,
+  ArrowLabelView,
   ArrowView,
   BindingView,
   HandleView,
@@ -56,6 +59,7 @@ export type {
   MiddleSegmentHandleView,
   PortsView,
   SelectionAlignment,
+  SelectionArrowheads,
   SelectionStyle,
   ShapeTree,
   ShapeView,

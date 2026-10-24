@@ -18,6 +18,7 @@ import {
   resizeHandles,
   selection,
   selectionAlignment,
+  selectionArrowheads,
   selectionRouting,
   selectionStyle,
   shapes,
@@ -27,6 +28,7 @@ import {
   update,
   viewport,
   visiblePorts,
+  type ArrowView,
   type Dependencies,
   type KeyInput,
   type PointerInput,
@@ -151,6 +153,34 @@ function Grid({ viewport }: { readonly viewport: Viewport }) {
       {levels.map(({ kind }) => (
         <rect key={kind} width="100%" height="100%" fill={`url(#${id}-${kind})`} className="grid" />
       ))}
+    </>
+  );
+}
+
+/**
+ * The highlight along a selected Arrow's line, left out where its Label's background is, so it doesn't run through the
+ * text, just as the line doesn't.
+ */
+function ArrowSelection({ arrow, zoom }: { readonly arrow: ArrowView; readonly zoom: number }) {
+  const clipId = useId();
+  const points = arrow.path.map(({ x, y }) => `${x},${y}`).join(" ");
+  const { background } = arrow.label;
+  if (!background) return <polyline data-selected={arrow.id} points={points} className="arrow-selection" />;
+  // A frame around the whole highlight, with a hole for the Label. It reaches past the line by more than the highlight
+  // is wide, which is in screen pixels.
+  const margin = handleSize / zoom;
+  const xs = [...arrow.path.map(({ x }) => x), background.x, background.x + background.width];
+  const ys = [...arrow.path.map(({ y }) => y), background.y, background.y + background.height];
+  const left = Math.min(...xs) - margin;
+  const top = Math.min(...ys) - margin;
+  const frame = `M ${left} ${top} H ${Math.max(...xs) + margin} V ${Math.max(...ys) + margin} H ${left} Z`;
+  const hole = `M ${background.x} ${background.y} h ${background.width} v ${background.height} h ${-background.width} Z`;
+  return (
+    <>
+      <clipPath id={clipId}>
+        <path d={`${frame} ${hole}`} clipRule="evenodd" />
+      </clipPath>
+      <polyline data-selected={arrow.id} points={points} className="arrow-selection" clipPath={`url(#${clipId})`} />
     </>
   );
 }
@@ -318,13 +348,8 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
               ))}
             {arrows(state)
               .filter(({ id }) => selected.has(id))
-              .map(({ id, path }) => (
-                <polyline
-                  key={id}
-                  data-selected={id}
-                  points={path.map(({ x, y }) => `${x},${y}`).join(" ")}
-                  className="arrow-selection"
-                />
+              .map((arrow) => (
+                <ArrowSelection key={arrow.id} arrow={arrow} zoom={view.zoom} />
               ))}
             {ports?.ports.map((port, index) => (
               <circle
@@ -377,6 +402,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
         style={selectionStyle(state)}
         alignment={selectionAlignment(state)}
         routing={selectionRouting(state)}
+        heads={selectionArrowheads(state)}
         dispatch={dispatch}
       />
       <div ref={toolbarRef} className="toolbar" role="toolbar">

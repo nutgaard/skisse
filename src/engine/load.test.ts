@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
+import type { Arrow } from "./arrow";
 import type { Sketch } from "./editor";
-import { canRedo, canUndo, labelLayout, rendering, shapeStyle, shapeTree, sketch } from "./queries";
+import { arrows, canRedo, canUndo, labelLayout, rendering, shapeStyle, shapeTree, sketch } from "./queries";
 import {
   apply,
   boundsById,
@@ -151,5 +152,16 @@ describe("loading a Sketch", () => {
       },
     ]);
     expect(canUndo(loaded)).toBe(false);
+  });
+
+  test("a Sketch saved before Arrows had heads and Labels opens with an arrow at the end of each Arrow, and an empty Label halfway along", () => {
+    const drawn = sketch(drawArrow(twoRectangles(), { x: 200, y: 140 }, { x: 300, y: 140 }));
+    const { heads, label, ...arrow } = drawn.shapes["shape-3"] as Arrow;
+    const saved = { shapes: { ...drawn.shapes, "shape-3": arrow } } as unknown as Sketch;
+
+    expect(arrows(newEditor(saved))[0]).toMatchObject({
+      heads: { start: "none", end: "arrow" },
+      label: { text: "", along: 0.5 },
+    });
   });
 });

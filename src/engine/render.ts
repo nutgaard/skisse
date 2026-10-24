@@ -1,6 +1,8 @@
-import { resolveArrow, type ArrowWithoutId } from "./arrow";
+import { layoutArrowLabel, resolveArrow, type ArrowWithoutId, type EndName } from "./arrow";
+import { arrowheadAt } from "./arrowhead";
 import type { Shape, ShapeId, ShapeWithoutId, Sketch, TextMeasurer } from "./editor";
-import { labelFontFamily, shapeLayout, shareOfSpace, type ShapeLayout } from "./label";
+import type { Point } from "./geometry";
+import { labelFontFamily, shapeLayout, shareOfSpace, type ArrowLabelLayout, type ShapeLayout } from "./label";
 import { isClosed, pathData, pathPieces, pieceLength, polyline, type Path } from "./path";
 import { shapeGeometry } from "./shape-geometry";
 import { isArrow } from "./shape-kind";
@@ -75,9 +77,11 @@ const placeholderStyle = {
 export type ShapeToRender = ShapeWithoutId & { readonly id?: ShapeId };
 
 /** An Arrow to render, with its path already resolved. An Arrow being drawn has no ID yet. */
-export type ArrowToRender = Pick<ArrowWithoutId, "style" | "routing"> & {
+export type ArrowToRender = Pick<ArrowWithoutId, "style" | "routing" | "heads"> & {
   readonly id?: ShapeId;
-  readonly path: Path;
+  /** The points its line runs through, from its start to its end. */
+  readonly points: readonly Point[];
+  readonly label: ArrowLabelLayout;
 };
 
 /** A Shape made from a Symbol or an Arrow, ready to render. */
@@ -90,9 +94,17 @@ export function arrowToRender(
   measure: TextMeasurer,
 ): readonly ArrowToRender[] {
   const resolvedArrow = resolveArrow(sketch, arrow, measure);
-  return resolvedArrow
-    ? [{ id: arrow.id, style: arrow.style, routing: arrow.routing, path: polyline(resolvedArrow.path) }]
-    : [];
+  if (!resolvedArrow) return [];
+  return [
+    {
+      id: arrow.id,
+      style: arrow.style,
+      routing: arrow.routing,
+      heads: arrow.heads,
+      points: resolvedArrow.path,
+      label: layoutArrowLabel(arrow, resolvedArrow, measure),
+    },
+  ];
 }
 
 /** The Shapes of `sketch` to render, in the order given, with each Arrow's path resolved. */
@@ -109,7 +121,7 @@ const textAnchors: Readonly<Record<HorizontalAlignment, string>> = { left: "star
 // One text element per line, leaving out blank lines, in the colour of the Shape's lines. Spaces are drawn as typed,
 // as they were measured, except those hanging at the end of a line.
 function renderLabel(
-  { lines, fontPixels }: ShapeLayout,
+  { lines, fontPixels }: Pick<ShapeLayout, "lines" | "fontPixels">,
   horizontal: HorizontalAlignment,
   style: Style,
 ): readonly SvgElement[] {
@@ -157,10 +169,51 @@ function renderShape(shape: ShapeToRender, measure: TextMeasurer, options: Rende
   ]);
 }
 
-// An Arrow drawn as its line, in the Arrow's lines' style.
-function renderArrow({ id, style, routing, path }: ArrowToRender): SvgElement {
+// How long, in Sketch units, an arrowhead is along the line, for each stroke width. It is half as wide across it.
+function arrowheadLength(width: StrokeWidth): number {
+  return 8 + 2 * strokePixels[width];
+}
+
+// The head at `end` of the line through `points`, solid even on a dashed line, with round corners like the line's. The
+// line runs on under it to the end, and the head's own stroke covers the line's round cap there.
+function renderArrowhead({ heads, points, style }: ArrowToRender, end: EndName): readonly SvgElement[] {
+  const toward = end === "end" ? points : points.toReversed();
+  const head = arrowheadAt(heads[end], toward, arrowheadLength(style.strokeWidth));
+  if (!head) return [];
+  const color = lineColor(style);
+  const stroke = {
+    "data-arrowhead": end,
+    stroke: color,
+    "stroke-width": strokePixels[style.strokeWidth],
+    "stroke-linejoin": "round",
+    "stroke-linecap": "round",
+  };
+  return [
+    head.kind === "circle"
+      ? svgElement("circle", { ...stroke, cx: head.center.x, cy: head.center.y, r: head.radius, fill: color })
+      : svgElement("path", { ...stroke, d: pathData(head.path), fill: head.filled ? color : "none" }),
+  ];
+}
+
+// An Arrow's Label, its lines centred, on a background of the Sketch's own white, so the line doesn't run through the
+// text. A Label that shows nothing has no background either. While the Label is being edited, its text field shows the
+// text, but the background stays, so the line doesn't run through the field either.
+function renderArrowLabel({ label, style }: ArrowToRender, textHidden: boolean): readonly SvgElement[] {
+  if (!label.background) return [];
+  return [
+    svgElement("rect", { "data-label-background": "", ...label.background, fill: "#ffffff" }),
+    ...(textHidden ? [] : renderLabel(label, "center", style)),
+  ];
+}
+
+// An Arrow drawn as its line, in the Arrow's lines' style, with a head at each end that has one, and then its Label.
+function renderArrow(arrow: ArrowToRender, options: RenderOptions): SvgElement {
+  const { id, style, routing, points } = arrow;
   return svgElement("g", { ...(id === undefined ? {} : { "data-shape": id }), "data-routing": routing }, [
-    ...renderLines(path, style),
+    ...renderLines(polyline(points), style),
+    ...renderArrowhead(arrow, "start"),
+    ...renderArrowhead(arrow, "end"),
+    ...renderArrowLabel(arrow, id !== undefined && id === options.hiddenLabel),
   ]);
 }
 
@@ -174,7 +227,7 @@ export function renderShapes(
   return svgElement(
     "g",
     {},
-    shapes.map((shape) => ("routing" in shape ? renderArrow(shape) : renderShape(shape, measure, options))),
+    shapes.map((shape) => ("routing" in shape ? renderArrow(shape, options) : renderShape(shape, measure, options))),
   );
 }
 
