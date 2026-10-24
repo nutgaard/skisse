@@ -595,12 +595,16 @@ function wheel(state: EditorState, input: WheelInput): EditorState {
     : { ...state, viewport: viewport.panBy(state.viewport, input.delta) };
 }
 
+/** The smallest Bounds around everything on the Sketch, or `undefined` when it is empty. */
+export function contentBounds(sketch: Sketch): Bounds | undefined {
+  const all = Object.values(sketch.shapes).map(({ bounds }) => bounds);
+  return all.length === 0 ? undefined : enclosingBounds(all);
+}
+
 // An empty Sketch has nothing to frame, so it goes back to 100% instead.
 function zoomToFit(state: EditorState, screenSize: viewport.Size): viewport.Viewport {
-  const all = Object.values(state.sketch.shapes).map(({ bounds }) => bounds);
-  return all.length === 0
-    ? viewport.resetZoom(state.viewport, screenSize)
-    : viewport.fit(screenSize, enclosingBounds(all));
+  const content = contentBounds(state.sketch);
+  return content ? viewport.fit(screenSize, content) : viewport.resetZoom(state.viewport, screenSize);
 }
 
 // Pointer positions arrive in screen pixels. Gestures on the Sketch work in Sketch coordinates.

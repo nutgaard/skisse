@@ -12,6 +12,7 @@ import {
 import type { Point } from "./geometry";
 import { fixedWidthTextMeasurer, sequentialIds } from "./fakes";
 import { selection, shapes } from "./queries";
+import type { SymbolId } from "./symbols";
 import type { Tool } from "./tools";
 import type { Size } from "./viewport";
 
@@ -77,8 +78,13 @@ function keyboard(type: KeyInput["type"]) {
 export const keyDown = keyboard("keyDown");
 export const keyUp = keyboard("keyUp");
 
+/** Draws a Shape of `symbol` by dragging from `from` to `to`. */
+export function drawSymbol(state: EditorState, symbol: SymbolId, from: Point, to: Point): EditorState {
+  return apply(state, selectTool(symbol), pointerDown(from), pointerMove(to), pointerUp(to));
+}
+
 export function drawRectangle(state: EditorState, from: Point, to: Point): EditorState {
-  return apply(state, selectTool("rectangle"), pointerDown(from), pointerMove(to), pointerUp(to));
+  return drawSymbol(state, "rectangle", from, to);
 }
 
 /**

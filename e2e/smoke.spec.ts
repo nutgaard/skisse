@@ -22,6 +22,6 @@ test("drawing a rectangle shows it on the Sketch, also while dragging, and it is
   await page.reload();
 
   await expect(rectangle).toHaveCount(1);
-  // The fill has no stroke, so its box is exactly the Shape's.
-  expect(await rectangle.locator(".shape-fill").boundingBox()).toEqual({ x: 200, y: 150, width: 100, height: 50 });
+  // The outline, drawn first as the fill, has no stroke, so its box is exactly the Shape's.
+  expect(await rectangle.locator("path").first().boundingBox()).toEqual({ x: 200, y: 150, width: 100, height: 50 });
 });

@@ -7,7 +7,9 @@ import {
 } from "./editor";
 import { boundsBetween, type Bounds, type Point } from "./geometry";
 import * as history from "./history";
+import { onScreen, renderShapes } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
+import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
 import type { Tool } from "./tools";
 import type { Viewport } from "./viewport";
@@ -87,4 +89,14 @@ export function currentInteraction(state: EditorState): InteractionView {
     case "panning":
       return { kind: "panning" };
   }
+}
+
+/**
+ * The Sketch as rendered on screen, in Sketch coordinates, including a Shape being drawn. The selection and resize
+ * handles are not part of it.
+ */
+export function rendering(state: EditorState): SvgElement {
+  const interaction = currentInteraction(state);
+  const beingDrawn = interaction.kind === "creatingShape" ? [interaction] : [];
+  return renderShapes([...Object.values(state.sketch.shapes), ...beingDrawn], onScreen);
 }
