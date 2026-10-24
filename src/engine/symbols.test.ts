@@ -4,7 +4,17 @@ import type { Bounds, Point } from "./geometry";
 import { activeTool, selection, shapes } from "./queries";
 import { shapeGeometry } from "./shape-geometry";
 import { symbolDefinition, type SymbolId } from "./symbols";
-import { apply, click, newEditor, pointerDown, pointerMove, pointerUp, press, selectTool } from "./test-helpers";
+import {
+  apply,
+  click,
+  newEditor,
+  pointerDown,
+  pointerMove,
+  pointerUp,
+  press,
+  selectTool,
+  drawLabelled,
+} from "./test-helpers";
 
 type BuiltInSymbol = {
   readonly symbol: SymbolId;
@@ -27,17 +37,11 @@ const builtInSymbols: readonly BuiltInSymbol[] = [
 
 const defaultBox: Bounds = { x: 100, y: 50, width: 160, height: 80 };
 
-// A Shape of the Symbol filling `box`, by default (100,50)–(260,130), with nothing selected.
+// A Shape of the Symbol filling `box`, by default (100,50)–(260,130), with a Label so that a text Shape stays, and
+// nothing selected.
 function unselectedShape(symbol: SymbolId, box: Bounds = defaultBox): EditorState {
-  return press(
-    apply(
-      newEditor(),
-      selectTool(symbol),
-      pointerDown({ x: box.x, y: box.y }),
-      pointerUp({ x: box.x + box.width, y: box.y + box.height }),
-    ),
-    "Escape",
-  );
+  const corner = { x: box.x + box.width, y: box.y + box.height };
+  return press(drawLabelled(newEditor(), symbol, { x: box.x, y: box.y }, corner, "A"), "Escape");
 }
 
 // A point `distance` from `point` towards the middle of `box`, along one axis.
@@ -154,14 +158,20 @@ describe("Containers", () => {
   test.each(["rectangle", "roundedRectangle", "cloud"] as const)(
     "a %s can be a Container, and its Label defaults to the top-left corner",
     (symbol) => {
-      expect(symbolDefinition(symbol)).toMatchObject({ canBeContainer: true, defaultLabelAlignment: "topLeft" });
+      expect(symbolDefinition(symbol)).toMatchObject({
+        canBeContainer: true,
+        defaultLabelAlignment: { horizontal: "left", vertical: "top" },
+      });
     },
   );
 
   test.each(["ellipse", "diamond", "cylinder", "horizontalCylinder", "document", "person", "text"] as const)(
     "a %s can't be a Container, and its Label defaults to the middle",
     (symbol) => {
-      expect(symbolDefinition(symbol)).toMatchObject({ canBeContainer: false, defaultLabelAlignment: "center" });
+      expect(symbolDefinition(symbol)).toMatchObject({
+        canBeContainer: false,
+        defaultLabelAlignment: { horizontal: "center", vertical: "middle" },
+      });
     },
   );
 });

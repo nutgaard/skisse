@@ -78,9 +78,19 @@ function keyboard(type: KeyInput["type"]) {
 export const keyDown = keyboard("keyDown");
 export const keyUp = keyboard("keyUp");
 
-/** Draws a Shape of `symbol` by dragging from `from` to `to`. */
-export function drawSymbol(state: EditorState, symbol: SymbolId, from: Point, to: Point): EditorState {
+/** Draws a Shape of `symbol` by dragging from `from` to `to`, which leaves its Label open for editing. */
+export function drawWithLabelOpen(state: EditorState, symbol: SymbolId, from: Point, to: Point): EditorState {
   return apply(state, selectTool(symbol), pointerDown(from), pointerMove(to), pointerUp(to));
+}
+
+/** Draws a Shape of `symbol` by dragging from `from` to `to`, types `text` as its Label, and commits it with Escape. */
+export function drawLabelled(state: EditorState, symbol: SymbolId, from: Point, to: Point, text: string): EditorState {
+  return press(typeLabel(drawWithLabelOpen(state, symbol, from, to), text), "Escape");
+}
+
+/** Draws a Shape of `symbol` by dragging from `from` to `to`, and finishes editing its Label, leaving it empty. */
+export function drawSymbol(state: EditorState, symbol: SymbolId, from: Point, to: Point): EditorState {
+  return apply(drawWithLabelOpen(state, symbol, from, to), keyDown("Escape"));
 }
 
 export function drawRectangle(state: EditorState, from: Point, to: Point): EditorState {
@@ -103,6 +113,11 @@ export function click(state: EditorState, at: Point, modifiers: Partial<Modifier
   return apply(state, selectTool("select"), pointerDown(at, modifiers), pointerUp(at, modifiers));
 }
 
+/** Two clicks in a row, then the double-click the browser reports for them. */
+export function doubleClick(state: EditorState, at: Point): EditorState {
+  return apply(click(click(state, at), at), { type: "doubleClick", position: at });
+}
+
 export function drag(state: EditorState, from: Point, to: Point, modifiers: Partial<Modifiers> = {}): EditorState {
   return apply(
     state,
@@ -111,6 +126,11 @@ export function drag(state: EditorState, from: Point, to: Point, modifiers: Part
     pointerMove(to, modifiers),
     pointerUp(to, modifiers),
   );
+}
+
+/** Replaces the text of the Label being edited, as typing into the Label's text field does. */
+export function typeLabel(state: EditorState, text: string): EditorState {
+  return apply(state, { type: "changeLabelText", text });
 }
 
 export function press(state: EditorState, key: string, modifiers: Partial<Modifiers> = {}): EditorState {

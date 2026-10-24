@@ -7,6 +7,7 @@ import {
   currentInteraction,
   exportSvg,
   gridSize,
+  labelLayout,
   noModifiers,
   pansOnPress,
   pathData,
@@ -20,40 +21,31 @@ import {
   update,
   viewport,
   type Dependencies,
+  type EditorState,
+  type FontSize,
+  type HorizontalAlignment,
+  type Input,
   type KeyInput,
+  type LabelView,
   type PointerInput,
   type Size,
   type Sketch,
   type ToolInfo,
+  type VerticalAlignment,
   type Viewport,
   type WheelInput,
 } from "../engine";
 import { useAutosave } from "./autosave";
 import { downloadPng, downloadSvg } from "./download";
+import { keyInput, modifiersOf } from "./inputs";
+import { LabelEditor } from "./LabelEditor";
 import { SvgElementView } from "./SvgElementView";
-
-function modifiersOf(event: KeyboardEvent | PointerEvent | WheelEvent) {
-  return {
-    shift: event.shiftKey,
-    alt: event.altKey,
-    ctrl: event.ctrlKey,
-    meta: event.metaKey,
-  };
-}
 
 function pointerInput(type: PointerInput["type"], event: PointerEvent): PointerInput {
   return {
     type,
     position: { x: event.clientX, y: event.clientY },
     button: event.button,
-    modifiers: modifiersOf(event),
-  };
-}
-
-function keyInput(type: KeyInput["type"], event: KeyboardEvent): KeyInput {
-  return {
-    type,
-    key: event.key,
     modifiers: modifiersOf(event),
   };
 }
@@ -90,13 +82,19 @@ function isSelectAll(event: KeyboardEvent) {
   return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a";
 }
 
-// Keys typed into a text field, such as when renaming a Sketch, are not editor shortcuts.
+// Keys typed into a text field, such as when renaming a Sketch or editing a Label, are not editor shortcuts.
 function isTyping(event: KeyboardEvent) {
-  return event.target instanceof HTMLInputElement;
+  return event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
 }
 
 function isSpace(event: KeyboardEvent) {
   return event.key === " ";
+}
+
+// Enter edits the selected Shape's Label. Its text field opens and takes focus while the key is still down, so the
+// browser must not also type the Enter into it. A focused button outside the Sketch still gets pressed by Enter.
+function editsLabel(event: KeyboardEvent) {
+  return event.key === "Enter" && !(event.target instanceof HTMLButtonElement);
 }
 
 // Space presses a button outside the editor's toolbar, such as in the Sketch list, when the keyboard moved focus to it.
@@ -170,6 +168,88 @@ function ToolButton({ info, active, onSelect }: ToolButtonProps) {
   );
 }
 
+// One of a few values to choose, as a button: its short name, and what it does in full.
+type Choice<T> = { readonly value: T; readonly name: string; readonly title: string };
+
+const horizontalAlignments: readonly Choice<HorizontalAlignment>[] = [
+  { value: "left", name: "Left", title: "Align left" },
+  { value: "center", name: "Centre", title: "Align centre" },
+  { value: "right", name: "Right", title: "Align right" },
+];
+
+const verticalAlignments: readonly Choice<VerticalAlignment>[] = [
+  { value: "top", name: "Top", title: "Align top" },
+  { value: "middle", name: "Middle", title: "Align middle" },
+  { value: "bottom", name: "Bottom", title: "Align bottom" },
+];
+
+const fontSizes: readonly Choice<FontSize>[] = [
+  { value: "small", name: "S", title: "Small text" },
+  { value: "medium", name: "M", title: "Medium text" },
+  { value: "large", name: "L", title: "Large text" },
+];
+
+type ChoicesProps<T> = {
+  readonly choices: readonly Choice<T>[];
+  /** The value chosen, or `undefined` when the selected Shapes differ. */
+  readonly chosen: T | undefined;
+  readonly onChoose: (value: T) => void;
+};
+
+// The buttons keep the focus where it is, so they change a Label being edited without finishing the editing.
+function Choices<T extends string>({ choices, chosen, onChoose }: ChoicesProps<T>) {
+  return choices.map((choice) => (
+    <button
+      key={choice.value}
+      type="button"
+      aria-pressed={choice.value === chosen}
+      aria-label={choice.title}
+      title={choice.title}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => onChoose(choice.value)}
+    >
+      {choice.name}
+    </button>
+  ));
+}
+
+// What the selected Shapes' Labels have in common, such as their font size, or `undefined` when they differ.
+function commonToSelection<T>(state: EditorState, of: (label: LabelView) => T): T | undefined {
+  const values = new Set(selection(state).flatMap((id) => {
+    const label = labelLayout(state, id);
+    return label ? [of(label)] : [];
+  }));
+  return values.size === 1 ? [...values][0] : undefined;
+}
+
+type LabelControlsProps = { readonly state: EditorState; readonly dispatch: (input: Input) => void };
+
+// Shown while Shapes are selected.
+function LabelControls({ state, dispatch }: LabelControlsProps) {
+  if (selection(state).length === 0) return null;
+  return (
+    <div className="toolbar label-controls" role="toolbar" aria-label="Label">
+      <Choices
+        choices={horizontalAlignments}
+        chosen={commonToSelection(state, (label) => label.alignment.horizontal)}
+        onChoose={(horizontal) => dispatch({ type: "changeLabelAlignment", alignment: { horizontal } })}
+      />
+      <span className="toolbar-separator" />
+      <Choices
+        choices={verticalAlignments}
+        chosen={commonToSelection(state, (label) => label.alignment.vertical)}
+        onChoose={(vertical) => dispatch({ type: "changeLabelAlignment", alignment: { vertical } })}
+      />
+      <span className="toolbar-separator" />
+      <Choices
+        choices={fontSizes}
+        chosen={commonToSelection(state, (label) => label.fontSize)}
+        onChoose={(fontSize) => dispatch({ type: "changeStyle", style: { fontSize } })}
+      />
+    </div>
+  );
+}
+
 type EditorProps = {
   readonly deps: Dependencies;
   /** The open Sketch's name, which exports are named after. */
@@ -182,13 +262,16 @@ type EditorProps = {
 export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, initialSketch));
   const svgRef = useRef<SVGSVGElement>(null);
+  // The Sketch and the text field laid over it while a Label is edited, which scroll and pinch alike.
+  const sketchAreaRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const interaction = currentInteraction(state);
   const selected = new Set(selection(state));
   const view = viewport(state);
   const finishedSketch = sketch(state);
+  const editedLabel = interaction.kind === "editingLabel" ? labelLayout(state, interaction.shapeId) : undefined;
   // Only a finished change to the Sketch changes the export, not every pointer move.
-  const exportedSvg = useMemo(() => exportSvg(finishedSketch), [finishedSketch]);
+  const exportedSvg = useMemo(() => exportSvg(finishedSketch, deps.measureText), [finishedSketch, deps]);
 
   useAutosave(finishedSketch, onSave);
 
@@ -211,7 +294,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
         if (!pans(event)) return;
         event.preventDefault();
       }
-      if (isSelectAll(event)) event.preventDefault();
+      if (isSelectAll(event) || editsLabel(event)) event.preventDefault();
       dispatch(keyInput("keyDown", event));
     };
     // Releases still reach the editor, so a modifier let go while typing doesn't stay held.
@@ -235,8 +318,8 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
 
   // Wheel and gesture listeners are added directly, as React's are passive and can't stop the browser zooming the page.
   useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
+    const sketchArea = sketchAreaRef.current;
+    if (!sketchArea) return;
     let pinchScale: number | undefined;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
@@ -257,15 +340,15 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
       event.preventDefault();
       pinchScale = undefined;
     };
-    svg.addEventListener("wheel", onWheel, { passive: false });
-    svg.addEventListener("gesturestart", onGestureStart);
-    svg.addEventListener("gesturechange", onGestureChange);
-    svg.addEventListener("gestureend", onGestureEnd);
+    sketchArea.addEventListener("wheel", onWheel, { passive: false });
+    sketchArea.addEventListener("gesturestart", onGestureStart);
+    sketchArea.addEventListener("gesturechange", onGestureChange);
+    sketchArea.addEventListener("gestureend", onGestureEnd);
     return () => {
-      svg.removeEventListener("wheel", onWheel);
-      svg.removeEventListener("gesturestart", onGestureStart);
-      svg.removeEventListener("gesturechange", onGestureChange);
-      svg.removeEventListener("gestureend", onGestureEnd);
+      sketchArea.removeEventListener("wheel", onWheel);
+      sketchArea.removeEventListener("gesturestart", onGestureStart);
+      sketchArea.removeEventListener("gesturechange", onGestureChange);
+      sketchArea.removeEventListener("gestureend", onGestureEnd);
     };
   }, []);
 
@@ -278,38 +361,45 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
 
   return (
     <>
-      <svg
-        ref={svgRef}
-        className="sketch"
-        data-pans={pansOnPress(state) || undefined}
-        data-panning={interaction.kind === "panning" || undefined}
-        onPointerDown={onPointer("pointerDown")}
-        onPointerMove={onPointer("pointerMove")}
-        onPointerUp={onPointer("pointerUp")}
-        onPointerCancel={onPointer("pointerCancel")}
-      >
-        <Grid viewport={view} />
-        <g transform={`scale(${view.zoom}) translate(${-view.x} ${-view.y})`}>
-          <SvgElementView element={rendering(state)} />
-          {shapes(state)
-            .filter(({ id }) => selected.has(id))
-            .map(({ id, bounds }) => (
-              <rect key={id} data-selected={id} {...bounds} className="selection-outline" />
+      <div ref={sketchAreaRef}>
+        <svg
+          ref={svgRef}
+          className="sketch"
+          data-pans={pansOnPress(state) || undefined}
+          data-panning={interaction.kind === "panning" || undefined}
+          onPointerDown={onPointer("pointerDown")}
+          onPointerMove={onPointer("pointerMove")}
+          onPointerUp={onPointer("pointerUp")}
+          onPointerCancel={onPointer("pointerCancel")}
+          onDoubleClick={(event) =>
+            dispatch({ type: "doubleClick", position: { x: event.clientX, y: event.clientY } })
+          }
+        >
+          <Grid viewport={view} />
+          <g transform={`scale(${view.zoom}) translate(${-view.x} ${-view.y})`}>
+            <SvgElementView element={rendering(state)} />
+            {shapes(state)
+              .filter(({ id }) => selected.has(id))
+              .map(({ id, bounds }) => (
+                <rect key={id} data-selected={id} {...bounds} className="selection-outline" />
+              ))}
+            {resizeHandles(state).map(({ handle, position }) => (
+              <rect
+                key={handle}
+                data-handle={handle}
+                x={position.x - handleSize / view.zoom / 2}
+                y={position.y - handleSize / view.zoom / 2}
+                width={handleSize / view.zoom}
+                height={handleSize / view.zoom}
+                className="resize-handle"
+              />
             ))}
-          {resizeHandles(state).map(({ handle, position }) => (
-            <rect
-              key={handle}
-              data-handle={handle}
-              x={position.x - handleSize / view.zoom / 2}
-              y={position.y - handleSize / view.zoom / 2}
-              width={handleSize / view.zoom}
-              height={handleSize / view.zoom}
-              className="resize-handle"
-            />
-          ))}
-          {interaction.kind === "marqueeSelecting" && <rect {...interaction.bounds} className="selection-box" />}
-        </g>
-      </svg>
+            {interaction.kind === "marqueeSelecting" && <rect {...interaction.bounds} className="selection-box" />}
+          </g>
+        </svg>
+        {editedLabel && <LabelEditor label={editedLabel} viewport={view} dispatch={dispatch} />}
+      </div>
+      <LabelControls state={state} dispatch={dispatch} />
       <div ref={toolbarRef} className="toolbar" role="toolbar">
         {tools.map((info) => (
           <ToolButton

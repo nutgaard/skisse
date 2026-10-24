@@ -1,11 +1,12 @@
 import { createElement } from "react";
 import type { SvgElement } from "../engine";
 
-// React names SVG attributes in camelCase, such as `strokeWidth` for `stroke-width`, except for data and aria ones.
+// React names SVG attributes in camelCase, such as `strokeWidth` for `stroke-width` and `xmlSpace` for `xml:space`,
+// except for data and aria ones.
 function reactName(name: string) {
   return name.startsWith("data-") || name.startsWith("aria-")
     ? name
-    : name.replace(/-(\w)/g, (_, letter: string) => letter.toUpperCase());
+    : name.replace(/[-:](\w)/g, (_, letter: string) => letter.toUpperCase());
 }
 
 /** An element the engine rendered, shown as React SVG. */

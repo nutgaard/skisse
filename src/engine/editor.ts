@@ -13,8 +13,10 @@ import {
 import { gridSize, nextGridLine, snapToGrid } from "./grid";
 import * as history from "./history";
 import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
+import { displayedBounds } from "./label";
 import { hitsOutline } from "./shape-geometry";
 import { symbolDefinition, type SymbolId } from "./symbols";
+import type { LabelAlignment } from "./symbols/symbol";
 import { toolOfShortcut, type Tool } from "./tools";
 import * as viewport from "./viewport";
 
@@ -54,8 +56,17 @@ export type Input =
   | KeyInput
   | WheelInput
   | { readonly type: "pinch"; readonly position: Point; readonly scale: number }
+  // Reported after the two clicks it is made of, at their screen position.
+  | { readonly type: "doubleClick"; readonly position: Point }
   | { readonly type: "zoomToFit" | "resetZoom"; readonly screenSize: viewport.Size }
-  | { readonly type: "undo" | "redo" };
+  | { readonly type: "undo" | "redo" }
+  // The whole text of the Label being edited, after each change made in its text field.
+  | { readonly type: "changeLabelText"; readonly text: string }
+  | { readonly type: "commitLabel" | "cancelLabel" }
+  // Change the selected Shapes.
+  | { readonly type: "changeStyle"; readonly style: Partial<Style> }
+  // Either direction alone keeps each Shape's alignment in the other.
+  | { readonly type: "changeLabelAlignment"; readonly alignment: Partial<LabelAlignment> };
 
 export type TextMeasurer = (text: string, fontSize: number) => number;
 
@@ -69,10 +80,38 @@ export type Dependencies = {
   readonly generateId: IdGenerator;
 };
 
+/** The three font sizes a Label can have. */
+export type FontSize = "small" | "medium" | "large";
+
+export type Style = { readonly fontSize: FontSize };
+
+const defaultStyle: Style = { fontSize: "medium" };
+
+export type Label = { readonly text: string; readonly alignment: LabelAlignment };
+
+/**
+ * A new Shape of `symbol` filling `bounds`, but for its ID: with an empty Label, aligned as the Symbol's Labels are by
+ * default, and the default style.
+ */
+export function newShape(symbol: SymbolId, bounds: Bounds): ShapeWithoutId {
+  return {
+    symbol,
+    bounds,
+    label: { text: "", alignment: symbolDefinition(symbol).defaultLabelAlignment },
+    style: defaultStyle,
+  };
+}
+
+/** A Shape but for its ID, such as one still being drawn. */
+export type ShapeWithoutId = Omit<SymbolShape, "id">;
+
 export type SymbolShape = {
   readonly id: ShapeId;
   readonly symbol: SymbolId;
+  // As the user set it. The Shape is shown taller when its Label needs more room.
   readonly bounds: Bounds;
+  readonly label: Label;
+  readonly style: Style;
 };
 
 export type Sketch = {
@@ -108,7 +147,9 @@ type Interaction =
     } & Drag)
   | ({ readonly kind: "resizing"; readonly shapeId: ShapeId; readonly handle: ResizeHandle } & Drag)
   // The viewport follows the pointer so that the Sketch point it grabbed stays under it.
-  | { readonly kind: "panning"; readonly grabbed: Point };
+  | { readonly kind: "panning"; readonly grabbed: Point }
+  // The text the Label had before, which cancelling puts back.
+  | { readonly kind: "editingLabel"; readonly shapeId: ShapeId; readonly originalText: string };
 
 export type EditorState = {
   readonly deps: Dependencies;
@@ -172,8 +213,24 @@ function snapperFor(snaps: boolean): ((value: number) => number) {
 
 export const emptySketch: Sketch = { shapes: {} };
 
-/** A fresh editor on `sketch`, a new empty one by default. Nothing is selected and there is nothing to undo. */
-export function createEditor(deps: Dependencies, sketch: Sketch = emptySketch): EditorState {
+// Sketches saved before Shapes had Labels and a style have Shapes without them, which get an empty Label and the
+// default style.
+function withLabels(sketch: Sketch): Sketch {
+  const complete = (shape: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds">): SymbolShape => ({
+    ...newShape(shape.symbol, shape.bounds),
+    ...shape,
+  });
+  return {
+    ...sketch,
+    shapes: Object.fromEntries(Object.entries(sketch.shapes).map(([id, shape]) => [id, complete(shape)])),
+  };
+}
+
+/**
+ * A fresh editor on the `saved` Sketch, a new empty one by default. Nothing is selected and there is nothing to undo.
+ */
+export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): EditorState {
+  const sketch = withLabels(saved);
   return {
     deps,
     sketch,
@@ -187,14 +244,21 @@ export function createEditor(deps: Dependencies, sketch: Sketch = emptySketch): 
   };
 }
 
-// Shapes are hit-tested by their Symbol's outline, as if filled, even with a transparent fill. The topmost Shape wins.
-function shapeAt(sketch: Sketch, point: Point): SymbolShape | undefined {
-  return Object.values(sketch.shapes).findLast((shape) => hitsOutline(shape.symbol, shape.bounds, point));
+// What the user sees and points at is the Shape as displayed, grown to fit its Label.
+function displayed(state: EditorState, shape: SymbolShape): Bounds {
+  return displayedBounds(shape, state.deps.measureText);
 }
 
-function shapesInside(sketch: Sketch, box: Bounds): readonly ShapeId[] {
-  return Object.values(sketch.shapes)
-    .filter((shape) => containsBounds(box, shape.bounds))
+// Shapes are hit-tested by their Symbol's outline, as if filled, even with a transparent fill. The topmost Shape wins.
+function shapeAt(state: EditorState, point: Point): SymbolShape | undefined {
+  return Object.values(state.sketch.shapes).findLast((shape) =>
+    hitsOutline(shape.symbol, displayed(state, shape), point),
+  );
+}
+
+function shapesInside(state: EditorState, box: Bounds): readonly ShapeId[] {
+  return Object.values(state.sketch.shapes)
+    .filter((shape) => containsBounds(box, displayed(state, shape)))
     .map(({ id }) => id);
 }
 
@@ -239,7 +303,7 @@ function handleAt(state: EditorState, point: Point): { shape: SymbolShape; handl
   const shape = resizableShape(state);
   const reach = sketchDistance(state, handleReach);
   const nearby = shape
-    ? handlePositions(shape.bounds).find(
+    ? handlePositions(displayed(state, shape)).find(
         ({ position }) => Math.abs(position.x - point.x) <= reach && Math.abs(position.y - point.y) <= reach,
       )
     : undefined;
@@ -262,7 +326,7 @@ function pressWithSelectTool(state: EditorState, input: PointerInput): EditorSta
       },
     };
   }
-  const hit = shapeAt(state.sketch, input.position);
+  const hit = shapeAt(state, input.position);
   if (!hit) return startMarquee(state, input);
   const { shift } = input.modifiers;
   const selection = shift ? toggle(state.selection, hit.id) : state.selection.includes(hit.id) ? state.selection : [hit.id];
@@ -332,6 +396,25 @@ function dragOffset(state: EditorState, drag: Drag, pointer: PointerState): Poin
   };
 }
 
+// The Shape's own Bounds after a resize from `from`, its Bounds as displayed, to `resized`. They follow the resize, but
+// the Shape's Label still decides how tall it is shown:
+// - A resize that leaves the top and bottom where they were keeps the Shape's own height, so it still shrinks back
+//   when its Label does.
+// - So does one that leaves the Shape shorter than its Label needs, unless it went below its own height. The Shape is
+//   then shown as tall as its Label needs, down from its top, or up from its bottom when the edge that stayed put is
+//   at the bottom, such as when the top was dragged, or the bottom was flipped past the top.
+function resizedOwnBounds(state: EditorState, shape: SymbolShape, from: Bounds, resized: Bounds): Bounds {
+  if (resized.y === from.y && resized.height === from.height) {
+    return { ...resized, y: shape.bounds.y, height: shape.bounds.height };
+  }
+  const shown = displayed(state, { ...shape, bounds: resized });
+  if (shown.height <= resized.height) return resized;
+  const own = { ...resized, height: Math.min(resized.height, shape.bounds.height) };
+  const bottom = resized.y + resized.height;
+  const stayedAtBottom = bottom === from.y + from.height || bottom === from.y;
+  return stayedAtBottom ? { ...own, y: bottom - shown.height } : own;
+}
+
 function resizeShape(
   state: EditorState,
   interaction: Extract<Interaction, { kind: "resizing" }>,
@@ -340,11 +423,14 @@ function resizeShape(
   const { before, shapeId, handle } = interaction;
   const shape = before.shapes[shapeId];
   if (!shape || !interaction.dragged) return { ...state, sketch: before, interaction };
-  const bounds = resizeBounds(shape.bounds, handle, pointerOffset(interaction, pointer), {
+  // The resize starts from the Shape as displayed, so its handles move the edges the user sees.
+  const from = displayed(state, shape);
+  const resized = resizeBounds(from, handle, pointerOffset(interaction, pointer), {
     snap: snapperFor(snapsToGrid(pointer.modifiers)),
     keepAspectRatio: pointer.modifiers.shift,
     minimumSize: minimumShapeSize,
   });
+  const bounds = resizedOwnBounds(state, shape, from, resized);
   return {
     ...state,
     sketch: { ...before, shapes: { ...before.shapes, [shapeId]: { ...shape, bounds } } },
@@ -376,7 +462,9 @@ export function pansOnPress(state: EditorState): boolean {
   return state.tool === "pan" || state.spaceHeld;
 }
 
+// A press outside the Label's text field finishes editing it, and then does what it would have done anyway.
 function pointerDown(state: EditorState, input: PointerInput): EditorState {
+  if (state.interaction.kind === "editingLabel") return pointerDown(finishEditingLabel(state, "commit"), input);
   if (pansOnPress(state)) return { ...state, interaction: { kind: "panning", grabbed: input.position } };
   switch (state.tool) {
     case "select":
@@ -403,6 +491,7 @@ function pointerMove(state: EditorState, input: PointerInput): EditorState {
   const { interaction } = state;
   switch (interaction.kind) {
     case "idle":
+    case "editingLabel":
       return state;
     case "creatingShape":
       return {
@@ -410,7 +499,7 @@ function pointerMove(state: EditorState, input: PointerInput): EditorState {
         interaction: { ...continuePress(state, interaction, input), snaps: snapsToGrid(input.modifiers) },
       };
     case "marqueeSelecting": {
-      const inside = shapesInside(state.sketch, boundsBetween(interaction.origin, input.position));
+      const inside = shapesInside(state, boundsBetween(interaction.origin, input.position));
       return {
         ...state,
         selection: interaction.additive ? union(interaction.previousSelection, inside) : inside,
@@ -423,6 +512,66 @@ function pointerMove(state: EditorState, input: PointerInput): EditorState {
     case "panning":
       return { ...state, viewport: viewport.keepUnderPointer(state.viewport, interaction.grabbed, input.position) };
   }
+}
+
+function updateShape(sketch: Sketch, id: ShapeId, change: (shape: SymbolShape) => SymbolShape): Sketch {
+  const shape = sketch.shapes[id];
+  return shape ? { ...sketch, shapes: { ...sketch.shapes, [id]: change(shape) } } : sketch;
+}
+
+function withLabelText(sketch: Sketch, id: ShapeId, text: string): Sketch {
+  return updateShape(sketch, id, (shape) => ({ ...shape, label: { ...shape.label, text } }));
+}
+
+// Only one Shape is selected while its Label is being edited.
+function startEditingLabel(state: EditorState, shapeId: ShapeId | undefined): EditorState {
+  const shape = shapeId === undefined ? undefined : state.sketch.shapes[shapeId];
+  return shape
+    ? {
+        ...state,
+        selection: [shape.id],
+        interaction: { kind: "editingLabel", shapeId: shape.id, originalText: shape.label.text },
+      }
+    : state;
+}
+
+// Double-clicking a Shape with the select tool opens its Label.
+function doubleClick(state: EditorState, at: Point): EditorState {
+  if (!isIdle(state) || state.tool !== "select" || state.spaceHeld) return state;
+  return startEditingLabel(state, shapeAt(state, at)?.id);
+}
+
+function changeLabelText(state: EditorState, text: string): EditorState {
+  const { interaction } = state;
+  return interaction.kind === "editingLabel"
+    ? { ...state, sketch: withLabelText(state.sketch, interaction.shapeId, text) }
+    : state;
+}
+
+// Changes every selected Shape. This works while a Label is being edited too, and is then part of its editing
+// session, but not in the middle of a gesture, which would undo it on the next pointer move.
+function changeSelected(state: EditorState, change: (shape: SymbolShape) => SymbolShape): EditorState {
+  if (!isIdle(state) && state.interaction.kind !== "editingLabel") return state;
+  return { ...state, sketch: state.selection.reduce((sketch, id) => updateShape(sketch, id, change), state.sketch) };
+}
+
+// Removes a Shape that is nothing but its Label once that Label is left empty, as nothing of it would show. Text that
+// is only spaces and line breaks counts as empty.
+function removeIfEmpty(state: EditorState, id: ShapeId): EditorState {
+  const shape = state.sketch.shapes[id];
+  return shape && symbolDefinition(shape.symbol).labelOnly && shape.label.text.trim() === ""
+    ? removeShapes(state, [id])
+    : state;
+}
+
+// Committing keeps the text as edited. Cancelling puts back the text from before. A Shape just created and removed
+// again for its empty Label leaves the Sketch as it was, so it adds no undo step.
+function finishEditingLabel(state: EditorState, how: "commit" | "cancel"): EditorState {
+  const { interaction } = state;
+  if (interaction.kind !== "editingLabel") return state;
+  const sketch =
+    how === "commit" ? state.sketch : withLabelText(state.sketch, interaction.shapeId, interaction.originalText);
+  return removeIfEmpty({ ...state, sketch, interaction: idle }, interaction.shapeId);
 }
 
 function addShape(sketch: Sketch, shape: SymbolShape): Sketch {
@@ -440,10 +589,10 @@ function freeIdSequence(state: EditorState, sequence: number): number {
     : freeIdSequence(state, sequence + 1);
 }
 
-// A new Shape becomes the selection, so it can be adjusted straight away.
+// A new Shape becomes the selection, so it can be adjusted straight away, and its Label opens for editing.
 function createShape(state: EditorState, symbol: SymbolId, bounds: Bounds): EditorState {
   const sequence = freeIdSequence(state, state.nextIdSequence);
-  const shape: SymbolShape = { id: state.deps.generateId(sequence), symbol, bounds };
+  const shape: SymbolShape = { id: state.deps.generateId(sequence), ...newShape(symbol, bounds) };
   return {
     ...state,
     sketch: addShape(state.sketch, shape),
@@ -457,8 +606,10 @@ function pointerUp(state: EditorState, input: PointerInput): EditorState {
   const { interaction } = moved;
   const finished: EditorState = { ...moved, interaction: idle };
   switch (interaction.kind) {
-    case "creatingShape":
-      return { ...createShape(finished, interaction.symbol, creationBounds(interaction)), tool: "select" };
+    case "creatingShape": {
+      const created = createShape(finished, interaction.symbol, creationBounds(interaction));
+      return { ...startEditingLabel(created, created.selection[0]), tool: "select" };
+    }
     case "moving": {
       const clicked = interaction.dragged ? undefined : interaction.selectsOnClick;
       return clicked === undefined ? finished : { ...finished, selection: [clicked] };
@@ -468,6 +619,8 @@ function pointerUp(state: EditorState, input: PointerInput): EditorState {
     case "resizing":
     case "panning":
       return finished;
+    case "editingLabel":
+      return moved;
   }
 }
 
@@ -479,6 +632,9 @@ function cancelGesture(state: EditorState): EditorState {
     case "creatingShape":
     case "panning":
       return cancelled;
+    // Editing a Label is not a pointer gesture, so a lost pointer leaves it open.
+    case "editingLabel":
+      return state;
     case "marqueeSelecting":
       return { ...cancelled, selection: interaction.previousSelection };
     case "moving":
@@ -514,15 +670,19 @@ function nudge(state: EditorState, direction: Point, modifiers: Modifiers): Edit
     : { ...state, sketch: moveShapes(state.sketch, state.selection, nudgeOffset(state, direction, modifiers)) };
 }
 
-function deleteSelection(state: EditorState): EditorState {
+function removeShapes(state: EditorState, ids: readonly ShapeId[]): EditorState {
   return {
     ...state,
     sketch: {
       ...state.sketch,
-      shapes: Object.fromEntries(Object.entries(state.sketch.shapes).filter(([id]) => !state.selection.includes(id))),
+      shapes: Object.fromEntries(Object.entries(state.sketch.shapes).filter(([id]) => !ids.includes(id))),
     },
-    selection: [],
+    selection: state.selection.filter((id) => !ids.includes(id)),
   };
+}
+
+function deleteSelection(state: EditorState): EditorState {
+  return removeShapes(state, state.selection);
 }
 
 // Pressing or releasing a modifier mid-drag, such as Alt for snapping, applies to the drag straight away,
@@ -538,6 +698,7 @@ function updateDragModifiers(state: EditorState, modifiers: Modifiers): EditorSt
     case "idle":
     case "marqueeSelecting":
     case "panning":
+    case "editingLabel":
       return state;
   }
 }
@@ -547,7 +708,15 @@ function trackSpace(state: EditorState, input: KeyInput): EditorState {
   return input.key === " " ? { ...state, spaceHeld: input.type === "keyDown" } : state;
 }
 
+// Escape and Enter finish editing a Label, keeping the text. Other keys while editing are typing, such as shift+Enter
+// for a line break, which the Label's text field takes care of.
+function keyWhileEditingLabel(state: EditorState, input: KeyInput): EditorState {
+  const finishes = input.key === "Escape" || (input.key === "Enter" && !input.modifiers.shift);
+  return finishes ? finishEditingLabel(state, "commit") : state;
+}
+
 function keyDown(state: EditorState, input: KeyInput): EditorState {
+  if (state.interaction.kind === "editingLabel") return keyWhileEditingLabel(state, input);
   if (input.key === "Escape") {
     return isIdle(state) ? { ...state, selection: [] } : cancelGesture(state);
   }
@@ -558,6 +727,7 @@ function keyDown(state: EditorState, input: KeyInput): EditorState {
   }
   if (command && input.key.toLowerCase() === "z") return input.modifiers.shift ? redo(state) : undo(state);
   if (input.key === "Delete" || input.key === "Backspace") return deleteSelection(state);
+  if (input.key === "Enter") return startEditingLabel(state, resizableShape(state)?.id);
   const direction = nudgeDirections[input.key];
   if (direction) return nudge(state, direction, input.modifiers);
   const tool = command || input.modifiers.alt ? undefined : toolOfShortcut(input.key);
@@ -595,15 +765,15 @@ function wheel(state: EditorState, input: WheelInput): EditorState {
     : { ...state, viewport: viewport.panBy(state.viewport, input.delta) };
 }
 
-/** The smallest Bounds around everything on the Sketch, or `undefined` when it is empty. */
-export function contentBounds(sketch: Sketch): Bounds | undefined {
-  const all = Object.values(sketch.shapes).map(({ bounds }) => bounds);
+/** The smallest Bounds around everything on the Sketch as displayed, or `undefined` when it is empty. */
+export function contentBounds(sketch: Sketch, measure: TextMeasurer): Bounds | undefined {
+  const all = Object.values(sketch.shapes).map((shape) => displayedBounds(shape, measure));
   return all.length === 0 ? undefined : enclosingBounds(all);
 }
 
 // An empty Sketch has nothing to frame, so it goes back to 100% instead.
 function zoomToFit(state: EditorState, screenSize: viewport.Size): viewport.Viewport {
-  const content = contentBounds(state.sketch);
+  const content = contentBounds(state.sketch, state.deps.measureText);
   return content ? viewport.fit(screenSize, content) : viewport.resetZoom(state.viewport, screenSize);
 }
 
@@ -627,6 +797,8 @@ function applyInput(state: EditorState, input: Input): EditorState {
       return pointerUp(state, inSketch(state, input));
     case "pointerCancel":
       return cancelGesture(state);
+    case "doubleClick":
+      return doubleClick(state, viewport.toSketch(state.viewport, input.position));
     case "keyDown":
       return keyDown(trackSpace(state, input), input);
     case "keyUp":
@@ -643,6 +815,19 @@ function applyInput(state: EditorState, input: Input): EditorState {
       return isIdle(state) ? undo(state) : state;
     case "redo":
       return isIdle(state) ? redo(state) : state;
+    case "changeLabelText":
+      return changeLabelText(state, input.text);
+    case "commitLabel":
+      return finishEditingLabel(state, "commit");
+    case "cancelLabel":
+      return finishEditingLabel(state, "cancel");
+    case "changeStyle":
+      return changeSelected(state, (shape) => ({ ...shape, style: { ...shape.style, ...input.style } }));
+    case "changeLabelAlignment":
+      return changeSelected(state, (shape) => ({
+        ...shape,
+        label: { ...shape.label, alignment: { ...shape.label.alignment, ...input.alignment } },
+      }));
   }
 }
 

@@ -1,12 +1,13 @@
 import { ellipse as ellipsePath } from "../path";
-import { inset, labelMargin, type SymbolDefinition } from "./symbol";
+import { inset, inTheMiddle, labelMargin, type SymbolDefinition } from "./symbol";
 
 export const ellipse: SymbolDefinition = {
   name: "Ellipse",
   shortcut: "o",
   defaultSize: { width: 120, height: 80 },
   canBeContainer: false,
-  defaultLabelAlignment: "center",
+  labelOnly: false,
+  defaultLabelAlignment: inTheMiddle,
   outline: ellipsePath,
   // The largest rectangle inside the ellipse, whose corners touch it.
   labelArea: (box) =>

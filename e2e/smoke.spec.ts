@@ -1,8 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("drawing a rectangle shows it on the Sketch, also while dragging, and it is still there after a reload", async ({
-  page,
-}) => {
+test("a drawn rectangle shows while dragging, and it and its Label are still there after a reload", async ({ page }) => {
   await page.goto("./");
   const rectangle = page.locator('[data-symbol="rectangle"]');
 
@@ -19,7 +17,15 @@ test("drawing a rectangle shows it on the Sketch, also while dragging, and it is
   await expect(rectangle).toHaveCount(1);
   await expect(rectangle).toBeVisible();
 
+  await expect(page.getByRole("textbox", { name: "Label" })).toBeFocused();
+  await page.keyboard.type("Orders");
+  await page.keyboard.press("Escape");
+
+  await expect(rectangle.locator("text")).toHaveText("Orders");
+
   await page.reload();
+
+  await expect(rectangle.locator("text")).toHaveText("Orders");
 
   await expect(rectangle).toHaveCount(1);
   // The outline, drawn first as the fill, has no stroke, so its box is exactly the Shape's.

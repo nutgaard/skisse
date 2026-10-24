@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
-import { canRedo, canUndo, sketch } from "./queries";
+import type { Sketch } from "./editor";
+import { canRedo, canUndo, labelLayout, rendering, sketch } from "./queries";
 import {
   apply,
   boundsById,
@@ -42,5 +43,21 @@ describe("loading a Sketch", () => {
     const dragging = apply(twoRectangles(), selectTool("select"), pointerDown({ x: 150, y: 140 }), pointerMove({ x: 250, y: 240 }));
 
     expect(boundsById(newEditor(sketch(dragging)))).toEqual(boundsById(twoRectangles()));
+  });
+
+  test("a Sketch saved before Shapes had Labels opens with an empty Label on each Shape", () => {
+    const saved = {
+      shapes: { "shape-1": { id: "shape-1", symbol: "rectangle", bounds: { x: 100, y: 100, width: 100, height: 80 } } },
+    } as unknown as Sketch;
+
+    const loaded = newEditor(saved);
+
+    expect(labelLayout(loaded, "shape-1")).toMatchObject({
+      text: "",
+      alignment: { horizontal: "left", vertical: "top" },
+      fontSize: "medium",
+    });
+    expect(() => rendering(loaded)).not.toThrow();
+    expect(canUndo(loaded)).toBe(false);
   });
 });

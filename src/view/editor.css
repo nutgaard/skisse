@@ -13,6 +13,8 @@ body,
   height: 100%;
   background: #fff;
   touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .sketch[data-pans] {
@@ -84,6 +86,24 @@ body,
   pointer-events: none;
 }
 
+.label-editor {
+  position: fixed;
+  transform-origin: 0 0;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  color: #1e1e1e;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* A tab is measured and drawn as wide as a space. */
+  tab-size: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+}
+
 .toolbar {
   position: fixed;
   top: 12px;
@@ -95,6 +115,11 @@ body,
   background: #fff;
   border: 1px solid #ddd;
   border-radius: 8px;
+}
+
+.label-controls {
+  top: auto;
+  bottom: 12px;
 }
 
 .toolbar button {

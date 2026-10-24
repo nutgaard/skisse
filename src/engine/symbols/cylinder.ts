@@ -1,6 +1,6 @@
 import type { Bounds } from "../geometry";
 import { arc, close, lineTo, moveTo, type Path } from "../path";
-import { inset, labelMargin, type SymbolDefinition } from "./symbol";
+import { inset, inTheMiddle, labelMargin, type SymbolDefinition } from "./symbol";
 
 // Half the height of the lid's ellipse. It follows the width, so the lid keeps its look on a tall cylinder, but a low
 // cylinder flattens it so the body still shows.
@@ -34,7 +34,8 @@ export const cylinder: SymbolDefinition = {
   shortcut: "c",
   defaultSize: { width: 100, height: 120 },
   canBeContainer: false,
-  defaultLabelAlignment: "center",
+  labelOnly: false,
+  defaultLabelAlignment: inTheMiddle,
   outline,
   lines: (box) => [...outline(box), ...lidEdge(box)],
   // The body, below the lid and above the bottom curve.

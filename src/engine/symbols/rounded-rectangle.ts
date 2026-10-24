@@ -1,6 +1,6 @@
 import type { Bounds } from "../geometry";
 import { arc, close, lineTo, moveTo, type Path } from "../path";
-import { inset, labelMargin, type SymbolDefinition } from "./symbol";
+import { inset, labelMargin, topLeft, type SymbolDefinition } from "./symbol";
 
 // The corner radius, which stays the same at any size unless the Shape gets too small for it.
 function cornerRadius(box: Bounds): number {
@@ -32,7 +32,8 @@ export const roundedRectangle: SymbolDefinition = {
   shortcut: "u",
   defaultSize: { width: 160, height: 80 },
   canBeContainer: true,
-  defaultLabelAlignment: "topLeft",
+  labelOnly: false,
+  defaultLabelAlignment: topLeft,
   outline,
   labelArea: (box) => inset(box, labelMargin),
 };
