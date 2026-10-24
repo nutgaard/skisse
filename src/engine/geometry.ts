@@ -7,6 +7,18 @@ export type Bounds = {
   readonly height: number;
 };
 
+export function distance(a: Point, b: Point): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+/** The smallest Bounds around `points`. Expects at least one point. */
+export function boundsOfPoints(points: readonly Point[]): Bounds {
+  return boundsBetween(
+    { x: Math.min(...points.map(({ x }) => x)), y: Math.min(...points.map(({ y }) => y)) },
+    { x: Math.max(...points.map(({ x }) => x)), y: Math.max(...points.map(({ y }) => y)) },
+  );
+}
+
 export function boundsBetween(a: Point, b: Point): Bounds {
   return {
     x: Math.min(a.x, b.x),

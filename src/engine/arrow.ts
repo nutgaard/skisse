@@ -1,7 +1,7 @@
 import type { Shape, ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
-import { boundsBetween, type Bounds, type Point } from "./geometry";
+import { distance, type Point } from "./geometry";
 import { displayedBounds } from "./label";
-import { lineTo, moveTo, nearestOnPath, type Path } from "./path";
+import { nearestOnPath } from "./path";
 import { hitsOutline, shapeGeometry } from "./shape-geometry";
 import type { Style } from "./style";
 import { drawOrder } from "./tree";
@@ -36,10 +36,12 @@ export type Arrow = {
 /** An Arrow but for its ID and its place among the other Shapes, such as one still being drawn. */
 export type ArrowWithoutId = Omit<Arrow, "id" | "parent" | "z">;
 
+/** Whether the Shape is an Arrow. Every other Shape is made from a Symbol. */
 export function isArrow(shape: Shape): shape is Arrow {
   return "routing" in shape;
 }
 
+/** Whether the Shape is made from a Symbol, which every Shape but an Arrow is. */
 export function isSymbolShape(shape: Shape): shape is SymbolShape {
   return !isArrow(shape);
 }
@@ -62,28 +64,14 @@ export function endPoint(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): 
   return nearestOnPath(outline, { x: box.x + end.at.x * box.width, y: box.y + end.at.y * box.height });
 }
 
-/** The points an Arrow's path runs through, from start to end, or `undefined` when an end can't be placed. */
-export function arrowPath(sketch: Sketch, arrow: ArrowWithoutId, measure: TextMeasurer): readonly Point[] | undefined {
+/** An Arrow placed on the Sketch: where its ends are, and the points its path runs through from start to end. */
+export type ResolvedArrow = { readonly start: Point; readonly end: Point; readonly path: readonly Point[] };
+
+/** Where an Arrow is on the Sketch, or `undefined` when an end can't be placed. */
+export function resolveArrow(sketch: Sketch, arrow: ArrowWithoutId, measure: TextMeasurer): ResolvedArrow | undefined {
   const start = endPoint(sketch, arrow.start, measure);
   const end = endPoint(sketch, arrow.end, measure);
-  return start && end ? [start, end] : undefined;
-}
-
-/** A line through `points`, as a Path. */
-export function polyline(points: readonly Point[]): Path {
-  return points.map((point, index) => (index === 0 ? moveTo(point) : lineTo(point)));
-}
-
-/** The smallest Bounds around `points`. Expects at least one point. */
-export function boundsOfPoints(points: readonly Point[]): Bounds {
-  return boundsBetween(
-    { x: Math.min(...points.map(({ x }) => x)), y: Math.min(...points.map(({ y }) => y)) },
-    { x: Math.max(...points.map(({ x }) => x)), y: Math.max(...points.map(({ y }) => y)) },
-  );
-}
-
-function distance(a: Point, b: Point): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
+  return start && end ? { start, end, path: [start, end] } : undefined;
 }
 
 // The place in `ports` of the Port nearest to `point` within `reach`, if there is one.
@@ -96,8 +84,8 @@ function portWithin(ports: readonly Point[], point: Point, reach: number): numbe
 }
 
 /**
- * The Shape an Arrow end at `point` binds to: the topmost Shape under it, or with a Port within `reach` of it. Arrows
- * never bind to other Arrows.
+ * The Shape an Arrow end at `point` binds to: the topmost Shape under it, or with its outline or a Port within `reach`
+ * of it, so an end dropped on the line drawn around a Shape binds to it. Arrows never bind to other Arrows.
  */
 export function bindingTarget(
   sketch: Sketch,
@@ -109,18 +97,21 @@ export function bindingTarget(
     .filter(isSymbolShape)
     .findLast((shape) => {
       const box = displayedBounds(shape, measure);
+      const { outline, ports } = shapeGeometry(shape.symbol, box);
+      const nearOutline = nearestOnPath(outline, point);
       return (
         hitsOutline(shape.symbol, box, point) ||
-        portWithin(shapeGeometry(shape.symbol, box).ports, point, reach) !== undefined
+        (nearOutline !== undefined && distance(nearOutline, point) <= reach) ||
+        portWithin(ports, point, reach) !== undefined
       );
     });
 }
 
 /**
- * Where an Arrow end let go at `point` attaches. Within `reach` of a Port, it snaps to that Port. Elsewhere over a
- * Shape, it binds to the nearest point on the Shape's outline. Over empty space, it floats.
+ * The end an Arrow gets when it is let go at `point`. Within `reach` of a Port, it snaps to that Port. Elsewhere over
+ * a Shape, it binds to the nearest point on the Shape's outline. Over empty space, it floats.
  */
-export function attachmentAt(sketch: Sketch, point: Point, reach: number, measure: TextMeasurer): ArrowEnd {
+export function endAt(sketch: Sketch, point: Point, reach: number, measure: TextMeasurer): ArrowEnd {
   const target = bindingTarget(sketch, point, reach, measure);
   if (!target) return { kind: "floating", at: point };
   const box = displayedBounds(target, measure);

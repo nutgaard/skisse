@@ -1,7 +1,7 @@
-import { arrowPath, isArrow, polyline, type ArrowWithoutId } from "./arrow";
+import { isArrow, resolveArrow, type ArrowWithoutId } from "./arrow";
 import type { Shape, ShapeId, ShapeWithoutId, Sketch, TextMeasurer } from "./editor";
 import { labelFontFamily, shapeLayout, shareOfSpace, type ShapeLayout } from "./label";
-import { isClosed, pathData, pathPieces, pieceLength, type Path } from "./path";
+import { isClosed, pathData, pathPieces, pieceLength, polyline, type Path } from "./path";
 import { shapeGeometry } from "./shape-geometry";
 import { lineColor, shades, type Style, type StrokePattern, type StrokeWidth } from "./style";
 import { svgElement, type SvgElement } from "./svg";
@@ -79,8 +79,8 @@ export type ArrowToRender = Pick<ArrowWithoutId, "style" | "routing"> & {
   readonly path: Path;
 };
 
-/** Something to render: a Shape made from a Symbol or an Arrow. */
-export type ToRender = ShapeToRender | ArrowToRender;
+/** A Shape made from a Symbol or an Arrow, ready to render. */
+export type Renderable = ShapeToRender | ArrowToRender;
 
 /** An Arrow to render, its path resolved on `sketch`, or nothing when it can't be placed. */
 export function arrowToRender(
@@ -88,13 +88,13 @@ export function arrowToRender(
   arrow: ArrowWithoutId & { readonly id?: ShapeId },
   measure: TextMeasurer,
 ): readonly ArrowToRender[] {
-  const points = arrowPath(sketch, arrow, measure);
-  return points ? [{ id: arrow.id, style: arrow.style, routing: arrow.routing, path: polyline(points) }] : [];
+  const placed = resolveArrow(sketch, arrow, measure);
+  return placed ? [{ id: arrow.id, style: arrow.style, routing: arrow.routing, path: polyline(placed.path) }] : [];
 }
 
 /** The Shapes of `sketch` to render, in the order given, with each Arrow's path resolved. */
-export function shapesToRender(sketch: Sketch, shapes: readonly Shape[], measure: TextMeasurer): readonly ToRender[] {
-  return shapes.flatMap((shape): readonly ToRender[] =>
+export function shapesToRender(sketch: Sketch, shapes: readonly Shape[], measure: TextMeasurer): readonly Renderable[] {
+  return shapes.flatMap((shape): readonly Renderable[] =>
     isArrow(shape) ? arrowToRender(sketch, shape, measure) : [shape],
   );
 }
@@ -162,11 +162,16 @@ function renderArrow({ id, style, routing, path }: ArrowToRender): SvgElement {
 }
 
 /** The Shapes, in Sketch coordinates, in the order given. */
-export function renderShapes(shapes: readonly ToRender[], measure: TextMeasurer, options: RenderOptions): SvgElement {
+export function renderShapes(
+  shapes: readonly Renderable[],
+  measure: TextMeasurer,
+  options: RenderOptions,
+): SvgElement {
+  // An Arrow has a Routing, as it does when stored.
   return svgElement(
     "g",
     {},
-    shapes.map((shape) => ("path" in shape ? renderArrow(shape) : renderShape(shape, measure, options))),
+    shapes.map((shape) => ("routing" in shape ? renderArrow(shape) : renderShape(shape, measure, options))),
   );
 }
 

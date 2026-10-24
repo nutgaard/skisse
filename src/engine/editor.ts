@@ -1,20 +1,22 @@
 import {
-  arrowPath,
-  attachmentAt,
   bindingTarget,
-  boundsOfPoints,
+  endAt,
   isArrow,
   isSymbolShape,
+  resolveArrow,
   unbindFrom,
   type Arrow,
   type ArrowEnd,
   type ArrowWithoutId,
   type EndName,
+  type ResolvedArrow,
 } from "./arrow";
 import {
   boundsBetween,
+  boundsOfPoints,
   boundsOfSpans,
   containsBounds,
+  distance,
   enclosingBounds,
   sideOf,
   spanAtLeast,
@@ -287,16 +289,17 @@ function displayed(state: EditorState, shape: ShapeWithoutId): Bounds {
   return displayedBounds(shape, state.deps.measureText);
 }
 
-/** The points an Arrow's path runs through, as the Sketch is now. */
-export function resolvedPath(state: EditorState, arrow: ArrowWithoutId): readonly Point[] | undefined {
-  return arrowPath(state.sketch, arrow, state.deps.measureText);
+/** Where an Arrow is, as the Sketch is now. */
+export function resolved(state: EditorState, arrow: ArrowWithoutId): ResolvedArrow | undefined {
+  return resolveArrow(state.sketch, arrow, state.deps.measureText);
 }
 
-/** The smallest Bounds around a Shape as displayed, or `undefined` for an Arrow that can't be placed. */
-export function shownBounds(sketch: Sketch, shape: Shape, measure: TextMeasurer): Bounds | undefined {
+// The smallest Bounds around any Shape as displayed: one made from a Symbol grown to fit its Label, or an Arrow's path.
+// `undefined` for an Arrow that can't be placed.
+function shapeBounds(sketch: Sketch, shape: Shape, measure: TextMeasurer): Bounds | undefined {
   if (isSymbolShape(shape)) return displayedBounds(shape, measure);
-  const path = arrowPath(sketch, shape, measure);
-  return path && boundsOfPoints(path);
+  const arrow = resolveArrow(sketch, shape, measure);
+  return arrow && boundsOfPoints(arrow.path);
 }
 
 // How far, in screen pixels, from an Arrow's line a press still hits it.
@@ -306,8 +309,8 @@ const lineReach = 6;
 // line.
 function hits(state: EditorState, shape: Shape, point: Point): boolean {
   if (isSymbolShape(shape)) return hitsOutline(shape.symbol, displayed(state, shape), point);
-  const path = resolvedPath(state, shape);
-  return path !== undefined && distanceToPolyline(path, point) <= sketchDistance(state, lineReach);
+  const arrow = resolved(state, shape);
+  return arrow !== undefined && distanceToPolyline(arrow.path, point) <= sketchDistance(state, lineReach);
 }
 
 // The topmost Shape under `point` that `eligible` allows.
@@ -369,7 +372,7 @@ function settleMoved(state: EditorState, ids: readonly ShapeId[]): EditorState {
 function shapesInside(state: EditorState, box: Bounds): readonly ShapeId[] {
   return Object.values(state.sketch.shapes)
     .filter((shape) => {
-      const bounds = shownBounds(state.sketch, shape, state.deps.measureText);
+      const bounds = shapeBounds(state.sketch, shape, state.deps.measureText);
       return bounds !== undefined && containsBounds(box, bounds);
     })
     .map(({ id }) => id);
@@ -419,16 +422,17 @@ export function selectedArrow(state: EditorState): Arrow | undefined {
   return shape && isArrow(shape) ? shape : undefined;
 }
 
-/** Where the handles on the ends of the selected Arrow are. */
-export function arrowEndPositions(state: EditorState): readonly { readonly end: EndName; readonly position: Point }[] {
+/** A handle on an end of the selected Arrow, which is dragged to move that end. */
+export type ArrowEndHandleView = { readonly end: EndName; readonly position: Point };
+
+/** The handles on the ends of the one selected Shape, when it is an Arrow. */
+export function arrowEndHandles(state: EditorState): readonly ArrowEndHandleView[] {
   const arrow = selectedArrow(state);
-  const path = arrow && resolvedPath(state, arrow);
-  const start = path?.[0];
-  const end = path?.at(-1);
-  return start && end
+  const placed = arrow && resolved(state, arrow);
+  return placed
     ? [
-        { end: "start", position: start },
-        { end: "end", position: end },
+        { end: "start", position: placed.start },
+        { end: "end", position: placed.end },
       ]
     : [];
 }
@@ -452,7 +456,7 @@ function handleAt(state: EditorState, point: Point): { shape: SymbolShape; handl
 function arrowEndAt(state: EditorState, point: Point): { arrow: Arrow; end: EndName } | undefined {
   const arrow = selectedArrow(state);
   const reach = sketchDistance(state, handleReach);
-  const nearby = arrowEndPositions(state).find(
+  const nearby = arrowEndHandles(state).find(
     ({ position }) => Math.abs(position.x - point.x) <= reach && Math.abs(position.y - point.y) <= reach,
   );
   return arrow && nearby ? { arrow, end: nearby.end } : undefined;
@@ -517,7 +521,7 @@ function movesItself(shape: Shape): boolean {
   return isSymbolShape(shape) || (shape.start.kind === "floating" && shape.end.kind === "floating");
 }
 
-function moved(shape: Shape, offset: Point): Shape {
+function translateShape(shape: Shape, offset: Point): Shape {
   if (isSymbolShape(shape)) return { ...shape, bounds: translate(shape.bounds, offset) };
   const { start, end } = shape;
   return start.kind === "floating" && end.kind === "floating"
@@ -539,7 +543,7 @@ function moveShapes(sketch: Sketch, ids: readonly ShapeId[], offset: Point): Ske
         withDescendants(sketch, ids)
           .map((id) => sketch.shapes[id])
           .filter((shape) => shape !== undefined)
-          .map((shape) => [shape.id, moved(shape, offset)]),
+          .map((shape) => [shape.id, translateShape(shape, offset)]),
       ),
     },
   };
@@ -550,7 +554,7 @@ function selectionBlock(state: EditorState, sketch: Sketch, selection: readonly 
   const all = selection.flatMap((id) => {
     const shape = sketch.shapes[id];
     if (!shape || !movesItself(shape)) return [];
-    return isSymbolShape(shape) ? [shape.bounds] : (shownBounds(sketch, shape, state.deps.measureText) ?? []);
+    return isSymbolShape(shape) ? [shape.bounds] : (shapeBounds(sketch, shape, state.deps.measureText) ?? []);
   });
   return all.length === 0 ? undefined : enclosingBounds(all);
 }
@@ -632,9 +636,9 @@ function resizeShape(
 // How far, in screen pixels, from a Port an Arrow end snaps to it, so snapping feels the same at every zoom.
 const portReach = 10;
 
-/** Where an Arrow end let go at `point` attaches. */
-function attachment(state: EditorState, sketch: Sketch, point: Point): ArrowEnd {
-  return attachmentAt(sketch, point, sketchDistance(state, portReach), state.deps.measureText);
+// The end an Arrow gets when it is let go at `point` on `sketch`.
+function placedEnd(state: EditorState, sketch: Sketch, point: Point): ArrowEnd {
+  return endAt(sketch, point, sketchDistance(state, portReach), state.deps.measureText);
 }
 
 // The dragged end attaches wherever the pointer is, once the pointer has travelled past the drag threshold.
@@ -645,7 +649,7 @@ function dragArrowEnd(
   const { before, arrowId, end, current } = interaction;
   const arrow = before.shapes[arrowId];
   if (!arrow || !isArrow(arrow) || !interaction.dragged) return { ...state, sketch: before, interaction };
-  const reattached: Arrow = { ...arrow, [end]: attachment(state, before, current) };
+  const reattached: Arrow = { ...arrow, [end]: placedEnd(state, before, current) };
   return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: reattached } }, interaction };
 }
 
@@ -690,7 +694,7 @@ function pointerDown(state: EditorState, input: PointerInput): EditorState {
         ...state,
         interaction: {
           kind: "drawingArrow",
-          start: attachment(state, state.sketch, input.position),
+          start: placedEnd(state, state.sketch, input.position),
           origin: input.position,
           current: input.position,
           dragged: false,
@@ -891,7 +895,8 @@ function createShape(state: EditorState, symbol: SymbolId, bounds: Bounds): Edit
 // drawn or dragged is.
 function arrowEndBeingPlaced(state: EditorState): Point | undefined {
   const { interaction, pointer } = state;
-  if (interaction.kind === "drawingArrow" || interaction.kind === "draggingArrowEnd") return interaction.current;
+  if (interaction.kind === "drawingArrow") return interaction.current;
+  if (interaction.kind === "draggingArrowEnd") return interaction.dragged ? interaction.current : undefined;
   const hovering = isIdle(state) && state.tool === "arrow" && !state.spaceHeld;
   return hovering && pointer ? viewport.toSketch(state.viewport, pointer) : undefined;
 }
@@ -905,21 +910,25 @@ export function portTarget(state: EditorState): { shape: SymbolShape; snapsTo: n
   if (!point) return undefined;
   const shape = bindingTarget(state.sketch, point, sketchDistance(state, portReach), state.deps.measureText);
   if (!shape) return undefined;
-  const end = attachment(state, state.sketch, point);
+  const end = placedEnd(state, state.sketch, point);
   return { shape, snapsTo: end.kind === "port" ? end.port : undefined };
 }
 
-/** The Arrow that letting go of the pointer now would create, once the pointer has been dragged. */
+/**
+ * The Arrow that letting go of the pointer now would create, once the pointer has been dragged. There is none while
+ * both its ends would land on the same point, such as on the same Port, as it would not show.
+ */
 export function arrowBeingDrawn(state: EditorState): ArrowWithoutId | undefined {
   const { interaction } = state;
-  return interaction.kind === "drawingArrow" && interaction.dragged
-    ? {
-        style: state.style,
-        routing: "straight",
-        start: interaction.start,
-        end: attachment(state, state.sketch, interaction.current),
-      }
-    : undefined;
+  if (interaction.kind !== "drawingArrow" || !interaction.dragged) return undefined;
+  const arrow: ArrowWithoutId = {
+    style: state.style,
+    routing: "straight",
+    start: interaction.start,
+    end: placedEnd(state, state.sketch, interaction.current),
+  };
+  const placed = resolved(state, arrow);
+  return placed && distance(placed.start, placed.end) > 0 ? arrow : undefined;
 }
 
 // A new Arrow goes on top of the Shapes at the top level and becomes the selection, so it can be adjusted straight
@@ -944,7 +953,7 @@ function pointerUp(state: EditorState, input: PointerInput): EditorState {
       const created = createShape(finished, interaction.symbol, creationBounds(interaction));
       return { ...startEditingLabel(created, created.selection[0]), tool: "select" };
     }
-    // A click without dragging draws nothing.
+    // A click without dragging draws nothing, and the Arrow tool stays on.
     case "drawingArrow": {
       const drawn = arrowBeingDrawn(moved);
       return drawn ? { ...createArrow(finished, drawn), tool: "select" } : finished;
@@ -1127,7 +1136,7 @@ function wheel(state: EditorState, input: WheelInput): EditorState {
 
 /** The smallest Bounds around everything on the Sketch as displayed, or `undefined` when it is empty. */
 export function contentBounds(sketch: Sketch, measure: TextMeasurer): Bounds | undefined {
-  const all = Object.values(sketch.shapes).flatMap((shape) => shownBounds(sketch, shape, measure) ?? []);
+  const all = Object.values(sketch.shapes).flatMap((shape) => shapeBounds(sketch, shape, measure) ?? []);
   return all.length === 0 ? undefined : enclosingBounds(all);
 }
 

@@ -39,7 +39,7 @@ import {
 
 // An Arrow, shape-3, from the right side of shape-1 at (200,130) to the left Port of shape-2 at (300,140). It is
 // selected.
-function connected(): EditorState {
+function boundArrow(): EditorState {
   return drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 305, y: 140 });
 }
 
@@ -58,12 +58,12 @@ function drawingArrow(from: Point, to: Point): EditorState {
   return apply(twoRectangles(), selectTool("arrow"), pointerDown(from), pointerMove(to));
 }
 
-// The middle of connected()'s Arrow, on its line.
+// The middle of boundArrow()'s Arrow, on its line.
 const middleOfArrow = { x: 250, y: 135 };
 
 describe("drawing an Arrow", () => {
   test("dragging from one Shape to another binds both ends", () => {
-    expect(arrows(connected())).toEqual([
+    expect(arrows(boundArrow())).toEqual([
       {
         id: "shape-3",
         routing: "straight",
@@ -95,6 +95,24 @@ describe("drawing an Arrow", () => {
     expect(onlyArrow(state).end.binding).toEqual({ shape: "shape-2", port: 3 });
   });
 
+  test("letting go on a Shape's right edge, away from a Port, binds the end to the outline there", () => {
+    const state = drawArrow(twoRectangles(), { x: 250, y: 300 }, { x: 400, y: 115 });
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 400, y: 115 }, binding: { shape: "shape-2" } });
+  });
+
+  test("letting go just outside a Shape, within 10 screen pixels of its outline, binds the end to the outline", () => {
+    const state = drawArrow(twoRectangles(), { x: 250, y: 300 }, { x: 330, y: 188 });
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 330, y: 180 }, binding: { shape: "shape-2" } });
+  });
+
+  test("letting go further outside a Shape leaves the end floating", () => {
+    const state = drawArrow(twoRectangles(), { x: 250, y: 300 }, { x: 330, y: 192 });
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 330, y: 192 } });
+  });
+
   test("letting go over empty space leaves the end floating there", () => {
     const state = drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 250, y: 300 });
 
@@ -108,6 +126,13 @@ describe("drawing an Arrow", () => {
     expect(onlyArrow(state).end.binding).toEqual({ shape: "shape-2", port: 3 });
   });
 
+  test("an Arrow whose ends would land on the same point is not drawn", () => {
+    const state = drawArrow(twoRectangles(), { x: 195, y: 140 }, { x: 198, y: 148 });
+
+    expect(arrows(state)).toEqual([]);
+    expect(activeTool(state)).toBe("arrow");
+  });
+
   test("a click with the Arrow tool draws nothing", () => {
     const at = { x: 250, y: 300 };
     const state = apply(twoRectangles(), selectTool("arrow"), pointerDown(at), pointerUp(at));
@@ -117,8 +142,8 @@ describe("drawing an Arrow", () => {
   });
 
   test("the new Arrow is selected and the tool goes back to select", () => {
-    expect(selection(connected())).toEqual(["shape-3"]);
-    expect(activeTool(connected())).toBe("select");
+    expect(selection(boundArrow())).toEqual(["shape-3"]);
+    expect(activeTool(boundArrow())).toBe("select");
   });
 
   test("A selects the Arrow tool", () => {
@@ -176,7 +201,7 @@ describe("snapping to Ports at any zoom", () => {
 
 describe("bound ends follow their Shapes", () => {
   test("moving a Shape moves the end bound to its Port", () => {
-    const state = drag(connected(), { x: 350, y: 140 }, { x: 350, y: 240 });
+    const state = drag(boundArrow(), { x: 350, y: 140 }, { x: 350, y: 240 });
 
     expect(onlyArrow(state).path).toEqual([
       { x: 200, y: 130 },
@@ -185,7 +210,7 @@ describe("bound ends follow their Shapes", () => {
   });
 
   test("moving a Shape moves the end bound to its outline", () => {
-    const state = drag(connected(), { x: 150, y: 140 }, { x: 50, y: 140 });
+    const state = drag(boundArrow(), { x: 150, y: 140 }, { x: 50, y: 140 });
 
     expect(onlyArrow(state).start.point).toEqual({ x: 100, y: 130 });
   });
@@ -202,7 +227,7 @@ describe("bound ends follow their Shapes", () => {
   });
 
   test("an end bound to a Port stays at it when the Shape is resized", () => {
-    const shape2Selected = click(connected(), { x: 350, y: 140 });
+    const shape2Selected = click(boundArrow(), { x: 350, y: 140 });
 
     const state = drag(shape2Selected, { x: 350, y: 180 }, { x: 350, y: 260 });
 
@@ -217,20 +242,20 @@ describe("bound ends follow their Shapes", () => {
 });
 
 describe("changing an Arrow's ends", () => {
-  // connected() and a rectangle, shape-4, at (300,300)–(400,380), with the Arrow selected.
+  // boundArrow() and a rectangle, shape-4, at (300,300)–(400,380), with the Arrow selected.
   function withThirdRectangle(): EditorState {
-    return click(drawRectangle(connected(), { x: 300, y: 300 }, { x: 400, y: 380 }), middleOfArrow);
+    return click(drawRectangle(boundArrow(), { x: 300, y: 300 }, { x: 400, y: 380 }), middleOfArrow);
   }
 
   test("a selected Arrow has a handle on each end", () => {
-    expect(arrowEndHandles(connected())).toEqual([
+    expect(arrowEndHandles(boundArrow())).toEqual([
       { end: "start", position: { x: 200, y: 130 } },
       { end: "end", position: { x: 300, y: 140 } },
     ]);
   });
 
   test("an Arrow selected with other Shapes has no handles on its ends", () => {
-    expect(arrowEndHandles(click(connected(), { x: 150, y: 140 }, { shift: true }))).toEqual([]);
+    expect(arrowEndHandles(click(boundArrow(), { x: 150, y: 140 }, { shift: true }))).toEqual([]);
   });
 
   test("dragging an end onto another Shape rebinds it", () => {
@@ -247,13 +272,13 @@ describe("changing an Arrow's ends", () => {
   });
 
   test("dragging an end onto empty space unbinds it", () => {
-    const state = drag(connected(), { x: 300, y: 140 }, { x: 250, y: 300 });
+    const state = drag(boundArrow(), { x: 300, y: 140 }, { x: 250, y: 300 });
 
     expect(onlyArrow(state).end).toEqual({ point: { x: 250, y: 300 } });
   });
 
   test("dragging an end onto another Arrow leaves it floating", () => {
-    const other = drawArrow(connected(), { x: 100, y: 400 }, { x: 400, y: 400 });
+    const other = drawArrow(boundArrow(), { x: 100, y: 400 }, { x: 400, y: 400 });
     const firstSelected = click(other, middleOfArrow);
 
     const state = drag(firstSelected, { x: 300, y: 140 }, { x: 250, y: 400 });
@@ -262,29 +287,29 @@ describe("changing an Arrow's ends", () => {
   });
 
   test("shows which end is being dragged", () => {
-    const state = apply(connected(), pointerDown({ x: 300, y: 140 }), pointerMove({ x: 250, y: 300 }));
+    const state = apply(boundArrow(), pointerDown({ x: 300, y: 140 }), pointerMove({ x: 250, y: 300 }));
 
     expect(currentInteraction(state)).toEqual({ kind: "draggingArrowEnd", arrowId: "shape-3", end: "end" });
   });
 
   test("Escape while dragging an end puts it back", () => {
-    const dragging = apply(connected(), pointerDown({ x: 300, y: 140 }), pointerMove({ x: 250, y: 300 }));
+    const dragging = apply(boundArrow(), pointerDown({ x: 300, y: 140 }), pointerMove({ x: 250, y: 300 }));
 
     const state = apply(dragging, keyDown("Escape"));
 
-    expect(arrows(state)).toEqual(arrows(connected()));
+    expect(arrows(state)).toEqual(arrows(boundArrow()));
   });
 
   test("dragging an end is one undo step", () => {
-    const state = undo(drag(connected(), { x: 300, y: 140 }, { x: 250, y: 300 }));
+    const state = undo(drag(boundArrow(), { x: 300, y: 140 }, { x: 250, y: 300 }));
 
-    expect(arrows(state)).toEqual(arrows(connected()));
+    expect(arrows(state)).toEqual(arrows(boundArrow()));
   });
 });
 
 describe("deleting a bound Shape", () => {
   test("leaves the Arrow with that end floating where it was", () => {
-    const state = press(click(connected(), { x: 350, y: 140 }), "Delete");
+    const state = press(click(boundArrow(), { x: 350, y: 140 }), "Delete");
 
     expect(onlyArrow(state)).toMatchObject({
       start: { point: { x: 200, y: 130 }, binding: { shape: "shape-1" } },
@@ -294,7 +319,7 @@ describe("deleting a bound Shape", () => {
   });
 
   test("the floating end stays put when the other Shape moves", () => {
-    const deleted = press(click(connected(), { x: 350, y: 140 }), "Delete");
+    const deleted = press(click(boundArrow(), { x: 350, y: 140 }), "Delete");
 
     const state = drag(deleted, { x: 150, y: 140 }, { x: 150, y: 240 });
 
@@ -305,9 +330,9 @@ describe("deleting a bound Shape", () => {
   });
 
   test("undoing the delete binds the end again", () => {
-    const state = undo(press(click(connected(), { x: 350, y: 140 }), "Delete"));
+    const state = undo(press(click(boundArrow(), { x: 350, y: 140 }), "Delete"));
 
-    expect(arrows(state)).toEqual(arrows(connected()));
+    expect(arrows(state)).toEqual(arrows(boundArrow()));
   });
 
   test("deleting a Container leaves the Arrows bound to its children floating", () => {
@@ -334,19 +359,19 @@ describe("an Arrow is a Shape", () => {
   }
 
   test("clicking its line selects it", () => {
-    expect(selection(click(press(connected(), "Escape"), middleOfArrow))).toEqual(["shape-3"]);
+    expect(selection(click(press(boundArrow(), "Escape"), middleOfArrow))).toEqual(["shape-3"]);
   });
 
   test("clicking near its line, within 6 screen pixels, selects it", () => {
-    expect(selection(click(press(connected(), "Escape"), { x: 250, y: 141 }))).toEqual(["shape-3"]);
+    expect(selection(click(press(boundArrow(), "Escape"), { x: 250, y: 141 }))).toEqual(["shape-3"]);
   });
 
   test("clicking further from its line doesn't select it", () => {
-    expect(selection(click(press(connected(), "Escape"), { x: 250, y: 145 }))).toEqual([]);
+    expect(selection(click(press(boundArrow(), "Escape"), { x: 250, y: 145 }))).toEqual([]);
   });
 
   test("a marquee around it selects it", () => {
-    const state = drag(press(connected(), "Escape"), { x: 50, y: 50 }, { x: 450, y: 250 });
+    const state = drag(press(boundArrow(), "Escape"), { x: 50, y: 50 }, { x: 450, y: 250 });
 
     expect(selection(state)).toEqual(["shape-1", "shape-2", "shape-3"]);
   });
@@ -361,9 +386,9 @@ describe("an Arrow is a Shape", () => {
   });
 
   test("dragging it doesn't move it when an end is bound", () => {
-    const state = drag(connected(), middleOfArrow, { x: 250, y: 300 });
+    const state = drag(boundArrow(), middleOfArrow, { x: 250, y: 300 });
 
-    expect(arrows(state)).toEqual(arrows(connected()));
+    expect(arrows(state)).toEqual(arrows(boundArrow()));
   });
 
   test("the arrow keys nudge it when both ends float", () => {
@@ -374,10 +399,10 @@ describe("an Arrow is a Shape", () => {
   });
 
   test("snapping a nudge of a bound Arrow leaves it where it is", () => {
-    expect(arrows(press(connected(), "ArrowRight", { alt: true }))).toEqual(arrows(connected()));
+    expect(arrows(press(boundArrow(), "ArrowRight", { alt: true }))).toEqual(arrows(boundArrow()));
   });
 
-  test("moving it with a Shape it is bound to moves only the floating end with the Shape", () => {
+  test("moving it with a Shape it is bound to moves only the bound end, with the Shape", () => {
     const halfBound = drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 250, y: 300 });
     const bothSelected = click(halfBound, { x: 150, y: 140 }, { shift: true });
 
@@ -400,23 +425,23 @@ describe("an Arrow is a Shape", () => {
   });
 
   test("Delete removes it", () => {
-    expect(arrows(press(connected(), "Delete"))).toEqual([]);
+    expect(arrows(press(boundArrow(), "Delete"))).toEqual([]);
   });
 
   test("undoing the delete brings it back", () => {
-    expect(arrows(undo(press(connected(), "Delete")))).toEqual(arrows(connected()));
+    expect(arrows(undo(press(boundArrow(), "Delete")))).toEqual(arrows(boundArrow()));
   });
 
   test("undoing drawing it removes it", () => {
-    expect(arrows(undo(connected()))).toEqual([]);
+    expect(arrows(undo(boundArrow()))).toEqual([]);
   });
 
   test("Enter doesn't open a Label on it", () => {
-    expect(currentInteraction(press(connected(), "Enter"))).toEqual({ kind: "idle" });
+    expect(currentInteraction(press(boundArrow(), "Enter"))).toEqual({ kind: "idle" });
   });
 
   test("double-clicking it doesn't open a Label on it", () => {
-    const state = apply(press(connected(), "Escape"), { type: "doubleClick", position: middleOfArrow });
+    const state = apply(press(boundArrow(), "Escape"), { type: "doubleClick", position: middleOfArrow });
 
     expect(currentInteraction(state)).toEqual({ kind: "idle" });
   });
@@ -472,8 +497,12 @@ describe("Ports", () => {
     expect(visiblePorts(state)?.shape).toBe("shape-2");
   });
 
+  test("are not shown when an end is pressed but not dragged yet", () => {
+    expect(visiblePorts(apply(boundArrow(), pointerDown({ x: 300, y: 140 })))).toBeUndefined();
+  });
+
   test("are shown on the Shape under an end being dragged", () => {
-    const state = apply(connected(), pointerDown({ x: 300, y: 140 }), pointerMove({ x: 150, y: 150 }));
+    const state = apply(boundArrow(), pointerDown({ x: 300, y: 140 }), pointerMove({ x: 150, y: 150 }));
 
     expect(visiblePorts(state)?.shape).toBe("shape-1");
   });
@@ -487,7 +516,7 @@ describe("rendering Arrows", () => {
   });
 
   test("the export draws each Arrow's line", () => {
-    const svg = exportSvg(sketch(connected()), fixedWidthTextMeasurer);
+    const svg = exportSvg(sketch(boundArrow()), fixedWidthTextMeasurer);
 
     expect(svg).toMatch(/<g data-shape="shape-3"[^>]*><path d="M 200 130 L 300 140"/);
   });

@@ -1,12 +1,11 @@
 import { isArrow, isSymbolShape, type ArrowEnd, type EndName, type Routing } from "./arrow";
 import {
   arrowBeingDrawn,
-  arrowEndPositions,
   creationBounds,
   newShape,
   portTarget,
   resizableShape,
-  resolvedPath,
+  resolved,
   type EditorState,
   type ShapeId,
   type Sketch,
@@ -14,7 +13,7 @@ import {
 import { boundsBetween, type Bounds, type Point } from "./geometry";
 import * as history from "./history";
 import { displayedBounds, shapeLayout, type LabelLine } from "./label";
-import { arrowToRender, onScreen, renderShapes, shapesToRender, type ToRender } from "./render";
+import { arrowToRender, onScreen, renderShapes, shapesToRender, type Renderable } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
 import { shapeGeometry } from "./shape-geometry";
 import { lineColor, type FontSize, type Style } from "./style";
@@ -25,7 +24,8 @@ import type { Tool } from "./tools";
 import { childrenOf, drawOrder, drawOrderLifting } from "./tree";
 import type { Viewport } from "./viewport";
 
-export { pansOnPress } from "./editor";
+export { arrowEndHandles, pansOnPress } from "./editor";
+export type { ArrowEndHandleView } from "./editor";
 
 // What queries return about a Shape made from a Symbol. Kept apart from the stored SymbolShape so the stored model can
 // change without changing what the view and the tests see.
@@ -88,6 +88,7 @@ export type BindingView = { readonly shape: ShapeId; readonly port?: number };
 /** Where an Arrow end is, and what it is bound to, if anything. A floating end has no Binding. */
 export type ArrowEndView = { readonly point: Point; readonly binding?: BindingView };
 
+/** What queries return about an Arrow: where it is, and what its ends are bound to. */
 export type ArrowView = {
   readonly id: ShapeId;
   readonly routing: Routing;
@@ -113,17 +114,15 @@ export function arrows(state: EditorState): readonly ArrowView[] {
   return drawOrder(state.sketch)
     .filter(isArrow)
     .flatMap((arrow) => {
-      const path = resolvedPath(state, arrow);
-      const start = path?.[0];
-      const end = path?.at(-1);
-      return path && start && end
+      const placed = resolved(state, arrow);
+      return placed
         ? [
             {
               id: arrow.id,
               routing: arrow.routing,
-              start: endView(arrow.start, start),
-              end: endView(arrow.end, end),
-              path,
+              start: endView(arrow.start, placed.start),
+              end: endView(arrow.end, placed.end),
+              path: placed.path,
             },
           ]
         : [];
@@ -147,14 +146,6 @@ export function visiblePorts(state: EditorState): PortsView | undefined {
   const { shape, snapsTo } = target;
   const { ports } = shapeGeometry(shape.symbol, displayedBounds(shape, state.deps.measureText));
   return { shape: shape.id, ports, snapsTo };
-}
-
-/** A handle on an end of the selected Arrow, which is dragged to move that end. */
-export type ArrowEndHandleView = { readonly end: EndName; readonly position: Point };
-
-/** The handles on the ends of the one selected Shape, when it is an Arrow. */
-export function arrowEndHandles(state: EditorState): readonly ArrowEndHandleView[] {
-  return arrowEndPositions(state);
 }
 
 /** A Shape and the Shapes directly inside it, from bottom to top. */
@@ -303,7 +294,7 @@ export function rendering(state: EditorState): SvgElement {
   const interaction = currentInteraction(state);
   const { measureText } = state.deps;
   const arrow = arrowBeingDrawn(state);
-  const beingDrawn: readonly ToRender[] =
+  const beingDrawn: readonly Renderable[] =
     interaction.kind === "creatingShape"
       ? [newShape(interaction.symbol, interaction.bounds, state.style)]
       : arrow

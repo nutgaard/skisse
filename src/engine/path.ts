@@ -1,4 +1,4 @@
-import type { Bounds, Point } from "./geometry";
+import { distance, type Bounds, type Point } from "./geometry";
 
 /**
  * One step of a Path, in Sketch coordinates. A `move` starts a new piece, and `close` joins a piece back to its start.
@@ -28,6 +28,11 @@ export function polygon(points: readonly Point[]): Path {
     ...points.flatMap((point, index) => (index === 0 ? [moveTo(point)] : [lineTo(point)])),
     close,
   ];
+}
+
+/** An open piece through `points`, joined by straight lines. */
+export function polyline(points: readonly Point[]): Path {
+  return points.map((point, index) => (index === 0 ? moveTo(point) : lineTo(point)));
 }
 
 export function rectangle({ x, y, width, height }: Bounds): Path {
@@ -180,10 +185,6 @@ function insidePolygon(corners: readonly Point[], point: Point): boolean {
 /** Whether `point` is inside any closed piece of the Path. */
 export function insidePath(path: Path, point: Point): boolean {
   return polygons(path).some((corners) => insidePolygon(corners, point));
-}
-
-function distance(a: Point, b: Point): number {
-  return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
 // The point on the segment from `from` to `to` closest to `point`.
