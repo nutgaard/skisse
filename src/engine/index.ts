@@ -30,13 +30,21 @@ export {
   rendering,
   resizeHandles,
   selection,
+  selectionAlignment,
   selectionStyle,
   shapeStyle,
   shapes,
   sketch,
   viewport,
 } from "./queries";
-export type { HandleView, InteractionView, LabelView, SelectionStyle, ShapeView } from "./queries";
+export type {
+  HandleView,
+  InteractionView,
+  LabelView,
+  SelectionAlignment,
+  SelectionStyle,
+  ShapeView,
+} from "./queries";
 export { fills, fontSizes, palette, shades, strokePatterns, strokeWidths } from "./style";
 export type { Color, Fill, FontSize, StrokePattern, StrokeWidth, Style } from "./style";
 export type { SvgElement } from "./svg";

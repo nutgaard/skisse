@@ -34,3 +34,22 @@ test("the style panel shows the selection's style, and mixed values where the se
   await expect(black).toHaveAttribute("aria-pressed", "false");
   await expect(panel.getByRole("button", { name: "Transparent fill" })).toHaveAttribute("aria-pressed", "true");
 });
+
+test("the style panel aligns the selected Shape's Label, and has nothing to align with nothing selected", async ({
+  page,
+}) => {
+  await page.goto("./");
+  const align = page.getByRole("toolbar", { name: "Style" }).getByRole("group", { name: "Align" });
+  const left = align.getByRole("button", { name: "Align left" });
+  const right = align.getByRole("button", { name: "Align right" });
+
+  await drawRectangle(page, 200, 150);
+  await expect(left).toHaveAttribute("aria-pressed", "true");
+  await right.click();
+  await expect(right).toHaveAttribute("aria-pressed", "true");
+  await expect(left).toHaveAttribute("aria-pressed", "false");
+
+  await page.keyboard.press("Escape");
+  await expect(right).toBeDisabled();
+  await expect(right).toHaveAttribute("aria-pressed", "false");
+});

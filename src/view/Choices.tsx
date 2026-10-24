@@ -8,13 +8,15 @@ type ChoicesProps<T> = {
   /** The value chosen, or `undefined` when the selected Shapes differ. */
   readonly chosen: T | undefined;
   readonly onChoose: (value: T) => void;
+  /** Whether there is nothing to choose for, such as no Label to align with nothing selected. */
+  readonly disabled?: boolean;
 };
 
 /**
  * A button for each choice. They keep the focus where it is, so they change a Label being edited without finishing the
  * editing.
  */
-export function Choices<T extends string>({ choices, chosen, onChoose }: ChoicesProps<T>) {
+export function Choices<T extends string>({ choices, chosen, onChoose, disabled = false }: ChoicesProps<T>) {
   return choices.map((choice) => (
     <button
       key={choice.value}
@@ -22,6 +24,7 @@ export function Choices<T extends string>({ choices, chosen, onChoose }: Choices
       aria-pressed={choice.value === chosen}
       aria-label={choice.title}
       title={choice.title}
+      disabled={disabled}
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => onChoose(choice.value)}
     >

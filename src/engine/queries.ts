@@ -14,7 +14,7 @@ import { handlePositions, type ResizeHandle } from "./resize";
 import { lineColor, type FontSize, type Style } from "./style";
 import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
-import type { LabelAlignment } from "./symbols/symbol";
+import type { HorizontalAlignment, LabelAlignment, VerticalAlignment } from "./symbols/symbol";
 import type { Tool } from "./tools";
 import type { Viewport } from "./viewport";
 
@@ -96,6 +96,24 @@ export function selectionStyle(state: EditorState): SelectionStyle {
     strokeWidth: common("strokeWidth"),
     fontSize: common("fontSize"),
   };
+}
+
+/** A Label alignment as the style panel shows it, where each direction can be mixed among the selected Shapes. */
+export type SelectionAlignment = {
+  readonly horizontal: HorizontalAlignment | "mixed";
+  readonly vertical: VerticalAlignment | "mixed";
+};
+
+/**
+ * The Label alignment of the selected Shapes, each direction `mixed` where they differ, or `undefined` with nothing
+ * selected, as Shapes are created with their Symbol's own alignment.
+ */
+export function selectionAlignment(state: EditorState): SelectionAlignment | undefined {
+  const [first, ...others] = state.selection.flatMap((id) => state.sketch.shapes[id]?.label.alignment ?? []);
+  if (!first) return undefined;
+  const common = <Direction extends keyof LabelAlignment>(direction: Direction): LabelAlignment[Direction] | "mixed" =>
+    others.every((alignment) => alignment[direction] === first[direction]) ? first[direction] : "mixed";
+  return { horizontal: common("horizontal"), vertical: common("vertical") };
 }
 
 /** The Sketch as of the last finished change, leaving out any gesture still in progress. This is what to save. */

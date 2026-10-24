@@ -1,5 +1,13 @@
 import { describe, expect, test } from "vitest";
-import { canUndo, currentInteraction, labelLayout, resizeHandles, selection, shapes } from "./queries";
+import {
+  canUndo,
+  currentInteraction,
+  labelLayout,
+  resizeHandles,
+  selection,
+  selectionAlignment,
+  shapes,
+} from "./queries";
 import type { EditorState } from "./editor";
 import type { Point } from "./geometry";
 import {
@@ -486,5 +494,23 @@ describe("alignment and font size", () => {
 
     expect(labelLayout(committed, "shape-1")?.fontSize).toBe("large");
     expect(shapes(apply(committed, undoInput))).toEqual([]);
+  });
+});
+
+describe("the alignment shown for the selection", () => {
+  test("is the selected Shape's alignment", () => {
+    expect(selectionAlignment(labelledRectangle("A"))).toEqual({ horizontal: "left", vertical: "top" });
+  });
+
+  test("is mixed in each direction the selected Shapes differ in", () => {
+    const ellipse = drawLabelled(labelledRectangle("A"), "ellipse", { x: 400, y: 100 }, { x: 500, y: 200 }, "B");
+    // The rectangle's Label is at the top left, and the ellipse's now at the top centre.
+    const bothAtTop = apply(ellipse, { type: "changeLabelAlignment", alignment: { vertical: "top" } });
+
+    expect(selectionAlignment(press(bothAtTop, "a", { meta: true }))).toEqual({ horizontal: "mixed", vertical: "top" });
+  });
+
+  test("is nothing with nothing selected, as there is no Label to align", () => {
+    expect(selectionAlignment(press(labelledRectangle("A"), "Escape"))).toBeUndefined();
   });
 });
