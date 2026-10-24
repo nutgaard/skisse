@@ -16,6 +16,7 @@ import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
 import type { LabelAlignment } from "./symbols/symbol";
 import type { Tool } from "./tools";
+import { childrenOf, drawOrder, drawOrderLifting } from "./tree";
 import type { Viewport } from "./viewport";
 
 export { pansOnPress } from "./editor";
@@ -63,13 +64,25 @@ export function labelLayout(state: EditorState, id: ShapeId): LabelView | undefi
   };
 }
 
-/** Every Shape, with its Bounds as displayed: grown to fit its Label. */
+/** Every Shape, with its Bounds as displayed: grown to fit its Label. In the order drawn, from bottom to top. */
 export function shapes(state: EditorState): readonly ShapeView[] {
-  return Object.values(state.sketch.shapes).map((shape) => ({
+  return drawOrder(state.sketch).map((shape) => ({
     id: shape.id,
     symbol: shape.symbol,
     bounds: displayedBounds(shape, state.deps.measureText),
   }));
+}
+
+/** A Shape and the Shapes directly inside it, from bottom to top. */
+export type ShapeTree = { readonly id: ShapeId; readonly children: readonly ShapeTree[] };
+
+function treeInside(state: EditorState, parent: ShapeId | undefined): readonly ShapeTree[] {
+  return childrenOf(state.sketch, parent).map(({ id }) => ({ id, children: treeInside(state, id) }));
+}
+
+/** The Shapes at the top level, each with the Shapes inside it, from bottom to top. */
+export function shapeTree(state: EditorState): readonly ShapeTree[] {
+  return treeInside(state, undefined);
 }
 
 /** How a Shape is drawn, as last chosen for it. */
@@ -190,14 +203,17 @@ export function currentInteraction(state: EditorState): InteractionView {
 }
 
 /**
- * The Sketch as rendered on screen, in Sketch coordinates, including a Shape being drawn. The selection and resize
- * handles are not part of it.
+ * The Sketch as rendered on screen, in Sketch coordinates, including a Shape being drawn, and with Shapes being dragged
+ * in front. The selection and resize handles are not part of it.
  */
 export function rendering(state: EditorState): SvgElement {
   const interaction = currentInteraction(state);
   const beingDrawn: readonly ShapeToRender[] =
     interaction.kind === "creatingShape" ? [newShape(interaction.symbol, interaction.bounds, state.style)] : [];
-  return renderShapes([...Object.values(state.sketch.shapes), ...beingDrawn], state.deps.measureText, {
+  // Shapes being dragged are drawn above all the others until dropped, so they never pass behind a Shape they cross.
+  const placed =
+    interaction.kind === "moving" ? drawOrderLifting(state.sketch, state.selection) : drawOrder(state.sketch);
+  return renderShapes([...placed, ...beingDrawn], state.deps.measureText, {
     ...onScreen,
     hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,
   });

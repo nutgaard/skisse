@@ -79,6 +79,12 @@ function isSelectAll(event: KeyboardEvent) {
   return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a";
 }
 
+// Cmd/Ctrl + [ and ] move the selection one step back or forward in the editor, so the browser must not also go back or
+// forward a page.
+function isStepReorder(event: KeyboardEvent) {
+  return (event.metaKey || event.ctrlKey) && (event.key === "[" || event.key === "]");
+}
+
 // Keys typed into a text field, such as when renaming a Sketch or editing a Label, are not editor shortcuts.
 function isTyping(event: KeyboardEvent) {
   return event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
@@ -209,7 +215,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
         if (!pans(event)) return;
         event.preventDefault();
       }
-      if (isSelectAll(event) || editsLabel(event)) event.preventDefault();
+      if (isSelectAll(event) || isStepReorder(event) || editsLabel(event)) event.preventDefault();
       dispatch(keyInput("keyDown", event));
     };
     // Releases still reach the editor, so a modifier let go while typing doesn't stay held.

@@ -72,7 +72,8 @@ describe("selecting Shapes", () => {
   });
 
   test("the topmost Shape is selected where Shapes overlap", () => {
-    const overlapping = drawRectangle(twoRectangles(), { x: 150, y: 120 }, { x: 250, y: 160 });
+    // Not over shape-1's centre, which would make shape-3 a Container around it.
+    const overlapping = drawRectangle(twoRectangles(), { x: 160, y: 120 }, { x: 260, y: 160 });
 
     expect(selection(click(overlapping, { x: 170, y: 140 }))).toEqual(["shape-3"]);
   });

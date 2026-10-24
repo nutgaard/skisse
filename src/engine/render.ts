@@ -4,6 +4,7 @@ import { isClosed, pathData, pathPieces, pieceLength, type Path } from "./path";
 import { shapeGeometry } from "./shape-geometry";
 import { lineColor, shades, type Style, type StrokePattern, type StrokeWidth } from "./style";
 import { svgElement, type SvgElement } from "./svg";
+import { drawOrder } from "./tree";
 import type { HorizontalAlignment } from "./symbols/symbol";
 
 /** How a Sketch is rendered: on screen, it shows aids for editing that an export leaves out. */
@@ -135,7 +136,7 @@ export function renderShapes(
   return svgElement("g", {}, shapes.map((shape) => renderShape(shape, measure, options)));
 }
 
-/** Every Shape of the Sketch, in Sketch coordinates. */
+/** Every Shape of the Sketch, in Sketch coordinates, each Container below the Shapes inside it. */
 export function renderSketch(sketch: Sketch, measure: TextMeasurer, options: RenderOptions): SvgElement {
-  return renderShapes(Object.values(sketch.shapes), measure, options);
+  return renderShapes(drawOrder(sketch), measure, options);
 }
