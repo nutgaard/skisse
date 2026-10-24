@@ -548,4 +548,17 @@ describe("stacking order of Arrows", () => {
 
     expect(shapesIn(svgText(rendering(state)))).toEqual(["shape-1", "shape-3", "shape-4", "shape-2", "shape-5"]);
   });
+
+  test("an Arrow whose end is being dragged onto a Shape outside its Container is drawn above that Shape", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 400, y: 140 });
+
+    const state = apply(
+      withArrow,
+      selectTool("select"),
+      pointerDown({ x: 400, y: 140 }),
+      pointerMove({ x: 1000, y: 140 }),
+    );
+
+    expect(shapesIn(svgText(rendering(state)))).toEqual(["shape-1", "shape-2", "shape-3", "shape-4", "shape-5"]);
+  });
 });

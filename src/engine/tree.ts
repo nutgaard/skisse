@@ -1,5 +1,5 @@
-import { isArrow } from "./shape-kind";
 import type { Shape, ShapeId, Sketch } from "./editor";
+import { isArrow } from "./shape-kind";
 
 /** Where a Shape is among the others: in which Container, and where among its siblings. */
 export type Placement = Pick<Shape, "parent" | "z">;

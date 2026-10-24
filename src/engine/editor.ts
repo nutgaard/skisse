@@ -338,10 +338,14 @@ function shapeBounds(sketch: Sketch, shape: Shape, measure: TextMeasurer): Bound
 // How far, in screen pixels, from an Arrow's line a press still hits it.
 const lineReach = 6;
 
-// Shapes are hit-tested by their Symbol's outline, as if filled, even with a transparent fill, and Arrows by their
-// line.
+// A Shape made from a Symbol is hit-tested by its Symbol's outline, as if filled, even with a transparent fill.
+function hitsSymbolShape(shape: SymbolShape, point: Point, measure: TextMeasurer): boolean {
+  return hitsOutline(shape.symbol, displayedBounds(shape, measure), point);
+}
+
+// Arrows are hit-tested by their line.
 function hits(state: EditorState, shape: Shape, point: Point): boolean {
-  if (isSymbolShape(shape)) return hitsOutline(shape.symbol, displayed(state, shape), point);
+  if (isSymbolShape(shape)) return hitsSymbolShape(shape, point, state.deps.measureText);
   const arrow = resolved(state, shape);
   return arrow !== undefined && distanceToPolyline(arrow.path, point) <= sketchDistance(state, lineReach);
 }
@@ -377,8 +381,7 @@ function containerAt(
   eligible: (container: SymbolShape) => boolean = () => true,
 ): SymbolShape | undefined {
   return symbolShapes(drawOrder(sketch)).findLast(
-    (shape) =>
-      isContainer(shape) && eligible(shape) && hitsOutline(shape.symbol, displayedBounds(shape, measure), point),
+    (shape) => isContainer(shape) && eligible(shape) && hitsSymbolShape(shape, point, measure),
   );
 }
 

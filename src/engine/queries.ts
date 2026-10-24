@@ -304,6 +304,18 @@ export function currentInteraction(state: EditorState): InteractionView {
   }
 }
 
+// The Shapes drawn above all the others until let go. Shapes being dragged are, so they never pass behind a Shape they
+// cross, and the Arrows bound to them come along. So does an Arrow whose end is being dragged, as the end can be bound
+// to a Shape outside its Container before it joins that Shape's level on letting go. Either way, an Arrow never passes
+// behind a Shape it is bound to.
+function liftedWhileDragging(state: EditorState): readonly ShapeId[] {
+  const { interaction } = state;
+  if (interaction.kind === "draggingArrowEnd") return [interaction.arrowId];
+  if (interaction.kind !== "moving") return [];
+  const dragged = withDescendants(state.sketch, state.selection);
+  return [...dragged, ...arrowsBoundTo(state.sketch, dragged)];
+}
+
 /**
  * The Sketch as rendered on screen, in Sketch coordinates, including a Shape or Arrow being drawn, and with Shapes
  * being dragged in front. The selection, handles and Ports are not part of it.
@@ -318,13 +330,7 @@ export function rendering(state: EditorState): SvgElement {
       : arrow
         ? arrowToRender(state.sketch, arrow, measureText)
         : [];
-  // Shapes being dragged are drawn above all the others until dropped, so they never pass behind a Shape they cross.
-  // The Arrows bound to them are lifted with them, so those still never pass behind a Shape they are bound to.
-  const dragged = interaction.kind === "moving" ? withDescendants(state.sketch, state.selection) : [];
-  const placed =
-    interaction.kind === "moving"
-      ? drawOrderLifting(state.sketch, [...dragged, ...arrowsBoundTo(state.sketch, dragged)])
-      : drawOrder(state.sketch);
+  const placed = drawOrderLifting(state.sketch, liftedWhileDragging(state));
   return renderShapes([...shapesToRender(state.sketch, placed, measureText), ...beingDrawn], measureText, {
     ...onScreen,
     hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,
