@@ -88,6 +88,7 @@ body,
 
 .label-editor {
   position: fixed;
+  transform-origin: 0 0;
   box-sizing: border-box;
   margin: 0;
   padding: 0;

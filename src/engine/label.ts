@@ -51,12 +51,13 @@ function pieces(paragraph: string): readonly Piece[] {
     );
 }
 
-// Greedy wrapping: each piece goes on the current line if it fits there, and starts a new line otherwise.
+// Greedy wrapping: each piece goes on the current line if it fits there, and starts a new line otherwise. Spaces at
+// the end of a line hang past its end, as in the browser, so they never start a new line.
 function wrapParagraph(paragraph: string, fits: Fits): readonly string[] {
   return pieces(paragraph).reduce<readonly string[]>((lines, { text, afterSpace }) => {
     const current = lines.at(-1);
     const joined = current === undefined ? undefined : `${current}${afterSpace ? " " : ""}${text}`;
-    return joined !== undefined && fits(joined)
+    return joined !== undefined && fits(joined.trimEnd())
       ? [...lines.slice(0, -1), joined]
       : [...lines, ...breakWord(text, fits)];
   }, []);
@@ -84,7 +85,8 @@ function layoutIn(shape: ShapeToLayout, bounds: Bounds, measure: TextMeasurer): 
   const centred = shape.label.alignment === "center";
   const top = centred ? labelArea.y + (labelArea.height - texts.length * lineHeight) / 2 : labelArea.y;
   const lines = texts.map((text, index) => {
-    const width = measure(text, pixels);
+    // Placed by its text, leaving out the spaces that hang at its end.
+    const width = measure(text.trimEnd(), pixels);
     return {
       text,
       bounds: {

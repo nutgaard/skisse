@@ -26,10 +26,10 @@ import {
   type Input,
   type KeyInput,
   type LabelAlignment,
+  type LabelView,
   type PointerInput,
   type Size,
   type Sketch,
-  type LabelView,
   type ToolInfo,
   type Viewport,
   type WheelInput,
@@ -203,7 +203,7 @@ function LabelControls({ state, dispatch }: LabelControlsProps) {
           type="button"
           aria-pressed={option.alignment === alignment}
           onMouseDown={(event) => event.preventDefault()}
-          onClick={() => dispatch({ type: "setLabelAlignment", alignment: option.alignment })}
+          onClick={() => dispatch({ type: "changeLabelAlignment", alignment: option.alignment })}
         >
           {option.name}
         </button>

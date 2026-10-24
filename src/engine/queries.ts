@@ -1,7 +1,6 @@
 import {
   creationBounds,
-  defaultStyle,
-  emptyLabel,
+  newShape,
   resizableShape,
   type EditorState,
   type FontSize,
@@ -140,16 +139,7 @@ export function currentInteraction(state: EditorState): InteractionView {
 export function rendering(state: EditorState): SvgElement {
   const interaction = currentInteraction(state);
   const beingDrawn: readonly ShapeToRender[] =
-    interaction.kind === "creatingShape"
-      ? [
-          {
-            symbol: interaction.symbol,
-            bounds: interaction.bounds,
-            label: emptyLabel(interaction.symbol),
-            style: defaultStyle,
-          },
-        ]
-      : [];
+    interaction.kind === "creatingShape" ? [newShape(interaction.symbol, interaction.bounds)] : [];
   return renderShapes([...Object.values(state.sketch.shapes), ...beingDrawn], state.deps.measureText, {
     ...onScreen,
     hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,

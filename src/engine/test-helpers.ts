@@ -78,9 +78,14 @@ function keyboard(type: KeyInput["type"]) {
 export const keyDown = keyboard("keyDown");
 export const keyUp = keyboard("keyUp");
 
+/** Draws a Shape of `symbol` by dragging from `from` to `to`, which leaves its Label open for editing. */
+export function startDrawing(state: EditorState, symbol: SymbolId, from: Point, to: Point): EditorState {
+  return apply(state, selectTool(symbol), pointerDown(from), pointerMove(to), pointerUp(to));
+}
+
 /** Draws a Shape of `symbol` by dragging from `from` to `to`, and finishes editing its Label, leaving it empty. */
 export function drawSymbol(state: EditorState, symbol: SymbolId, from: Point, to: Point): EditorState {
-  return apply(state, selectTool(symbol), pointerDown(from), pointerMove(to), pointerUp(to), keyDown("Escape"));
+  return apply(startDrawing(state, symbol, from, to), keyDown("Escape"));
 }
 
 export function drawRectangle(state: EditorState, from: Point, to: Point): EditorState {

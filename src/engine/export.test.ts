@@ -15,9 +15,9 @@ import {
   newEditor,
   pointerDown,
   pointerMove,
-  pointerUp,
   press,
   selectTool,
+  startDrawing,
   twoRectangles,
   typeLabel,
 } from "./test-helpers";
@@ -79,7 +79,7 @@ function textElements(element: Element): readonly Element[] {
 
 // A text Shape at (100,100)–(220,140), with its Label being edited.
 function editingText(text = ""): EditorState {
-  return typeLabel(apply(newEditor(), selectTool("text"), pointerDown({ x: 100, y: 100 }), pointerUp({ x: 220, y: 140 })), text);
+  return typeLabel(startDrawing(newEditor(), "text", { x: 100, y: 100 }, { x: 220, y: 140 }), text);
 }
 
 function textShape(): EditorState {
@@ -88,8 +88,7 @@ function textShape(): EditorState {
 
 // A Shape of `symbol` at (100,100)–(300,200) with the Label `text`, and nothing selected.
 function labelled(symbol: SymbolId, text: string): EditorState {
-  const created = apply(newEditor(), selectTool(symbol), pointerDown({ x: 100, y: 100 }), pointerUp({ x: 300, y: 200 }));
-  return press(press(typeLabel(created, text), "Escape"), "Escape");
+  return press(press(typeLabel(startDrawing(newEditor(), symbol, { x: 100, y: 100 }, { x: 300, y: 200 }), text), "Escape"), "Escape");
 }
 
 // A rectangle, its Label area inset by 8 at (108,108)–(292,192), with a Label of two lines.

@@ -4,7 +4,18 @@ import type { Bounds, Point } from "./geometry";
 import { activeTool, selection, shapes } from "./queries";
 import { shapeGeometry } from "./shape-geometry";
 import { symbolDefinition, type SymbolId } from "./symbols";
-import { apply, click, newEditor, pointerDown, pointerMove, pointerUp, press, selectTool, typeLabel } from "./test-helpers";
+import {
+  apply,
+  click,
+  newEditor,
+  pointerDown,
+  pointerMove,
+  pointerUp,
+  press,
+  selectTool,
+  startDrawing,
+  typeLabel,
+} from "./test-helpers";
 
 type BuiltInSymbol = {
   readonly symbol: SymbolId;
@@ -30,12 +41,7 @@ const defaultBox: Bounds = { x: 100, y: 50, width: 160, height: 80 };
 // A Shape of the Symbol filling `box`, by default (100,50)–(260,130), with a Label so that a text Shape stays, and
 // nothing selected.
 function unselectedShape(symbol: SymbolId, box: Bounds = defaultBox): EditorState {
-  const created = apply(
-    newEditor(),
-    selectTool(symbol),
-    pointerDown({ x: box.x, y: box.y }),
-    pointerUp({ x: box.x + box.width, y: box.y + box.height }),
-  );
+  const created = startDrawing(newEditor(), symbol, { x: box.x, y: box.y }, { x: box.x + box.width, y: box.y + box.height });
   return press(press(typeLabel(created, "A"), "Escape"), "Escape");
 }
 

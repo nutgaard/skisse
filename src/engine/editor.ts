@@ -65,7 +65,7 @@ export type Input =
   | { readonly type: "commitLabel" | "cancelLabel" }
   // Change the selected Shapes.
   | { readonly type: "changeStyle"; readonly style: Partial<Style> }
-  | { readonly type: "setLabelAlignment"; readonly alignment: LabelAlignment };
+  | { readonly type: "changeLabelAlignment"; readonly alignment: LabelAlignment };
 
 export type TextMeasurer = (text: string, fontSize: number) => number;
 
@@ -84,13 +84,21 @@ export type FontSize = "small" | "medium" | "large";
 
 export type Style = { readonly fontSize: FontSize };
 
-export const defaultStyle: Style = { fontSize: "medium" };
+const defaultStyle: Style = { fontSize: "medium" };
 
 export type Label = { readonly text: string; readonly alignment: LabelAlignment };
 
-/** The Label a new Shape of `symbol` starts with: empty, and aligned as the Symbol's Labels are by default. */
-export function emptyLabel(symbol: SymbolId): Label {
-  return { text: "", alignment: symbolDefinition(symbol).defaultLabelAlignment };
+/**
+ * A new Shape of `symbol` filling `bounds`, but for its ID: with an empty Label, aligned as the Symbol's Labels are by
+ * default, and the default style.
+ */
+export function newShape(symbol: SymbolId, bounds: Bounds): Omit<SymbolShape, "id"> {
+  return {
+    symbol,
+    bounds,
+    label: { text: "", alignment: symbolDefinition(symbol).defaultLabelAlignment },
+    style: defaultStyle,
+  };
 }
 
 export type SymbolShape = {
@@ -205,14 +213,13 @@ export const emptySketch: Sketch = { shapes: {} };
 // default style.
 function withLabels(sketch: Sketch): Sketch {
   const complete = (shape: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds">): SymbolShape => ({
+    ...newShape(shape.symbol, shape.bounds),
     ...shape,
-    label: shape.label ?? emptyLabel(shape.symbol),
-    style: shape.style ?? defaultStyle,
   });
   return { ...sketch, shapes: Object.fromEntries(Object.entries(sketch.shapes).map(([id, shape]) => [id, complete(shape)])) };
 }
 
-/** A fresh editor on `sketch`, a new empty one by default. Nothing is selected and there is nothing to undo. */
+/** A fresh editor on the `saved` Sketch, a new empty one by default. Nothing is selected and there is nothing to undo. */
 export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): EditorState {
   const sketch = withLabels(saved);
   return {
@@ -380,6 +387,24 @@ function dragOffset(state: EditorState, drag: Drag, pointer: PointerState): Poin
   };
 }
 
+// A resize starts from the Shape as displayed, so its handles move the edges the user sees, and gives `resized`. The
+// Shape's own Bounds then follow it, but its Label still decides how tall it is shown:
+// - A resize that leaves the top and bottom where they were keeps the Shape's own height, so it still shrinks back
+//   when its Label does.
+// - So does one that leaves the Shape shorter than its Label needs, unless it went below its own height. The Shape is
+//   then shown as tall as its Label needs, from the top, or up from the bottom when that edge stayed put.
+function resizedOwnBounds(state: EditorState, shape: SymbolShape, resized: Bounds): Bounds {
+  const from = displayed(state, shape);
+  if (resized.y === from.y && resized.height === from.height) {
+    return { ...resized, y: shape.bounds.y, height: shape.bounds.height };
+  }
+  const shown = displayed(state, { ...shape, bounds: resized });
+  if (shown.height <= resized.height) return resized;
+  const own = { ...resized, height: Math.min(resized.height, shape.bounds.height) };
+  const bottom = resized.y + resized.height;
+  return bottom === from.y + from.height ? { ...own, y: bottom - shown.height } : own;
+}
+
 function resizeShape(
   state: EditorState,
   interaction: Extract<Interaction, { kind: "resizing" }>,
@@ -388,22 +413,12 @@ function resizeShape(
   const { before, shapeId, handle } = interaction;
   const shape = before.shapes[shapeId];
   if (!shape || !interaction.dragged) return { ...state, sketch: before, interaction };
-  // The resize starts from the Shape as displayed, so its handles move the edges the user sees. A resize that leaves
-  // the top and bottom where they were keeps the Shape's own height, so it still shrinks back when its Label does.
-  // So does one that leaves the Shape shorter than its Label needs, unless it went below its own height.
-  const from = displayed(state, shape);
-  const resized = resizeBounds(from, handle, pointerOffset(interaction, pointer), {
+  const resized = resizeBounds(displayed(state, shape), handle, pointerOffset(interaction, pointer), {
     snap: snapperFor(snapsToGrid(pointer.modifiers)),
     keepAspectRatio: pointer.modifiers.shift,
     minimumSize: minimumShapeSize,
   });
-  const labelNeedsMore = displayed(state, { ...shape, bounds: resized }).height > resized.height;
-  const bounds =
-    resized.y === from.y && resized.height === from.height
-      ? { ...resized, y: shape.bounds.y, height: shape.bounds.height }
-      : labelNeedsMore
-        ? { ...resized, height: Math.min(resized.height, shape.bounds.height) }
-        : resized;
+  const bounds = resizedOwnBounds(state, shape, resized);
   return {
     ...state,
     sketch: { ...before, shapes: { ...before.shapes, [shapeId]: { ...shape, bounds } } },
@@ -564,13 +579,7 @@ function freeIdSequence(state: EditorState, sequence: number): number {
 // A new Shape becomes the selection, so it can be adjusted straight away, and its Label opens for editing.
 function createShape(state: EditorState, symbol: SymbolId, bounds: Bounds): EditorState {
   const sequence = freeIdSequence(state, state.nextIdSequence);
-  const shape: SymbolShape = {
-    id: state.deps.generateId(sequence),
-    symbol,
-    bounds,
-    label: emptyLabel(symbol),
-    style: defaultStyle,
-  };
+  const shape: SymbolShape = { id: state.deps.generateId(sequence), ...newShape(symbol, bounds) };
   return {
     ...state,
     sketch: addShape(state.sketch, shape),
@@ -801,7 +810,7 @@ function applyInput(state: EditorState, input: Input): EditorState {
       return finishEditingLabel(state, "cancel");
     case "changeStyle":
       return changeSelected(state, (shape) => ({ ...shape, style: { ...shape.style, ...input.style } }));
-    case "setLabelAlignment":
+    case "changeLabelAlignment":
       return changeSelected(state, (shape) => ({ ...shape, label: { ...shape.label, alignment: input.alignment } }));
   }
 }

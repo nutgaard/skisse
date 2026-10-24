@@ -64,3 +64,27 @@ for (const size of ["Small text", "Medium text", "Large text"]) {
     }
   });
 }
+
+test("the Label's text field wraps as the Label does when zoomed", async ({ page }) => {
+  await page.goto("./");
+  await drawRectangle(page);
+  await page.keyboard.type(text);
+  await page.keyboard.press("Escape");
+  // Zooms out to 35%, where text set at a font size scaled by the zoom wraps differently.
+  await page.keyboard.down("Control");
+  for (let step = 0; step < 3; step++) await page.mouse.wheel(0, 50);
+  await page.keyboard.up("Control");
+  await expect(page.getByRole("button", { name: "Reset zoom to 100%" })).toHaveText("35%");
+
+  const shape = await page.locator('[data-symbol="rectangle"] path').first().boundingBox();
+  if (!shape) throw new Error("the rectangle is not drawn");
+  await page.mouse.dblclick(shape.x + shape.width / 2, shape.y + shape.height / 2);
+
+  const field = page.getByRole("textbox", { name: "Label" });
+  await expect(field).toHaveValue(text);
+  const { scrollHeight, clientHeight } = await field.evaluate((element) => ({
+    scrollHeight: element.scrollHeight,
+    clientHeight: element.clientHeight,
+  }));
+  expect(scrollHeight).toBeLessThanOrEqual(clientHeight);
+});
