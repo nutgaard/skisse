@@ -1,4 +1,4 @@
-import { isArrow, isSymbolShape, type ArrowEnd, type EndName, type Routing } from "./arrow";
+import { arrowsBoundTo, type ArrowEnd, type EndName, type Routing } from "./arrow";
 import {
   arrowBeingDrawn,
   creationBounds,
@@ -16,12 +16,13 @@ import { displayedBounds, shapeLayout, type LabelLine } from "./label";
 import { arrowToRender, onScreen, renderShapes, shapesToRender, type Renderable } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
 import { shapeGeometry } from "./shape-geometry";
+import { isArrow, isSymbolShape } from "./shape-kind";
 import { lineColor, type FontSize, type Style } from "./style";
 import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
 import type { LabelAlignment } from "./symbols/symbol";
 import type { Tool } from "./tools";
-import { childrenOf, drawOrder, drawOrderLifting } from "./tree";
+import { childrenOf, drawOrder, drawOrderLifting, withDescendants } from "./tree";
 import type { Viewport } from "./viewport";
 
 export { arrowEndHandles, middleSegmentHandle, pansOnPress } from "./editor";
@@ -303,9 +304,21 @@ export function currentInteraction(state: EditorState): InteractionView {
   }
 }
 
+// The Shapes drawn above all the others until let go. Shapes being dragged are, so they never pass behind a Shape they
+// cross, and the Arrows bound to them come along. So does an Arrow whose end is being dragged, as the end can be bound
+// to a Shape outside its Container before the Arrow joins the Container holding both its ends on letting go. Either
+// way, an Arrow never passes behind a Shape it is bound to.
+function liftedWhileDragging(state: EditorState): readonly ShapeId[] {
+  const { interaction } = state;
+  if (interaction.kind === "draggingArrowEnd") return [interaction.arrowId];
+  if (interaction.kind !== "moving") return [];
+  const dragged = withDescendants(state.sketch, state.selection);
+  return [...dragged, ...arrowsBoundTo(state.sketch, dragged)];
+}
+
 /**
  * The Sketch as rendered on screen, in Sketch coordinates, including a Shape or Arrow being drawn, and with Shapes
- * being dragged in front. The selection, handles and Ports are not part of it.
+ * being dragged, or an Arrow whose end is being dragged, in front. The selection, handles and Ports are not part of it.
  */
 export function rendering(state: EditorState): SvgElement {
   const interaction = currentInteraction(state);
@@ -317,9 +330,7 @@ export function rendering(state: EditorState): SvgElement {
       : arrow
         ? arrowToRender(state.sketch, arrow, measureText)
         : [];
-  // Shapes being dragged are drawn above all the others until dropped, so they never pass behind a Shape they cross.
-  const placed =
-    interaction.kind === "moving" ? drawOrderLifting(state.sketch, state.selection) : drawOrder(state.sketch);
+  const placed = drawOrderLifting(state.sketch, liftedWhileDragging(state));
   return renderShapes([...shapesToRender(state.sketch, placed, measureText), ...beingDrawn], measureText, {
     ...onScreen,
     hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,

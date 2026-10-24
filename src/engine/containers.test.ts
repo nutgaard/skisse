@@ -1,7 +1,23 @@
 import { describe, expect, test } from "vitest";
 import type { EditorState, ShapeId } from "./editor";
-import { selection, shapeTree, type ShapeTree } from "./queries";
-import { boundsById, click, drag, drawRectangle, drawSymbol, newEditor, press } from "./test-helpers";
+import type { Point } from "./geometry";
+import { arrows, rendering, selection, shapeTree, type ShapeTree } from "./queries";
+import { svgText } from "./svg";
+import {
+  apply,
+  boundsById,
+  click,
+  drag,
+  drawArrow,
+  drawRectangle,
+  drawSymbol,
+  drawWithLabelOpen,
+  newEditor,
+  pointerDown,
+  pointerMove,
+  press,
+  selectTool,
+} from "./test-helpers";
 
 // A Shape in the Shape tree, with the Shapes directly inside it.
 function shape(id: ShapeId, ...children: readonly ShapeTree[]): ShapeTree {
@@ -302,5 +318,247 @@ describe("undoing containment", () => {
     const drawn = drawRectangle(vpcClusterService(), { x: 850, y: -50 }, { x: 1600, y: 400 });
 
     expect(shapeTree(undo(drawn))).toEqual(shapeTree(vpcClusterService()));
+  });
+});
+
+// A VPC shape-1 at (0,0)–(800,600) with two services inside it, shape-2 at (100,100)–(200,180) and shape-3 at
+// (400,100)–(500,180), and a database shape-4 outside it at (1000,100)–(1100,180). The services' left and right
+// Ports are at (100,140), (200,140), (400,140) and (500,140), and the database's left Port at (1000,140).
+function vpcWithServices(): EditorState {
+  const vpc = drawRectangle(newEditor(), { x: 0, y: 0 }, { x: 800, y: 600 });
+  const first = drawRectangle(vpc, { x: 100, y: 100 }, { x: 200, y: 180 });
+  const second = drawRectangle(first, { x: 400, y: 100 }, { x: 500, y: 180 });
+  return drawRectangle(second, { x: 1000, y: 100 }, { x: 1100, y: 180 });
+}
+
+function pathOf(state: EditorState, id: ShapeId): readonly Point[] | undefined {
+  return arrows(state).find((arrow) => arrow.id === id)?.path;
+}
+
+describe("Arrows inside Containers", () => {
+  test("an Arrow between two services in a VPC belongs to the VPC and moves with it", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 400, y: 140 });
+
+    const moved = drag(withArrow, { x: 50, y: 50 }, { x: 150, y: 100 });
+
+    expect(shapeTree(withArrow)).toEqual([
+      shape("shape-1", shape("shape-2"), shape("shape-3"), shape("shape-5")),
+      shape("shape-4"),
+    ]);
+    expect(pathOf(moved, "shape-5")).toEqual([
+      { x: 300, y: 190 },
+      { x: 500, y: 190 },
+    ]);
+    expect(shapeTree(moved)).toEqual(shapeTree(withArrow));
+  });
+
+  test("an Arrow from a service in a VPC to a database outside it belongs to the top level", () => {
+    const state = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 1000, y: 140 });
+
+    expect(shapeTree(state)).toEqual([
+      shape("shape-1", shape("shape-2"), shape("shape-3")),
+      shape("shape-4"),
+      shape("shape-5"),
+    ]);
+  });
+
+  test("an Arrow from a service in a VPC to a floating end inside it belongs to the VPC and moves with it", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 300, y: 300 });
+
+    const moved = drag(withArrow, { x: 50, y: 50 }, { x: 150, y: 100 });
+
+    expect(shapeTree(withArrow)).toEqual([
+      shape("shape-1", shape("shape-2"), shape("shape-3"), shape("shape-5")),
+      shape("shape-4"),
+    ]);
+    expect(pathOf(moved, "shape-5")).toEqual([
+      { x: 300, y: 190 },
+      { x: 400, y: 350 },
+    ]);
+  });
+
+  test("an Arrow with both ends floating inside a VPC belongs to the VPC and moves with it", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 300, y: 300 }, { x: 600, y: 400 });
+
+    const moved = drag(withArrow, { x: 50, y: 50 }, { x: 150, y: 100 });
+
+    expect(shapeTree(withArrow)).toEqual([
+      shape("shape-1", shape("shape-2"), shape("shape-3"), shape("shape-5")),
+      shape("shape-4"),
+    ]);
+    expect(pathOf(moved, "shape-5")).toEqual([
+      { x: 400, y: 350 },
+      { x: 700, y: 450 },
+    ]);
+  });
+
+  test("an Arrow with an end floating outside every Container belongs to the top level", () => {
+    const bound = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 900, y: 300 });
+    const floating = drawArrow(bound, { x: 300, y: 300 }, { x: 900, y: 400 });
+
+    expect(shapeTree(floating)).toEqual([
+      shape("shape-1", shape("shape-2"), shape("shape-3")),
+      shape("shape-4"),
+      shape("shape-5"),
+      shape("shape-6"),
+    ]);
+  });
+
+  test("moving a bound service out of the VPC moves the Arrow to the top level", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 400, y: 140 });
+
+    const state = drag(withArrow, { x: 450, y: 160 }, { x: 950, y: 460 });
+
+    expect(shapeTree(state)).toEqual([
+      shape("shape-1", shape("shape-2")),
+      shape("shape-4"),
+      shape("shape-3"),
+      shape("shape-5"),
+    ]);
+  });
+
+  test("dragging an Arrow's end into the VPC moves the Arrow into it", () => {
+    const outside = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 900, y: 300 });
+
+    const state = drag(outside, { x: 900, y: 300 }, { x: 300, y: 300 });
+
+    expect(shapeTree(state)).toEqual([
+      shape("shape-1", shape("shape-2"), shape("shape-3"), shape("shape-5")),
+      shape("shape-4"),
+    ]);
+  });
+
+  test("a Container drawn around an Arrow's ends adopts the Arrow", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 1000, y: 140 }, { x: 1000, y: 400 });
+
+    const state = drawRectangle(withArrow, { x: 900, y: 50 }, { x: 1200, y: 500 });
+
+    expect(shapeTree(state)).toEqual([
+      shape("shape-1", shape("shape-2"), shape("shape-3")),
+      shape("shape-6", shape("shape-4"), shape("shape-5")),
+    ]);
+  });
+
+  test("a Container drawn around an Arrow's ends adopts the Arrow while its Label is still open", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 1000, y: 140 }, { x: 1000, y: 400 });
+
+    const state = drawWithLabelOpen(withArrow, "rectangle", { x: 900, y: 50 }, { x: 1200, y: 500 });
+
+    expect(shapeTree(state)).toEqual([
+      shape("shape-1", shape("shape-2"), shape("shape-3")),
+      shape("shape-6", shape("shape-4"), shape("shape-5")),
+    ]);
+  });
+
+  test("deleting the VPC deletes the Arrows it owns, and leaves those crossing its boundary with floating ends", () => {
+    const inside = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 400, y: 140 });
+    const crossing = drawArrow(inside, { x: 500, y: 140 }, { x: 1000, y: 140 });
+
+    const state = press(click(crossing, { x: 50, y: 50 }), "Delete");
+
+    expect(shapeTree(state)).toEqual([shape("shape-4"), shape("shape-6")]);
+    expect(arrows(state)).toEqual([
+      expect.objectContaining({
+        id: "shape-6",
+        start: { point: { x: 500, y: 140 } },
+        end: { point: { x: 1000, y: 140 }, binding: { shape: "shape-4", port: 3 } },
+      }),
+    ]);
+  });
+});
+
+// The Shapes in SVG text, in the order it draws them.
+function shapesIn(svg: string): readonly (string | undefined)[] {
+  return [...svg.matchAll(/data-shape="([^"]+)"/g)].map(([, id]) => id);
+}
+
+describe("stacking order of Arrows", () => {
+  test("an Arrow is drawn above the Shapes at its own level, even those drawn after it", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 400, y: 140 });
+
+    const state = drawRectangle(withArrow, { x: 100, y: 300 }, { x: 200, y: 380 });
+
+    expect(shapesIn(svgText(rendering(state)))).toEqual([
+      "shape-1",
+      "shape-2",
+      "shape-3",
+      "shape-6",
+      "shape-5",
+      "shape-4",
+    ]);
+  });
+
+  test("bringing a Shape an Arrow is bound to to the front leaves the Arrow above it", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 1000, y: 140 });
+
+    const state = press(click(withArrow, { x: 1050, y: 140 }), "]");
+
+    expect(shapesIn(svgText(rendering(state)))).toEqual(["shape-1", "shape-2", "shape-3", "shape-4", "shape-5"]);
+  });
+
+  test("sending an Arrow to the back only sends it behind the other Arrows at its level", () => {
+    const first = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 1000, y: 140 });
+    const second = drawArrow(first, { x: 900, y: 300 }, { x: 900, y: 500 });
+
+    const state = press(second, "[");
+
+    expect(shapesIn(svgText(rendering(state)))).toEqual([
+      "shape-1",
+      "shape-2",
+      "shape-3",
+      "shape-4",
+      "shape-6",
+      "shape-5",
+    ]);
+  });
+
+  test("a Shape stepping forward passes the next Shape above it, not an Arrow drawn before that Shape", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 1000, y: 140 });
+    const withShape = drawRectangle(withArrow, { x: 900, y: 300 }, { x: 1000, y: 380 });
+
+    const state = press(click(withShape, { x: 1050, y: 140 }), "]", { meta: true });
+
+    expect(shapesIn(svgText(rendering(state)))).toEqual([
+      "shape-1",
+      "shape-2",
+      "shape-3",
+      "shape-6",
+      "shape-4",
+      "shape-5",
+    ]);
+  });
+
+  test("a Container being dragged keeps the Arrows bound to the Shapes inside it above them", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 1000, y: 140 });
+
+    const state = apply(withArrow, selectTool("select"), pointerDown({ x: 50, y: 50 }), pointerMove({ x: 60, y: 60 }));
+
+    expect(shapesIn(svgText(rendering(state)))).toEqual(["shape-4", "shape-1", "shape-2", "shape-3", "shape-5"]);
+  });
+
+  test("a Shape being dragged keeps the Arrows bound to it above it", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 400, y: 140 });
+
+    const state = apply(
+      withArrow,
+      selectTool("select"),
+      pointerDown({ x: 150, y: 160 }),
+      pointerMove({ x: 160, y: 170 }),
+    );
+
+    expect(shapesIn(svgText(rendering(state)))).toEqual(["shape-1", "shape-3", "shape-4", "shape-2", "shape-5"]);
+  });
+
+  test("an Arrow whose end is being dragged onto a Shape outside its Container is drawn above that Shape", () => {
+    const withArrow = drawArrow(vpcWithServices(), { x: 200, y: 140 }, { x: 400, y: 140 });
+
+    const state = apply(
+      withArrow,
+      selectTool("select"),
+      pointerDown({ x: 400, y: 140 }),
+      pointerMove({ x: 1000, y: 140 }),
+    );
+
+    expect(shapesIn(svgText(rendering(state)))).toEqual(["shape-1", "shape-2", "shape-3", "shape-4", "shape-5"]);
   });
 });

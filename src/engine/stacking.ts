@@ -1,5 +1,5 @@
 import type { ShapeId, Sketch } from "./editor";
-import { childrenOf } from "./tree";
+import { stackedTogether, stackedWith } from "./tree";
 
 /** A new order for siblings, given from bottom to top, that moves the selected ones. */
 export type Reorder = (siblings: readonly ShapeId[], isSelected: (id: ShapeId) => boolean) => readonly ShapeId[];
@@ -33,21 +33,20 @@ export const bringForward: Reorder = (siblings, isSelected) =>
   sendBackward(siblings.toReversed(), isSelected).toReversed();
 
 /**
- * The Sketch with the Shapes of `ids` reordered by `reorder` among their siblings only, so a child stays inside its
- * Container, above it, and a Container takes its children along. Siblings already in the new order keep their
- * z-positions.
+ * The Sketch with the Shapes of `ids` reordered by `reorder` among the Shapes stacked with them only, so a child stays
+ * inside its Container, above it, a Container takes its children along, and Arrows stay above the other Shapes.
+ * Shapes already in the new order keep their z-positions.
  */
 export function restack(sketch: Sketch, ids: readonly ShapeId[], reorder: Reorder): Sketch {
-  const parents = new Set(
-    ids.flatMap((id) => {
-      const shape = sketch.shapes[id];
-      return shape ? [shape.parent] : [];
-    }),
+  const selected = ids.flatMap((id) => sketch.shapes[id] ?? []);
+  // One selected Shape of each stack, as reordering a stack moves all the selected Shapes in it at once.
+  const ofEachStack = selected.filter(
+    (shape, index) => !selected.slice(0, index).some((earlier) => stackedTogether(earlier, shape)),
   );
-  return [...parents].reduce((restacked, parent) => {
-    const siblings = childrenOf(restacked, parent).map(({ id }) => id);
-    const order = reorder(siblings, (id) => ids.includes(id));
-    if (order.every((id, index) => id === siblings[index])) return restacked;
+  return ofEachStack.reduce((restacked, shape) => {
+    const stack = stackedWith(restacked, shape).map(({ id }) => id);
+    const order = reorder(stack, (id) => ids.includes(id));
+    if (order.every((id, index) => id === stack[index])) return restacked;
     return {
       ...restacked,
       shapes: {
