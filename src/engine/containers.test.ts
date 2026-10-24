@@ -188,6 +188,12 @@ describe("drawing a Container", () => {
     expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-4", shape("shape-2", shape("shape-3"))))]);
   });
 
+  test("a Container drawn exactly over a Container adopts it", () => {
+    const state = drawRectangle(nested(), { x: 200, y: 150 }, { x: 600, y: 450 });
+
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-4", shape("shape-2", shape("shape-3"))))]);
+  });
+
   test("a Container drawn around a Container never goes inside a child sticking out of it", () => {
     // The cluster shrunk to (200,150)–(400,300), and the service widened to (350,260)–(700,340), sticking out of it.
     const shrunk = drag(click(nested(), { x: 250, y: 200 }), { x: 600, y: 450 }, { x: 400, y: 300 });

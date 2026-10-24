@@ -660,13 +660,16 @@ function freeIdSequence(state: EditorState, sequence: number): number {
     : freeIdSequence(state, sequence + 1);
 }
 
+// Whether `container`'s outline covers the centre of `other`.
+function coversCentre(state: EditorState, container: ShapeWithoutId, other: SymbolShape): boolean {
+  return hitsOutline(container.symbol, displayed(state, container), centre(displayed(state, other)));
+}
+
 // A new Container adopts the Shapes beside it whose centres it covers, and the Shapes inside them come along.
 function adoptCovered(state: EditorState, container: SymbolShape): Sketch {
   const covered = isContainer(container)
     ? childrenOf(state.sketch, container.parent).filter(
-        (shape) =>
-          shape.id !== container.id &&
-          hitsOutline(container.symbol, displayed(state, container), centre(displayed(state, shape))),
+        (shape) => shape.id !== container.id && coversCentre(state, container, shape),
       )
     : [];
   return covered.reduce(
@@ -680,15 +683,15 @@ function area({ width, height }: Bounds): number {
 }
 
 // A new Shape joins the innermost Container under its centre, on top of the Shapes there. A new Container never joins
-// a smaller one whose centre it covers, as it adopts that one instead, such as when drawn around a cluster with its
-// centre on the cluster. Nor does it join one inside it, such as a child sticking out of it.
+// one no bigger than itself whose centre it covers, as it adopts that one instead, such as when drawn around a cluster
+// with its centre on the cluster. Nor does it join a Shape inside that one, such as a child sticking out of it.
 function containerForNew(state: EditorState, shape: ShapeWithoutId): ShapeId | undefined {
   const bounds = displayed(state, shape);
-  const coversCentreOf = (other: SymbolShape): boolean => {
-    const otherBounds = displayed(state, other);
-    return area(otherBounds) < area(bounds) && hitsOutline(shape.symbol, bounds, centre(otherBounds));
-  };
-  const covered = isContainer(shape) ? Object.values(state.sketch.shapes).filter(coversCentreOf) : [];
+  const covered = isContainer(shape)
+    ? Object.values(state.sketch.shapes).filter(
+        (other) => area(displayed(state, other)) <= area(bounds) && coversCentre(state, shape, other),
+      )
+    : [];
   return containerAt(
     state,
     centre(bounds),
