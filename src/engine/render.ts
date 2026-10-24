@@ -103,7 +103,7 @@ function renderLabel(
 
 // The outline, drawn under the lines in the Shape's fill, or with none when it is transparent. A text Shape that shows
 // nothing else shows it as a faint placeholder instead.
-function outlineStyle({ fill }: Style, placeholder: boolean) {
+function outlineStyle({ fill }: Style, placeholder: boolean): SvgElement["attributes"] {
   if (placeholder) return placeholderStyle;
   return { fill: fill === "transparent" ? "none" : shades[fill].fill };
 }
