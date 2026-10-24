@@ -1,6 +1,6 @@
 import type { Bounds } from "../geometry";
 import { arc, close, ellipse, lineTo, moveTo, type Path } from "../path";
-import { centred, inset, labelMargin, type SymbolDefinition } from "./symbol";
+import { inset, inTheMiddle, labelMargin, type SymbolDefinition } from "./symbol";
 
 // A round head on top of a torso with rounded shoulders. The head stays round at any aspect ratio, so the person
 // stays recognisable when stretched.
@@ -41,7 +41,7 @@ export const person: SymbolDefinition = {
   defaultSize: { width: 80, height: 120 },
   canBeContainer: false,
   labelOnly: false,
-  defaultLabelAlignment: centred,
+  defaultLabelAlignment: inTheMiddle,
   outline,
   // The lower half of the torso, below the shoulders.
   labelArea: (box) => inset({ ...box, y: box.y + box.height / 2, height: box.height / 2 }, labelMargin),

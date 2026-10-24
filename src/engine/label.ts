@@ -81,8 +81,8 @@ function lineHeightOf(shape: ShapeWithoutId): number {
   return fontPixels[shape.style.fontSize] * lineSpacing;
 }
 
-// How much of the space left beside a Label goes before it, in each direction.
-const shareOfSpace: Readonly<Record<HorizontalAlignment | VerticalAlignment, number>> = {
+/** How much of the space left beside a Label goes before it, in each direction. */
+export const shareOfSpace: Readonly<Record<HorizontalAlignment | VerticalAlignment, number>> = {
   left: 0,
   top: 0,
   center: 0.5,
@@ -90,6 +90,16 @@ const shareOfSpace: Readonly<Record<HorizontalAlignment | VerticalAlignment, num
   right: 1,
   bottom: 1,
 };
+
+// The width a line takes up when it is aligned. As in the browser, that is its text and the spaces at its end that
+// still fit beside it, while the others hang past the end of the line.
+function alignedWidth(line: string, area: Bounds, pixels: number, measure: TextMeasurer): number {
+  const text = line.trimEnd();
+  const fitting = Array.from({ length: line.length - text.length + 1 }, (_, index) => line.length - index)
+    .map((length) => line.slice(0, length))
+    .find((withSpaces) => measure(withSpaces, pixels) <= area.width);
+  return measure(fitting ?? text, pixels);
+}
 
 function layoutIn(shape: ShapeWithoutId, bounds: Bounds, measure: TextMeasurer): ShapeLayout {
   const labelArea = symbolDefinition(shape.symbol).labelArea(bounds);
@@ -100,12 +110,11 @@ function layoutIn(shape: ShapeWithoutId, bounds: Bounds, measure: TextMeasurer):
   const blockHeight = Math.max(1, texts.length) * lineHeight;
   const top = labelArea.y + (labelArea.height - blockHeight) * shareOfSpace[vertical];
   const lines = texts.map((text, index) => {
-    // Placed by its text, leaving out the spaces that hang at its end.
     const width = measure(text.trimEnd(), pixels);
     return {
       text,
       bounds: {
-        x: labelArea.x + (labelArea.width - width) * shareOfSpace[horizontal],
+        x: labelArea.x + (labelArea.width - alignedWidth(text, labelArea, pixels, measure)) * shareOfSpace[horizontal],
         y: top + index * lineHeight,
         width,
         height: lineHeight,

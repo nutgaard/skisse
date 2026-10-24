@@ -1,6 +1,6 @@
 import type { Bounds } from "../geometry";
 import { arc, close, lineTo, moveTo, type Path } from "../path";
-import { centred, inset, labelMargin, type SymbolDefinition } from "./symbol";
+import { inset, inTheMiddle, labelMargin, type SymbolDefinition } from "./symbol";
 
 // A cylinder on its side, its lid facing right. Half the width of the lid's ellipse follows the height, as for the
 // upright cylinder.
@@ -40,7 +40,7 @@ export const horizontalCylinder: SymbolDefinition = {
   defaultSize: { width: 160, height: 80 },
   canBeContainer: false,
   labelOnly: false,
-  defaultLabelAlignment: centred,
+  defaultLabelAlignment: inTheMiddle,
   outline,
   lines: (box) => [...outline(box), ...lidEdge(box)],
   // The body, between the left end and the lid.

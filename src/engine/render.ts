@@ -1,5 +1,5 @@
 import type { ShapeId, ShapeWithoutId, Sketch, TextMeasurer } from "./editor";
-import { labelFontFamily, shapeLayout, type ShapeLayout } from "./label";
+import { labelFontFamily, shapeLayout, shareOfSpace, type ShapeLayout } from "./label";
 import { pathData } from "./path";
 import { shapeGeometry } from "./shape-geometry";
 import { svgElement, type SvgElement } from "./svg";
@@ -38,16 +38,12 @@ export type ShapeToRender = ShapeWithoutId & { readonly id?: ShapeId };
 
 // Where each line of a Label is drawn from: its start, middle or end, so it stays aligned even if the font is drawn
 // slightly wider or narrower than measured.
-const textAnchors: Readonly<Record<HorizontalAlignment, { readonly anchor: string; readonly along: number }>> = {
-  left: { anchor: "start", along: 0 },
-  center: { anchor: "middle", along: 0.5 },
-  right: { anchor: "end", along: 1 },
-};
+const textAnchors: Readonly<Record<HorizontalAlignment, string>> = { left: "start", center: "middle", right: "end" };
 
 // One text element per line, leaving out blank lines. Spaces are drawn as typed, as they were measured, except those
 // hanging at the end of a line.
 function renderLabel({ lines, fontPixels }: ShapeLayout, horizontal: HorizontalAlignment): readonly SvgElement[] {
-  const { anchor, along } = textAnchors[horizontal];
+  const along = shareOfSpace[horizontal];
   return lines.filter(({ text }) => text.trim() !== "").map(({ text, bounds }) =>
     svgElement(
       "text",
@@ -57,7 +53,7 @@ function renderLabel({ lines, fontPixels }: ShapeLayout, horizontal: HorizontalA
         "font-family": labelFontFamily,
         "font-size": fontPixels,
         fill: lineStyle.stroke,
-        "text-anchor": anchor,
+        "text-anchor": textAnchors[horizontal],
         "dominant-baseline": "central",
         "xml:space": "preserve",
       },

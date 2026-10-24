@@ -202,10 +202,23 @@ describe("wrapping a Label", () => {
     expect(lineTexts(labelledRectangle("a  b", { x: 115, y: 200 }))).toEqual(["a ", "b"]);
   });
 
-  test("places a line by its text, not by the spaces at its end", () => {
+  test("aligns a line with the spaces at its end that fit, as the browser does, though its bounds are its text's", () => {
     const state = drawLabelled(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }, "API ");
 
-    expect(labelLayout(state, "shape-1")?.lines[0]?.bounds).toEqual({ x: 185, y: 137.5, width: 30, height: 25 });
+    expect(labelLayout(state, "shape-1")?.lines[0]?.bounds).toEqual({ x: 180, y: 137.5, width: 30, height: 25 });
+  });
+
+  test.each([
+    ["Ab   ", 242, 20],
+    // Not even one of the spaces fits beside the 18 characters, so they all hang.
+    ["abcdefghijklmnopqr  ", 112, 180],
+  ])("aligns %o to the right with only the spaces at its end that fit", (text, x, width) => {
+    const state = apply(click(labelledRectangle(text), { x: 200, y: 150 }), {
+      type: "changeLabelAlignment",
+      alignment: { horizontal: "right" },
+    });
+
+    expect(labelLayout(state, "shape-1")?.lines[0]?.bounds).toMatchObject({ x, width });
   });
 
   test("keeps explicit line breaks, including empty lines", () => {

@@ -15,7 +15,7 @@ export type LabelAlignment = { readonly horizontal: HorizontalAlignment; readonl
 export const topLeft: LabelAlignment = { horizontal: "left", vertical: "top" };
 
 /** In the middle. */
-export const centred: LabelAlignment = { horizontal: "center", vertical: "middle" };
+export const inTheMiddle: LabelAlignment = { horizontal: "center", vertical: "middle" };
 
 /**
  * Everything the editor knows about one Symbol. Each geometry function gets the box the Shape fills, in Sketch

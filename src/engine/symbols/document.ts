@@ -1,6 +1,6 @@
 import type { Bounds } from "../geometry";
 import { close, lineTo, moveTo, type Path } from "../path";
-import { centred, inset, labelMargin, type SymbolDefinition } from "./symbol";
+import { inset, inTheMiddle, labelMargin, type SymbolDefinition } from "./symbol";
 
 // How far the wavy bottom edge rises above the bottom of the box at its ends.
 // It follows the height, but stays low on a narrow document so the wave doesn't turn spiky.
@@ -33,7 +33,7 @@ export const documentSymbol: SymbolDefinition = {
   defaultSize: { width: 120, height: 80 },
   canBeContainer: false,
   labelOnly: false,
-  defaultLabelAlignment: centred,
+  defaultLabelAlignment: inTheMiddle,
   outline,
   // Above the wave.
   labelArea: (box) => inset({ ...box, height: box.height - 2 * waveHeight(box) }, labelMargin),
