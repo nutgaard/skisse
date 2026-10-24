@@ -1,13 +1,26 @@
+import { isArrow } from "./arrow";
 import type { Shape, ShapeId, Sketch } from "./editor";
 
 /** Where a Shape is among the others: in which Container, and where among its siblings. */
 export type Placement = Pick<Shape, "parent" | "z">;
 
-/** The Shapes directly inside `parent`, or at the top level for `undefined`, from bottom to top. */
+/**
+ * The Shapes directly inside `parent`, or at the top level for `undefined`, from bottom to top. The Arrows are above
+ * the other Shapes, so they never pass behind a Shape they connect to.
+ */
 export function childrenOf(sketch: Sketch, parent: ShapeId | undefined): readonly Shape[] {
-  return Object.values(sketch.shapes)
+  const children = Object.values(sketch.shapes)
     .filter((shape) => shape.parent === parent)
     .sort((a, b) => a.z - b.z);
+  return [...children.filter((shape) => !isArrow(shape)), ...children.filter(isArrow)];
+}
+
+/**
+ * The Shapes stacked with `shape`, itself included, from bottom to top: the Arrows in its Container when it is an
+ * Arrow, and the other Shapes there when it isn't.
+ */
+export function stackedWith(sketch: Sketch, shape: Shape): readonly Shape[] {
+  return childrenOf(sketch, shape.parent).filter((other) => isArrow(other) === isArrow(shape));
 }
 
 /** Every Shape inside `parent`, or every Shape for `undefined`, as drawn: each just before its children. */
@@ -28,6 +41,17 @@ export function isWithin(sketch: Sketch, id: ShapeId, ancestor: ShapeId): boolea
   return id === ancestor || (parent !== undefined && isWithin(sketch, parent, ancestor));
 }
 
+// `id` and the Containers it is in, from the innermost out, ending with `undefined` for the top level.
+function enclosing(sketch: Sketch, id: ShapeId | undefined): readonly (ShapeId | undefined)[] {
+  return id === undefined ? [undefined] : [id, ...enclosing(sketch, sketch.shapes[id]?.parent)];
+}
+
+/** The innermost of `a`, `b` and the Containers they are in that holds both, or `undefined` for the top level. */
+export function innermostCommon(sketch: Sketch, a: ShapeId | undefined, b: ShapeId | undefined): ShapeId | undefined {
+  const aroundB = enclosing(sketch, b);
+  return enclosing(sketch, a).find((id) => aroundB.includes(id));
+}
+
 /** The Shapes of `ids` that are not inside another of them, as drawn. */
 export function outermost(sketch: Sketch, ids: readonly ShapeId[]): readonly ShapeId[] {
   return idsAsDrawn(
@@ -43,7 +67,7 @@ export function withDescendants(sketch: Sketch, ids: readonly ShapeId[]): readon
 
 /** In `parent`, on top of the Shapes directly inside it. */
 export function onTopIn(sketch: Sketch, parent: ShapeId | undefined): Placement {
-  return { parent, z: (childrenOf(sketch, parent).at(-1)?.z ?? -1) + 1 };
+  return { parent, z: Math.max(-1, ...childrenOf(sketch, parent).map(({ z }) => z)) + 1 };
 }
 
 /** Every Shape as drawn, but with the Shapes of `ids` and the Shapes inside them lifted above all the others. */

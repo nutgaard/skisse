@@ -4,6 +4,7 @@ import { canRedo, canUndo, labelLayout, rendering, shapeStyle, shapeTree, sketch
 import {
   apply,
   boundsById,
+  drawArrow,
   drawRectangle,
   newEditor,
   pointerDown,
@@ -126,5 +127,29 @@ describe("loading a Sketch", () => {
       { id: "shape-3", children: [] },
       { id: "shape-1", children: [{ id: "shape-2", children: [] }] },
     ]);
+  });
+
+  test("a Sketch saved before Arrows belonged to Containers opens with each Arrow in its Container", () => {
+    // A Container with two Shapes inside it, and an Arrow between them stored at the top level.
+    const container = drawRectangle(newEditor(), { x: 0, y: 0 }, { x: 600, y: 300 });
+    const first = drawRectangle(container, { x: 100, y: 100 }, { x: 200, y: 180 });
+    const second = drawRectangle(first, { x: 400, y: 100 }, { x: 500, y: 180 });
+    const drawn = sketch(drawArrow(second, { x: 200, y: 140 }, { x: 400, y: 140 }));
+    const arrow = drawn.shapes["shape-4"];
+    const saved: Sketch = { shapes: { ...drawn.shapes, "shape-4": { ...arrow!, parent: undefined, z: 1 } } };
+
+    const loaded = newEditor(saved);
+
+    expect(shapeTree(loaded)).toEqual([
+      {
+        id: "shape-1",
+        children: [
+          { id: "shape-2", children: [] },
+          { id: "shape-3", children: [] },
+          { id: "shape-4", children: [] },
+        ],
+      },
+    ]);
+    expect(canUndo(loaded)).toBe(false);
   });
 });

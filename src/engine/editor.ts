@@ -40,7 +40,16 @@ import { defaultStyle, validStyle, type Style } from "./style";
 import { symbolDefinition, type SymbolId } from "./symbols";
 import type { LabelAlignment } from "./symbols/symbol";
 import { toolOfShortcut, type Tool } from "./tools";
-import { childrenOf, drawOrder, isWithin, onTopIn, outermost, withDescendants, type Placement } from "./tree";
+import {
+  childrenOf,
+  drawOrder,
+  innermostCommon,
+  isWithin,
+  onTopIn,
+  outermost,
+  withDescendants,
+  type Placement,
+} from "./tree";
 import * as viewport from "./viewport";
 
 export type Modifiers = {
@@ -288,9 +297,11 @@ function completeShapes(sketch: Sketch): Sketch {
 
 /**
  * A fresh editor on the `saved` Sketch, a new empty one by default. Nothing is selected and there is nothing to undo.
+ * Sketches saved before Arrows belonged to Containers have every Arrow at the top level, and each joins the Container
+ * it belongs to.
  */
 export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): EditorState {
-  const sketch = completeShapes(saved);
+  const sketch = settleArrows(completeShapes(saved), deps.measureText);
   return {
     deps,
     sketch,
@@ -361,13 +372,34 @@ function symbolShapes(shapes: readonly Shape[]): readonly SymbolShape[] {
 // The innermost Container under `point` that `eligible` allows. Of overlapping Containers that are not inside each
 // other, the topmost counts as the innermost.
 function containerAt(
-  state: EditorState,
+  sketch: Sketch,
+  measure: TextMeasurer,
   point: Point,
-  eligible: (container: SymbolShape) => boolean,
+  eligible: (container: SymbolShape) => boolean = () => true,
 ): SymbolShape | undefined {
-  return symbolShapes(drawOrder(state.sketch)).findLast(
-    (shape) => isContainer(shape) && eligible(shape) && hits(state, shape, point),
+  return symbolShapes(drawOrder(sketch)).findLast(
+    (shape) =>
+      isContainer(shape) && eligible(shape) && hitsOutline(shape.symbol, displayedBounds(shape, measure), point),
   );
+}
+
+// Where an Arrow end counts as being: in the Container its Shape is in when bound, or in the innermost Container under
+// it when floating.
+function endLocation(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): ShapeId | undefined {
+  return end.kind === "floating" ? containerAt(sketch, measure, end.at)?.id : sketch.shapes[end.shape]?.parent;
+}
+
+// An Arrow belongs to the innermost Container holding both its ends, or to the top level when there is none, such as
+// when it crosses a Container's boundary.
+function arrowParent(sketch: Sketch, arrow: ArrowWithoutId, measure: TextMeasurer): ShapeId | undefined {
+  return innermostCommon(sketch, endLocation(sketch, arrow.start, measure), endLocation(sketch, arrow.end, measure));
+}
+
+// Each Arrow joins the Container it belongs to, on top of the Shapes there, unless it is in there already.
+function settleArrows(sketch: Sketch, measure: TextMeasurer): Sketch {
+  return drawOrder(sketch)
+    .filter(isArrow)
+    .reduce((settled, arrow) => moveInto(settled, arrow.id, arrowParent(settled, arrow, measure)), sketch);
 }
 
 // Moves a Shape into `parent`, on top of the Shapes already there, unless it is in there already.
@@ -385,8 +417,11 @@ function settleMoved(state: EditorState, ids: readonly ShapeId[]): EditorState {
     const shape = settled.sketch.shapes[id];
     // Arrows stay where they are among the Shapes.
     if (!shape || isArrow(shape)) return settled;
-    const container = containerAt(settled, centre(displayed(settled, shape)), (candidate) =>
-      !isWithin(settled.sketch, candidate.id, id),
+    const container = containerAt(
+      settled.sketch,
+      settled.deps.measureText,
+      centre(displayed(settled, shape)),
+      (candidate) => !isWithin(settled.sketch, candidate.id, id),
     );
     return { ...settled, sketch: moveInto(settled.sketch, id, container?.id) };
   }, state);
@@ -584,15 +619,18 @@ function translateEnd(end: ArrowEnd, offset: Point): ArrowEnd {
   return end.kind === "floating" ? { ...end, at: translatePoint(end.at, offset) } : end;
 }
 
-function translateShape(shape: Shape, offset: Point): Shape {
+// An Arrow carried along inside a moved Container moves its floating ends, as its bound ends follow Shapes that move
+// with it too.
+function translateShape(shape: Shape, offset: Point, carried: boolean): Shape {
   if (isSymbolShape(shape)) return { ...shape, bounds: translate(shape.bounds, offset) };
-  return movesItself(shape)
+  return carried || movesItself(shape)
     ? { ...shape, start: translateEnd(shape.start, offset), end: translateEnd(shape.end, offset) }
     : shape;
 }
 
 // The Shapes inside them come along.
 function moveShapes(sketch: Sketch, ids: readonly ShapeId[], offset: Point): Sketch {
+  const carried = (id: ShapeId) => ids.some((ancestor) => ancestor !== id && isWithin(sketch, id, ancestor));
   return {
     ...sketch,
     shapes: {
@@ -601,7 +639,7 @@ function moveShapes(sketch: Sketch, ids: readonly ShapeId[], offset: Point): Ske
         withDescendants(sketch, ids)
           .map((id) => sketch.shapes[id])
           .filter((shape) => shape !== undefined)
-          .map((shape) => [shape.id, translateShape(shape, offset)]),
+          .map((shape) => [shape.id, translateShape(shape, offset, carried(shape.id))]),
       ),
     },
   };
@@ -972,21 +1010,24 @@ function containerForNew(state: EditorState, shape: ShapeWithoutId): ShapeId | u
       )
     : [];
   return containerAt(
-    state,
+    state.sketch,
+    state.deps.measureText,
     centre(bounds),
     (candidate) => !covered.some(({ id }) => isWithin(state.sketch, candidate.id, id)),
   )?.id;
 }
 
-// A new Shape becomes the selection, so it can be adjusted straight away, and its Label opens for editing.
+// A new Shape becomes the selection, so it can be adjusted straight away, and its Label opens for editing. A new
+// Container takes in the Arrows it now holds both ends of straight away, rather than once its Label is finished.
 function createShape(state: EditorState, symbol: SymbolId, bounds: Bounds): EditorState {
   const sequence = freeIdSequence(state, state.nextIdSequence);
   const drawn = newShape(symbol, bounds, state.style);
   const parent = containerForNew(state, drawn);
   const shape: SymbolShape = { id: state.deps.generateId(sequence), ...onTopIn(state.sketch, parent), ...drawn };
+  const adopted = adoptCovered({ ...state, sketch: addShape(state.sketch, shape) }, shape);
   return {
     ...state,
-    sketch: adoptCovered({ ...state, sketch: addShape(state.sketch, shape) }, shape),
+    sketch: settleArrows(adopted, state.deps.measureText),
     selection: [shape.id],
     nextIdSequence: sequence + 1,
   };
@@ -1037,11 +1078,12 @@ export function arrowBeingDrawn(state: EditorState): ArrowWithoutId | undefined 
   return resolvedArrow && distance(resolvedArrow.start, resolvedArrow.end) > 0 ? arrow : undefined;
 }
 
-// A new Arrow goes on top of the Shapes at the top level and becomes the selection, so it can be adjusted straight
-// away.
+// A new Arrow goes on top of the Shapes in the Container it belongs to and becomes the selection, so it can be adjusted
+// straight away.
 function createArrow(state: EditorState, drawn: ArrowWithoutId): EditorState {
   const sequence = freeIdSequence(state, state.nextIdSequence);
-  const arrow: Arrow = { id: state.deps.generateId(sequence), ...onTopIn(state.sketch, undefined), ...drawn };
+  const parent = arrowParent(state.sketch, drawn, state.deps.measureText);
+  const arrow: Arrow = { id: state.deps.generateId(sequence), ...onTopIn(state.sketch, parent), ...drawn };
   return {
     ...state,
     sketch: addShape(state.sketch, arrow),
@@ -1328,11 +1370,15 @@ function applyInput(state: EditorState, input: Input): EditorState {
 // A change to the Sketch is recorded once the editor is idle again, so a whole gesture, or any longer interaction,
 // is one step, and a cancelled one, which puts the Sketch back, records nothing. Offsets that the change made no longer
 // fit their elbow paths are dropped then, so they stay dropped, even if the Shapes move back. Until then, such as while
-// the Shapes are still being dragged, the paths only leave them out.
+// the Shapes are still being dragged, the paths only leave them out. Each Arrow also joins the Container it now belongs
+// to then, whatever the change was, such as a move, a dragged end, a delete or a resize.
 export function update(state: EditorState, input: Input): EditorState {
   const next = applyInput(state, input);
   if (!isIdle(next)) return next;
+  const { measureText } = next.deps;
   const sketch =
-    next.sketch === next.history.present ? next.sketch : withoutStaleOffsets(next.sketch, next.deps.measureText);
+    next.sketch === next.history.present
+      ? next.sketch
+      : settleArrows(withoutStaleOffsets(next.sketch, measureText), measureText);
   return { ...next, sketch, history: history.record(next.history, sketch) };
 }
