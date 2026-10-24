@@ -187,6 +187,8 @@ export function displayedBounds(shape: ShapeWithoutId, measure: TextMeasurer): B
 
 /** An Arrow's Label as displayed, centred on its point on the Arrow's path. */
 export type ArrowLabelLayout = {
+  /** The point the Label is centred on. */
+  readonly at: Point;
   /** Where the lines go together, with room to spare on either side for a caret. At least one line high. */
   readonly textBlock: Bounds;
   readonly fontPixels: number;
@@ -220,5 +222,5 @@ export function arrowLabelLayout(text: string, fontSize: FontSize, at: Point, me
   const textBlock = { x: at.x - width / 2, y: top, width, height: Math.max(1, typed.length) * lineHeight };
   const gap =
     text.trim() === "" ? undefined : expandBounds(enclosingBounds(lines.map(({ bounds }) => bounds)), gapPadding);
-  return { textBlock, fontPixels: pixels, lineHeight, lines, gap };
+  return { at, textBlock, fontPixels: pixels, lineHeight, lines, gap };
 }

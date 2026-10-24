@@ -154,7 +154,7 @@ describe("loading a Sketch", () => {
     expect(canUndo(loaded)).toBe(false);
   });
 
-  test("a Sketch saved before Arrows had heads and Labels opens with an arrow at the end of each Arrow, and an empty Label halfway along", () => {
+  test("a Sketch saved before Arrows had heads and Labels gives each an arrow at its end and an empty Label", () => {
     const drawn = sketch(drawArrow(twoRectangles(), { x: 200, y: 140 }, { x: 300, y: 140 }));
     const { heads, label, ...arrow } = drawn.shapes["shape-3"] as Arrow;
     const saved = { shapes: { ...drawn.shapes, "shape-3": arrow } } as unknown as Sketch;

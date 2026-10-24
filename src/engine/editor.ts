@@ -4,7 +4,6 @@ import {
   defaultHeads,
   clearAlong,
   endLetGoAt,
-  labelPoint,
   layoutArrowLabel,
   newArrowLabel,
   resolveArrow,
@@ -371,7 +370,12 @@ function hitsSymbolShape(shape: SymbolShape, point: Point, measure: TextMeasurer
 
 // Whether `point` is on the Arrow's Label, as far as the gap around it in the line reaches, on the Arrow's path as
 // resolved.
-function onArrowLabel(arrow: ArrowWithoutId, resolvedArrow: ResolvedArrow, point: Point, measure: TextMeasurer): boolean {
+function onArrowLabel(
+  arrow: ArrowWithoutId,
+  resolvedArrow: ResolvedArrow,
+  point: Point,
+  measure: TextMeasurer,
+): boolean {
   const { gap } = layoutArrowLabel(arrow, resolvedArrow, measure);
   return gap !== undefined && contains(gap, point);
 }
@@ -847,12 +851,14 @@ function dragArrowLabel(
   const resolvedArrow = arrow && resolveArrow(before, arrow, state.deps.measureText);
   if (!arrow || !resolvedArrow || !interaction.dragged) return { ...state, sketch: before, interaction };
   const { measureText } = state.deps;
-  const target = translatePoint(labelPoint(arrow, resolvedArrow, measureText), pointerOffset(interaction, pointer));
-  // A path with no length has nowhere along it to go, so the Label keeps its share for when it has one again.
+  const shown = layoutArrowLabel(arrow, resolvedArrow, measureText).at;
+  const target = translatePoint(shown, pointerOffset(interaction, pointer));
+  // A path with no length has nowhere along it to go, so the Label keeps its share for when it has one again. Nor has a
+  // path with no room for the Label clear of its ends, and the Label then keeps the share it was put at.
   const along = shareAlongPolyline(resolvedArrow.path, target) ?? arrow.label.along;
   const replaced: Arrow = {
     ...arrow,
-    label: { ...arrow.label, along: clearAlong(arrow, resolvedArrow, along, measureText) },
+    label: { ...arrow.label, along: clearAlong(arrow, resolvedArrow, along, measureText) ?? along },
   };
   return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: replaced } }, interaction };
 }

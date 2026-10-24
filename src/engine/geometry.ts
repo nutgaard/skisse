@@ -19,6 +19,13 @@ export function distanceToBounds(bounds: Bounds, point: Point): number {
   return Math.hypot(dx, dy);
 }
 
+/** How far apart `a` and `b` are at their nearest, or 0 when they overlap. */
+export function distanceBetweenBounds(a: Bounds, b: Bounds): number {
+  const dx = Math.max(a.x - (b.x + b.width), 0, b.x - (a.x + a.width));
+  const dy = Math.max(a.y - (b.y + b.height), 0, b.y - (a.y + a.height));
+  return Math.hypot(dx, dy);
+}
+
 /** The smallest Bounds around `points`. Expects at least one point. */
 export function boundsOfPoints(points: readonly Point[]): Bounds {
   return boundsBetween(

@@ -1,6 +1,5 @@
 import {
   arrowsBoundTo,
-  labelPoint,
   layoutArrowLabel,
   type ArrowEnd,
   type Arrowhead,
@@ -155,7 +154,8 @@ export function arrows(state: EditorState): readonly ArrowView[] {
     .filter(isArrow)
     .flatMap((arrow) => {
       const resolvedArrow = resolved(state, arrow);
-      return resolvedArrow
+      const layout = resolvedArrow && layoutArrowLabel(arrow, resolvedArrow, state.deps.measureText);
+      return resolvedArrow && layout
         ? [
             {
               id: arrow.id,
@@ -164,11 +164,7 @@ export function arrows(state: EditorState): readonly ArrowView[] {
               end: endView(arrow.end, resolvedArrow.end),
               heads: arrow.heads,
               path: resolvedArrow.path,
-              label: {
-                ...arrow.label,
-                at: labelPoint(arrow, resolvedArrow, state.deps.measureText),
-                gap: layoutArrowLabel(arrow, resolvedArrow, state.deps.measureText).gap,
-              },
+              label: { ...arrow.label, at: layout.at, gap: layout.gap },
             },
           ]
         : [];
