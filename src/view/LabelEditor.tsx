@@ -28,7 +28,7 @@ export function LabelEditor({ label, viewport, dispatch }: LabelEditorProps) {
     field.current?.select();
   }, []);
 
-  const { textBlock, alignment, lineHeight, fontPixels, text } = label;
+  const { textBlock, alignment, lineHeight, fontPixels, color, text } = label;
   const { zoom } = viewport;
 
   return (
@@ -50,6 +50,7 @@ export function LabelEditor({ label, viewport, dispatch }: LabelEditorProps) {
         fontSize: fontPixels,
         lineHeight: `${lineHeight}px`,
         textAlign: alignment.horizontal,
+        color,
       }}
       onChange={(event) => dispatch({ type: "changeLabelText", text: event.target.value })}
       onKeyDown={(event) => {

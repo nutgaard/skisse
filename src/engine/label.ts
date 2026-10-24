@@ -1,5 +1,6 @@
-import type { FontSize, ShapeWithoutId, TextMeasurer } from "./editor";
+import type { ShapeWithoutId, TextMeasurer } from "./editor";
 import type { Bounds } from "./geometry";
+import type { FontSize } from "./style";
 import { symbolDefinition } from "./symbols";
 import type { HorizontalAlignment, VerticalAlignment } from "./symbols/symbol";
 

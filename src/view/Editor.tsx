@@ -14,6 +14,8 @@ import {
   rendering,
   resizeHandles,
   selection,
+  selectionAlignment,
+  selectionStyle,
   shapes,
   sketch,
   symbolIcon,
@@ -21,17 +23,11 @@ import {
   update,
   viewport,
   type Dependencies,
-  type EditorState,
-  type FontSize,
-  type HorizontalAlignment,
-  type Input,
   type KeyInput,
-  type LabelView,
   type PointerInput,
   type Size,
   type Sketch,
   type ToolInfo,
-  type VerticalAlignment,
   type Viewport,
   type WheelInput,
 } from "../engine";
@@ -39,6 +35,7 @@ import { useAutosave } from "./autosave";
 import { downloadPng, downloadSvg } from "./download";
 import { keyInput, modifiersOf } from "./inputs";
 import { LabelEditor } from "./LabelEditor";
+import { StylePanel } from "./StylePanel";
 import { SvgElementView } from "./SvgElementView";
 
 function pointerInput(type: PointerInput["type"], event: PointerEvent): PointerInput {
@@ -165,88 +162,6 @@ function ToolButton({ info, active, onSelect }: ToolButtonProps) {
         info.name
       )}
     </button>
-  );
-}
-
-// One of a few values to choose, as a button: its short name, and what it does in full.
-type Choice<T> = { readonly value: T; readonly name: string; readonly title: string };
-
-const horizontalAlignments: readonly Choice<HorizontalAlignment>[] = [
-  { value: "left", name: "Left", title: "Align left" },
-  { value: "center", name: "Centre", title: "Align centre" },
-  { value: "right", name: "Right", title: "Align right" },
-];
-
-const verticalAlignments: readonly Choice<VerticalAlignment>[] = [
-  { value: "top", name: "Top", title: "Align top" },
-  { value: "middle", name: "Middle", title: "Align middle" },
-  { value: "bottom", name: "Bottom", title: "Align bottom" },
-];
-
-const fontSizes: readonly Choice<FontSize>[] = [
-  { value: "small", name: "S", title: "Small text" },
-  { value: "medium", name: "M", title: "Medium text" },
-  { value: "large", name: "L", title: "Large text" },
-];
-
-type ChoicesProps<T> = {
-  readonly choices: readonly Choice<T>[];
-  /** The value chosen, or `undefined` when the selected Shapes differ. */
-  readonly chosen: T | undefined;
-  readonly onChoose: (value: T) => void;
-};
-
-// The buttons keep the focus where it is, so they change a Label being edited without finishing the editing.
-function Choices<T extends string>({ choices, chosen, onChoose }: ChoicesProps<T>) {
-  return choices.map((choice) => (
-    <button
-      key={choice.value}
-      type="button"
-      aria-pressed={choice.value === chosen}
-      aria-label={choice.title}
-      title={choice.title}
-      onMouseDown={(event) => event.preventDefault()}
-      onClick={() => onChoose(choice.value)}
-    >
-      {choice.name}
-    </button>
-  ));
-}
-
-// What the selected Shapes' Labels have in common, such as their font size, or `undefined` when they differ.
-function commonToSelection<T>(state: EditorState, of: (label: LabelView) => T): T | undefined {
-  const values = new Set(selection(state).flatMap((id) => {
-    const label = labelLayout(state, id);
-    return label ? [of(label)] : [];
-  }));
-  return values.size === 1 ? [...values][0] : undefined;
-}
-
-type LabelControlsProps = { readonly state: EditorState; readonly dispatch: (input: Input) => void };
-
-// Shown while Shapes are selected.
-function LabelControls({ state, dispatch }: LabelControlsProps) {
-  if (selection(state).length === 0) return null;
-  return (
-    <div className="toolbar label-controls" role="toolbar" aria-label="Label">
-      <Choices
-        choices={horizontalAlignments}
-        chosen={commonToSelection(state, (label) => label.alignment.horizontal)}
-        onChoose={(horizontal) => dispatch({ type: "changeLabelAlignment", alignment: { horizontal } })}
-      />
-      <span className="toolbar-separator" />
-      <Choices
-        choices={verticalAlignments}
-        chosen={commonToSelection(state, (label) => label.alignment.vertical)}
-        onChoose={(vertical) => dispatch({ type: "changeLabelAlignment", alignment: { vertical } })}
-      />
-      <span className="toolbar-separator" />
-      <Choices
-        choices={fontSizes}
-        chosen={commonToSelection(state, (label) => label.fontSize)}
-        onChoose={(fontSize) => dispatch({ type: "changeStyle", style: { fontSize } })}
-      />
-    </div>
   );
 }
 
@@ -399,7 +314,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
         </svg>
         {editedLabel && <LabelEditor label={editedLabel} viewport={view} dispatch={dispatch} />}
       </div>
-      <LabelControls state={state} dispatch={dispatch} />
+      <StylePanel style={selectionStyle(state)} alignment={selectionAlignment(state)} dispatch={dispatch} />
       <div ref={toolbarRef} className="toolbar" role="toolbar">
         {tools.map((info) => (
           <ToolButton

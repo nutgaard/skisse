@@ -5,7 +5,8 @@ import { fixedWidthTextMeasurer } from "./fakes";
 import { labelFontFamily } from "./label";
 import { rendering, sketch } from "./queries";
 import { svgText } from "./svg";
-import type { SymbolId } from "./symbols";
+import type { Style } from "./style";
+import { symbolIds, type SymbolId } from "./symbols";
 import {
   apply,
   click,
@@ -87,9 +88,10 @@ function textShape(): EditorState {
   return press(editingText("Title"), "Escape");
 }
 
-// A Shape of `symbol` at (100,100)–(300,200) with the Label `text`, and nothing selected.
-function labelled(symbol: SymbolId, text: string): EditorState {
-  return press(drawLabelled(newEditor(), symbol, { x: 100, y: 100 }, { x: 300, y: 200 }, text), "Escape");
+// A Shape of `symbol` at (100,100)–(300,200) with the Label `text`, in `style`, and nothing selected.
+function labelled(symbol: SymbolId, text: string, style: Partial<Style> = {}): EditorState {
+  const chosen = apply(newEditor(), { type: "changeStyle", style });
+  return press(drawLabelled(chosen, symbol, { x: 100, y: 100 }, { x: 300, y: 200 }, text), "Escape");
 }
 
 // A rectangle, its Label area inset by 8 at (108,108)–(292,192), with a Label of two lines.
@@ -255,7 +257,133 @@ describe("SVG export", () => {
   });
 });
 
+// A Shape of `symbol` at (100,100)–(300,200) in `style`, with the Label "API", and nothing selected.
+function styled(style: Partial<Style>, symbol: SymbolId = "rectangle"): EditorState {
+  return labelled(symbol, "API", style);
+}
+
+// The one Shape of the export, its outline (drawn first, as the fill), the pieces of its lines and its Label.
+function styledParts(state: EditorState) {
+  const [shape] = shapeElements(exported(state));
+  if (!shape) throw new Error("the Sketch exported no Shape");
+  const [outline] = shape.children;
+  return { outline: outline?.attributes ?? {}, lines: strokedElements(shape), text: textElements(shape) };
+}
+
+function dashes(element: Element): readonly number[] {
+  return (element.attributes["stroke-dasharray"] ?? "").split(" ").filter(Boolean).map(Number);
+}
+
+describe("styles in the SVG export", () => {
+  test("draws a Shape's lines and its Label in its stroke colour", () => {
+    const black = styledParts(styled({}));
+    const red = styledParts(styled({ strokeColor: "red" }));
+
+    const colours = (parts: ReturnType<typeof styledParts>) => [
+      ...parts.lines.map(({ attributes }) => attributes.stroke),
+      ...parts.text.map(({ attributes }) => attributes.fill),
+    ];
+    expect(new Set(colours(red)).size).toBe(1);
+    expect(colours(red)[0]).toMatch(/^#/);
+    expect(colours(red)[0]).not.toBe(colours(black)[0]);
+  });
+
+  test("fills the outline with the fill colour, and a transparent one with nothing", () => {
+    expect(styledParts(styled({})).outline.fill).toBe("none");
+    expect(styledParts(styled({ fill: "blue" })).outline.fill).toMatch(/^#/);
+    expect(styledParts(styled({ fill: "blue" })).outline.stroke ?? "none").toBe("none");
+  });
+
+  test("fills a Shape lighter than its lines in the same colour, so its Label stays readable", () => {
+    const { outline, lines } = styledParts(styled({ strokeColor: "blue", fill: "blue" }));
+
+    expect(outline.fill).not.toBe(lines[0]?.attributes.stroke);
+  });
+
+  test("draws thick lines wider than thin ones", () => {
+    const width = (style: Partial<Style>) => Number(styledParts(styled(style)).lines[0]?.attributes["stroke-width"]);
+
+    expect(width({ strokeWidth: "thick" })).toBeGreaterThan(width({ strokeWidth: "thin" }));
+  });
+
+  test("draws solid lines without dashes", () => {
+    for (const line of styledParts(styled({ strokeWidth: "thick" })).lines) {
+      expect(line.attributes["stroke-dasharray"]).toBeUndefined();
+    }
+  });
+
+  test.each(["dashed", "dotted"] as const)(
+    "draws every piece of every Symbol's lines %s",
+    (strokePattern) => {
+      for (const symbol of symbolIds.filter((id) => id !== "text")) {
+        const { lines } = styledParts(styled({ strokePattern }, symbol));
+        expect(lines.length).toBeGreaterThan(0);
+        for (const line of lines) expect(dashes(line)).toHaveLength(2);
+      }
+    },
+  );
+
+  test("draws dots as round dots, and dashes and dots with round ends", () => {
+    const [dotted] = styledParts(styled({ strokePattern: "dotted" })).lines;
+    const [dashed] = styledParts(styled({ strokePattern: "dashed" })).lines;
+
+    expect(dashes(dotted!)[0]).toBe(0);
+    expect(dashes(dashed!)[0]).toBeGreaterThan(0);
+    expect(dotted?.attributes["stroke-linecap"]).toBe("round");
+    expect(dashed?.attributes["stroke-linecap"]).toBe("round");
+  });
+
+  test.each(["dashed", "dotted"] as const)(
+    "fits a whole number of %s steps around a closed outline, so no step is cut short where it closes",
+    (strokePattern) => {
+      // The rectangle is 200 by 100, so its outline is 600 long.
+      const [line] = styledParts(styled({ strokePattern })).lines;
+      const [dash = 0, gap = 0] = dashes(line!);
+
+      const steps = 600 / (dash + gap);
+
+      expect(steps).toBeCloseTo(Math.round(steps), 6);
+    },
+  );
+
+  test("spaces the dashes of thick lines further apart than those of thin ones", () => {
+    const step = (style: Partial<Style>) => {
+      const [dash = 0, gap = 0] = dashes(styledParts(styled(style)).lines[0]!);
+      return dash + gap;
+    };
+
+    expect(step({ strokePattern: "dashed", strokeWidth: "thick" })).toBeGreaterThan(
+      step({ strokePattern: "dashed", strokeWidth: "thin" }),
+    );
+    expect(step({ strokePattern: "dotted", strokeWidth: "thick" })).toBeGreaterThan(
+      step({ strokePattern: "dotted", strokeWidth: "thin" }),
+    );
+  });
+
+  test("draws the lid of a cylinder as a piece of its own, so each piece fits its own dashes", () => {
+    const { lines } = styledParts(styled({ strokePattern: "dashed" }, "cylinder"));
+
+    expect(lines).toHaveLength(2);
+    expect(lines.map(({ attributes }) => attributes.d?.match(/M/g))).toEqual([["M"], ["M"]]);
+  });
+});
+
 describe("the rendering on screen", () => {
+  test("draws the Shape being drawn in the style it will have", () => {
+    const blue = apply(newEditor(), { type: "changeStyle", style: { strokeColor: "blue", fill: "yellow" } });
+    const drawing = apply(
+      blue,
+      selectTool("ellipse"),
+      pointerDown({ x: 100, y: 100 }),
+      pointerMove({ x: 220, y: 180 }),
+    );
+
+    const [beingDrawn] = renderedOnScreen(drawing).children;
+    const [drawn] = renderedOnScreen(drawSymbol(blue, "ellipse", { x: 100, y: 100 }, { x: 220, y: 180 })).children;
+
+    expect(beingDrawn?.children).toEqual(drawn?.children);
+  });
+
   test("renders the Shapes just as the export does", () => {
     const state = drawSymbol(twoRectangles(), "cloud", { x: 100, y: 300 }, { x: 260, y: 400 });
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { Sketch } from "./editor";
-import { canRedo, canUndo, labelLayout, rendering, sketch } from "./queries";
+import { canRedo, canUndo, labelLayout, rendering, shapeStyle, sketch } from "./queries";
 import {
   apply,
   boundsById,
@@ -56,6 +56,32 @@ describe("loading a Sketch", () => {
       text: "",
       alignment: { horizontal: "left", vertical: "top" },
       fontSize: "medium",
+    });
+    expect(() => rendering(loaded)).not.toThrow();
+    expect(canUndo(loaded)).toBe(false);
+  });
+
+  test("a Sketch saved before Shapes had colours and strokes opens with the default ones and its font size", () => {
+    const saved = {
+      shapes: {
+        "shape-1": {
+          id: "shape-1",
+          symbol: "rectangle",
+          bounds: { x: 100, y: 100, width: 100, height: 80 },
+          label: { text: "API", alignment: { horizontal: "left", vertical: "top" } },
+          style: { fontSize: "large" },
+        },
+      },
+    } as unknown as Sketch;
+
+    const loaded = newEditor(saved);
+
+    expect(shapeStyle(loaded, "shape-1")).toEqual({
+      strokeColor: "black",
+      fill: "transparent",
+      strokePattern: "solid",
+      strokeWidth: "thin",
+      fontSize: "large",
     });
     expect(() => rendering(loaded)).not.toThrow();
     expect(canUndo(loaded)).toBe(false);

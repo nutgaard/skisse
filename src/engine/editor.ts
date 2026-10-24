@@ -15,6 +15,7 @@ import * as history from "./history";
 import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
 import { displayedBounds } from "./label";
 import { hitsOutline } from "./shape-geometry";
+import { defaultStyle, validStyle, type Style } from "./style";
 import { symbolDefinition, type SymbolId } from "./symbols";
 import type { LabelAlignment } from "./symbols/symbol";
 import { toolOfShortcut, type Tool } from "./tools";
@@ -80,25 +81,18 @@ export type Dependencies = {
   readonly generateId: IdGenerator;
 };
 
-/** The three font sizes a Label can have. */
-export type FontSize = "small" | "medium" | "large";
-
-export type Style = { readonly fontSize: FontSize };
-
-const defaultStyle: Style = { fontSize: "medium" };
-
 export type Label = { readonly text: string; readonly alignment: LabelAlignment };
 
 /**
- * A new Shape of `symbol` filling `bounds`, but for its ID: with an empty Label, aligned as the Symbol's Labels are by
- * default, and the default style.
+ * A new Shape of `symbol` filling `bounds` in `style`, but for its ID: with an empty Label, aligned as the Symbol's
+ * Labels are by default.
  */
-export function newShape(symbol: SymbolId, bounds: Bounds): ShapeWithoutId {
+export function newShape(symbol: SymbolId, bounds: Bounds, style: Style): ShapeWithoutId {
   return {
     symbol,
     bounds,
     label: { text: "", alignment: symbolDefinition(symbol).defaultLabelAlignment },
-    style: defaultStyle,
+    style,
   };
 }
 
@@ -155,6 +149,8 @@ export type EditorState = {
   readonly deps: Dependencies;
   readonly sketch: Sketch;
   readonly tool: Tool;
+  // The style most recently chosen, which new Shapes get.
+  readonly style: Style;
   readonly selection: readonly ShapeId[];
   readonly interaction: Interaction;
   readonly viewport: viewport.Viewport;
@@ -214,11 +210,13 @@ function snapperFor(snaps: boolean): ((value: number) => number) {
 export const emptySketch: Sketch = { shapes: {} };
 
 // Sketches saved before Shapes had Labels and a style have Shapes without them, which get an empty Label and the
-// default style.
-function withLabels(sketch: Sketch): Sketch {
+// default style. Those saved before a style had colours and strokes have Shapes with just a font size, and get the
+// default for the rest.
+function completeShapes(sketch: Sketch): Sketch {
   const complete = (shape: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds">): SymbolShape => ({
-    ...newShape(shape.symbol, shape.bounds),
+    ...newShape(shape.symbol, shape.bounds, defaultStyle),
     ...shape,
+    style: { ...defaultStyle, ...shape.style },
   });
   return {
     ...sketch,
@@ -230,11 +228,12 @@ function withLabels(sketch: Sketch): Sketch {
  * A fresh editor on the `saved` Sketch, a new empty one by default. Nothing is selected and there is nothing to undo.
  */
 export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): EditorState {
-  const sketch = withLabels(saved);
+  const sketch = completeShapes(saved);
   return {
     deps,
     sketch,
     tool: "select",
+    style: defaultStyle,
     selection: [],
     interaction: idle,
     viewport: viewport.initialViewport,
@@ -548,11 +547,24 @@ function changeLabelText(state: EditorState, text: string): EditorState {
     : state;
 }
 
-// Changes every selected Shape. This works while a Label is being edited too, and is then part of its editing
-// session, but not in the middle of a gesture, which would undo it on the next pointer move.
+// Whether the selected Shapes can be changed. They can while a Label is being edited, and the change is then part of
+// its editing session, but not in the middle of a gesture, which would undo the change on the next pointer move.
+function canChangeSelected(state: EditorState): boolean {
+  return isIdle(state) || state.interaction.kind === "editingLabel";
+}
+
 function changeSelected(state: EditorState, change: (shape: SymbolShape) => SymbolShape): EditorState {
-  if (!isIdle(state) && state.interaction.kind !== "editingLabel") return state;
+  if (!canChangeSelected(state)) return state;
   return { ...state, sketch: state.selection.reduce((sketch, id) => updateShape(sketch, id, change), state.sketch) };
+}
+
+// A style chosen applies to every selected Shape, and to the Shapes drawn from now on, even with nothing selected. Only
+// the values a style can have are taken, so no colour outside the palette gets in.
+function chooseStyle(state: EditorState, style: Partial<Style>): EditorState {
+  if (!canChangeSelected(state)) return state;
+  const chosen = validStyle(style);
+  const changed = changeSelected(state, (shape) => ({ ...shape, style: { ...shape.style, ...chosen } }));
+  return { ...changed, style: { ...state.style, ...chosen } };
 }
 
 // Removes a Shape that is nothing but its Label once that Label is left empty, as nothing of it would show. Text that
@@ -592,7 +604,7 @@ function freeIdSequence(state: EditorState, sequence: number): number {
 // A new Shape becomes the selection, so it can be adjusted straight away, and its Label opens for editing.
 function createShape(state: EditorState, symbol: SymbolId, bounds: Bounds): EditorState {
   const sequence = freeIdSequence(state, state.nextIdSequence);
-  const shape: SymbolShape = { id: state.deps.generateId(sequence), ...newShape(symbol, bounds) };
+  const shape: SymbolShape = { id: state.deps.generateId(sequence), ...newShape(symbol, bounds, state.style) };
   return {
     ...state,
     sketch: addShape(state.sketch, shape),
@@ -822,7 +834,7 @@ function applyInput(state: EditorState, input: Input): EditorState {
     case "cancelLabel":
       return finishEditingLabel(state, "cancel");
     case "changeStyle":
-      return changeSelected(state, (shape) => ({ ...shape, style: { ...shape.style, ...input.style } }));
+      return chooseStyle(state, input.style);
     case "changeLabelAlignment":
       return changeSelected(state, (shape) => ({
         ...shape,
