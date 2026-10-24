@@ -33,6 +33,7 @@ export {
   selectionAlignment,
   selectionStyle,
   shapeStyle,
+  shapeTree,
   shapes,
   sketch,
   viewport,
@@ -43,6 +44,7 @@ export type {
   LabelView,
   SelectionAlignment,
   SelectionStyle,
+  ShapeTree,
   ShapeView,
 } from "./queries";
 export { fills, fontSizes, palette, shades, strokePatterns, strokeWidths } from "./style";
