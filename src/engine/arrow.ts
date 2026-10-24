@@ -1,5 +1,5 @@
 import type { Shape, ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
-import { elbowRoute, type ElbowOffset, type Lead, type Middle } from "./elbow";
+import { elbowRoute, type ElbowEnd, type ElbowOffset, type MiddleSegment } from "./elbow";
 import { contains, distance, type Bounds, type Point } from "./geometry";
 import { displayedBounds } from "./label";
 import { insidePath, nearestOnPath } from "./path";
@@ -67,9 +67,9 @@ function outOfSide(box: Bounds, point: Point): Point {
   return sides.reduce((nearest, side) => (side.distance < nearest.distance ? side : nearest)).out;
 }
 
-// Where an end is on the Sketch, and for a bound end, the way out of its Shape's side it is on. `undefined` when the
-// Shape it is bound to is missing.
-function endLead(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): Lead | undefined {
+// Where an end is on the Sketch, and for a bound end, its Shape's box as displayed and the way out of the side of it
+// the end is on. `undefined` when the Shape it is bound to is missing.
+function elbowEnd(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): ElbowEnd | undefined {
   if (end.kind === "floating") return { point: end.at };
   const shape = boundShape(sketch, end.shape);
   if (!shape) return undefined;
@@ -80,12 +80,12 @@ function endLead(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): Lead | u
       ? ports[end.port]
       : // A point on the outline at one size need not be on it at another, so the point is brought back onto it.
         nearestOnPath(outline, { x: box.x + end.at.x * box.width, y: box.y + end.at.y * box.height });
-  return point && { point, out: outOfSide(box, point) };
+  return point && { point, out: outOfSide(box, point), box };
 }
 
 /** Where an end is on the Sketch, or `undefined` when the Shape it is bound to is missing. */
 export function endPoint(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): Point | undefined {
-  return endLead(sketch, end, measure)?.point;
+  return elbowEnd(sketch, end, measure)?.point;
 }
 
 /** An Arrow placed on the Sketch: where its ends are, and the points its path runs through from start to end. */
@@ -94,15 +94,15 @@ export type ResolvedArrow = {
   readonly end: Point;
   readonly path: readonly Point[];
   /** The middle segment of an elbow path, which can be dragged sideways, unless it has none. */
-  readonly middle?: Middle;
+  readonly middle?: MiddleSegment;
   /** Whether the path follows the Arrow's elbow offset. It doesn't when it has none, or once it would double back. */
   readonly followsOffset: boolean;
 };
 
 /** Where an Arrow is on the Sketch, or `undefined` when an end can't be placed. */
 export function resolveArrow(sketch: Sketch, arrow: ArrowWithoutId, measure: TextMeasurer): ResolvedArrow | undefined {
-  const start = endLead(sketch, arrow.start, measure);
-  const end = endLead(sketch, arrow.end, measure);
+  const start = elbowEnd(sketch, arrow.start, measure);
+  const end = elbowEnd(sketch, arrow.end, measure);
   if (!start || !end) return undefined;
   if (arrow.routing !== "elbow") {
     return { start: start.point, end: end.point, path: [start.point, end.point], followsOffset: false };
@@ -211,12 +211,18 @@ export function unbindFrom(sketch: Sketch, removed: readonly ShapeId[], measure:
   };
 }
 
+/** The Arrow without an elbow offset, its middle segment back where it is on its own. */
+export function withoutOffset(arrow: Arrow): Arrow {
+  const { elbowOffset, ...rest } = arrow;
+  return rest;
+}
+
 /** The Sketch with every elbow offset dropped that its Arrow's path no longer follows, as it would double back. */
 export function withoutStaleOffsets(sketch: Sketch, measure: TextMeasurer): Sketch {
   const stale = Object.values(sketch.shapes).flatMap((shape) =>
     isArrow(shape) && shape.elbowOffset && !resolveArrow(sketch, shape, measure)?.followsOffset ? [shape] : [],
   );
   if (stale.length === 0) return sketch;
-  const dropped = stale.map(({ elbowOffset, ...arrow }) => [arrow.id, arrow]);
+  const dropped = stale.map((arrow) => [arrow.id, withoutOffset(arrow)]);
   return { ...sketch, shapes: { ...sketch.shapes, ...Object.fromEntries(dropped) } };
 }

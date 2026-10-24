@@ -5,6 +5,7 @@ import {
   isSymbolShape,
   resolveArrow,
   unbindFrom,
+  withoutOffset,
   withoutStaleOffsets,
   type Arrow,
   type ArrowEnd,
@@ -499,6 +500,12 @@ function arrowEndAt(state: EditorState, point: Point): { arrow: Arrow; end: EndN
   return arrow && nearby ? { arrow, end: nearby.end } : undefined;
 }
 
+function middleSegmentAt(state: EditorState, point: Point): Arrow | undefined {
+  const arrow = selectedArrow(state);
+  const handle = middleSegmentHandle(state);
+  return arrow && handle && grabsHandle(state, handle.position, point) ? arrow : undefined;
+}
+
 function pressWithSelectTool(state: EditorState, input: PointerInput): EditorState {
   const grabbedEnd = arrowEndAt(state, input.position);
   if (grabbedEnd) {
@@ -516,14 +523,13 @@ function pressWithSelectTool(state: EditorState, input: PointerInput): EditorSta
       },
     };
   }
-  const segment = middleSegmentHandle(state);
-  const arrow = selectedArrow(state);
-  if (arrow && segment && grabsHandle(state, segment.position, input.position)) {
+  const grabbedSegment = middleSegmentAt(state, input.position);
+  if (grabbedSegment) {
     return {
       ...state,
       interaction: {
         kind: "draggingElbowSegment",
-        arrowId: arrow.id,
+        arrowId: grabbedSegment.id,
         origin: input.position,
         current: input.position,
         before: state.sketch,
@@ -721,9 +727,8 @@ function dragElbowSegment(
   const arrow = before.shapes[arrowId];
   const middle = arrow && isArrow(arrow) ? resolveArrow(before, arrow, state.deps.measureText)?.middle : undefined;
   if (!arrow || !isArrow(arrow) || !middle) return { ...state, sketch: before, interaction };
-  const { elbowOffset, ...rest } = arrow;
   const offset = offsetDraggedBy(middle, pointerOffset(interaction, pointer));
-  const replaced: Arrow = offset ? { ...rest, elbowOffset: offset } : rest;
+  const replaced: Arrow = offset ? { ...arrow, elbowOffset: offset } : withoutOffset(arrow);
   return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: replaced } }, interaction };
 }
 
@@ -895,9 +900,7 @@ function chooseStyle(state: EditorState, style: Partial<Style>): EditorState {
 function chooseRouting(state: EditorState, routing: Routing): EditorState {
   if (!canChangeSelected(state)) return state;
   const changed = changeSelected(state, (shape) => {
-    if (!isArrow(shape) || shape.routing === routing) return shape;
-    const { elbowOffset, ...rest } = shape;
-    return { ...rest, routing };
+    return isArrow(shape) && shape.routing !== routing ? { ...withoutOffset(shape), routing } : shape;
   });
   return { ...changed, routing };
 }

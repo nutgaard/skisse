@@ -130,6 +130,34 @@ describe("elbow paths between Ports", () => {
     ]);
   });
 
+  test("from a right side to a left side behind it and level with it go around both Shapes", () => {
+    // shape-2 at (-200,100)–(-100,180), its left Port at (-200,140), level with shape-1's right Port.
+    const state = elbowArrow([{ x: -200, y: 100 }, { x: -100, y: 180 }], { x: 198, y: 140 }, { x: -198, y: 140 });
+
+    expect(onlyArrow(state).path).toEqual([
+      { x: 200, y: 140 },
+      { x: 220, y: 140 },
+      { x: 220, y: 80 },
+      { x: -220, y: 80 },
+      { x: -220, y: 140 },
+      { x: -200, y: 140 },
+    ]);
+  });
+
+  test("from a right side to a left side behind it and nearly level with it go around both Shapes", () => {
+    // shape-2 at (-200,110)–(-100,190), its left Port at (-200,150).
+    const state = elbowArrow([{ x: -200, y: 110 }, { x: -100, y: 190 }], { x: 198, y: 140 }, { x: -198, y: 150 });
+
+    expect(onlyArrow(state).path).toEqual([
+      { x: 200, y: 140 },
+      { x: 220, y: 140 },
+      { x: 220, y: 80 },
+      { x: -220, y: 80 },
+      { x: -220, y: 150 },
+      { x: -200, y: 150 },
+    ]);
+  });
+
   test("between two right sides run out past the further one", () => {
     // shape-2 at (300,200)–(400,280), its right Port at (400,240).
     const state = elbowArrow([{ x: 300, y: 200 }, { x: 400, y: 280 }], { x: 198, y: 140 }, { x: 398, y: 240 });
@@ -189,6 +217,18 @@ describe("elbow paths with floating ends", () => {
       { x: 220, y: 140 },
       { x: 220, y: 300 },
       { x: 50, y: 300 },
+    ]);
+  });
+
+  test("from a right side to a floating end level with it behind the Shape go around the Shape", () => {
+    const state = elbow(drawArrow(shape1(), { x: 198, y: 140 }, { x: 50, y: 140 }));
+
+    expect(onlyArrow(state).path).toEqual([
+      { x: 200, y: 140 },
+      { x: 220, y: 140 },
+      { x: 220, y: 80 },
+      { x: 50, y: 80 },
+      { x: 50, y: 140 },
     ]);
   });
 
@@ -280,7 +320,15 @@ describe("switching Routing", () => {
     const state = drawArrow(chosen, { x: 198, y: 140 }, { x: 302, y: 240 });
 
     expect(selectionRouting(chosen)).toBe("elbow");
-    expect(onlyArrow(state)).toMatchObject({ routing: "elbow", path: arrows(elbow(crossing()))[0]?.path });
+    expect(onlyArrow(state)).toMatchObject({
+      routing: "elbow",
+      path: [
+        { x: 200, y: 140 },
+        { x: 250, y: 140 },
+        { x: 250, y: 240 },
+        { x: 300, y: 240 },
+      ],
+    });
   });
 
   test("of an Arrow changes the Routing the next Arrows are drawn with", () => {

@@ -1,10 +1,10 @@
-import type { Point } from "./geometry";
+import type { Bounds, Point } from "./geometry";
 
 /**
- * An end of an elbow path: where it is, and for an end bound to a Shape, the way straight out of the side of the Shape
- * it is on, as a step of 1 along x or y. A floating end has no required direction.
+ * An end of an elbow path: where it is, and for an end bound to a Shape, the Shape's box as displayed and the way
+ * straight out of the side of it the end is on, as a step of 1 along x or y. A floating end has no required direction.
  */
-export type Lead = { readonly point: Point; readonly out?: Point };
+export type ElbowEnd = { readonly point: Point; readonly out?: Point; readonly box?: Bounds };
 
 /** The axis the middle segment of an elbow path is moved along: x for an upright segment, y for a level one. */
 export type Axis = "x" | "y";
@@ -13,7 +13,7 @@ export type Axis = "x" | "y";
 export type ElbowOffset = { readonly axis: Axis; readonly by: number };
 
 /** The middle segment of an elbow path, which can be dragged sideways along its axis. */
-export type Middle = {
+export type MiddleSegment = {
   readonly axis: Axis;
   readonly from: Point;
   readonly to: Point;
@@ -24,15 +24,17 @@ export type Middle = {
   readonly max: number;
 };
 
+/** An elbow path, and the middle segment the user can drag sideways. */
 export type ElbowRoute = {
   readonly path: readonly Point[];
   /** The middle segment, unless the path has none to drag, such as a single turn or a straight line. */
-  readonly middle?: Middle;
+  readonly middle?: MiddleSegment;
   /** Whether the path follows the offset it was given, which it doesn't once that would make it double back. */
   readonly followsOffset: boolean;
 };
 
-// How far an elbow path runs straight out of a Shape before it turns, where it has to turn back.
+// How far an elbow path runs straight out of a Shape before it turns, where it has to turn back, and how far it keeps
+// from a Shape it goes around.
 const stub = 20;
 
 function along(point: Point, axis: Axis): number {
@@ -52,6 +54,36 @@ function step(point: Point, out: Point, length: number): Point {
   return { x: point.x + out.x * length, y: point.y + out.y * length };
 }
 
+// Where a box starts and ends along the axis.
+type Extent = { readonly start: number; readonly end: number };
+
+function extentOf(box: Bounds, axis: Axis): Extent {
+  return axis === "x" ? { start: box.x, end: box.x + box.width } : { start: box.y, end: box.y + box.height };
+}
+
+function overlaps(a: Extent, b: Extent): boolean {
+  return a.start <= b.end && b.start <= a.end;
+}
+
+// Halfway along the axis, unless that runs through a bound end's Shape, as when the ends face away from each other
+// and are about level. The middle segment then goes around the Shapes there, on the side nearer halfway, or the top or
+// left on a tie.
+function aroundShapes(start: ElbowEnd, end: ElbowEnd, axis: Axis, halfway: number): number {
+  const extents = [start, end].flatMap(({ box }) => (box ? [extentOf(box, axis)] : []));
+  const hit = extents.filter((extent) => extent.start < halfway && halfway < extent.end);
+  const [first] = hit;
+  if (!first) return halfway;
+  const span = extents
+    .filter((extent) => hit.some((other) => overlaps(extent, other)))
+    .reduce(
+      (joined, extent) => ({ start: Math.min(joined.start, extent.start), end: Math.max(joined.end, extent.end) }),
+      first,
+    );
+  const before = span.start - stub;
+  const after = span.end + stub;
+  return halfway - before <= after - halfway ? before : after;
+}
+
 // A way to route the path, with its middle segment moved along `axis`.
 type Candidate = {
   readonly axis: Axis;
@@ -68,18 +100,20 @@ type Candidate = {
 
 // An end that leaves along the axis must not have the middle segment behind it, or the path would double back there.
 // An end that leaves across it runs out a stub first, and turns towards the middle segment from there.
-function candidate(start: Lead, end: Lead, axis: Axis): Candidate {
+function candidate(start: ElbowEnd, end: ElbowEnd, axis: Axis): Candidate {
   const leaves = [start, end].flatMap(({ point, out }) => (out && along(out, axis) !== 0 ? [{ point, out }] : []));
   const min = Math.max(...leaves.filter(({ out }) => along(out, axis) > 0).map(({ point }) => along(point, axis)));
   const max = Math.min(...leaves.filter(({ out }) => along(out, axis) < 0).map(({ point }) => along(point, axis)));
   const halfway = (along(start.point, axis) + along(end.point, axis)) / 2;
   const centred = min < halfway && halfway < max;
   const stubs = [start, end].filter(({ out }) => out && along(out, axis) === 0).length;
+  const beside = halfway <= min ? min + stub : max - stub;
   return {
     axis,
     min,
     max,
-    natural: centred ? halfway : halfway <= min ? min + stub : max - stub,
+    // With nothing to keep it to one side of an end, it can go anywhere, so it keeps clear of the Shapes.
+    natural: leaves.length === 0 ? aroundShapes(start, end, axis, halfway) : centred ? halfway : beside,
     centred,
     segments: 3 + stubs,
   };
@@ -90,75 +124,110 @@ function isPossible({ min, max }: Candidate): boolean {
 }
 
 // From the end to where it meets the middle segment at `at`, running out a stub first when it leaves across the axis.
-function lead({ point, out }: Lead, axis: Axis, at: number): readonly Point[] {
+function leg({ point, out }: ElbowEnd, axis: Axis, at: number): readonly Point[] {
   if (!out || along(out, axis) !== 0) return [point, pointAt(axis, at, across(point, axis))];
   const stubEnd = step(point, out, stub);
   return [point, stubEnd, pointAt(axis, at, across(stubEnd, axis))];
 }
 
-// Whether a path through `previous`, `point` and `next` runs straight on at `point`, neither turning nor turning back.
-function runsStraightOn(previous: Point, point: Point, next: Point): boolean {
-  const into = { x: point.x - previous.x, y: point.y - previous.y };
-  const out = { x: next.x - point.x, y: next.y - point.y };
-  return into.x * out.y === into.y * out.x && into.x * out.x + into.y * out.y > 0;
+// The path with its middle segment at `at`, before any points are joined, and where that middle segment starts and
+// ends.
+type Layout = { readonly points: readonly Point[]; readonly from: Point; readonly to: Point };
+
+function layoutAt(start: ElbowEnd, end: ElbowEnd, axis: Axis, at: number): Layout {
+  const fromStart = leg(start, axis, at);
+  const fromEnd = leg(end, axis, at);
+  return {
+    points: [...fromStart, ...fromEnd.toReversed()],
+    from: fromStart.at(-1) ?? start.point,
+    to: fromEnd.at(-1) ?? end.point,
+  };
 }
 
-// The path without repeated points, and without corners where it runs on straight. A turn back is kept.
-function simplified(points: readonly Point[]): readonly Point[] {
-  const distinct = points.filter((point, index) => {
+// The points without any repeated one in a row.
+function distinct(points: readonly Point[]): readonly Point[] {
+  return points.filter((point, index) => {
     const previous = points[index - 1];
     return !previous || previous.x !== point.x || previous.y !== point.y;
   });
-  return distinct.filter((point, index) => {
-    const previous = distinct[index - 1];
-    const next = distinct[index + 1];
-    return !previous || !next || !runsStraightOn(previous, point, next);
+}
+
+type Turn = "straight" | "turn" | "back";
+
+// How a path through `previous`, `point` and `next` goes on at `point`: straight on, turning, or back the way it came.
+function turnAt(previous: Point, point: Point, next: Point): Turn {
+  const into = { x: point.x - previous.x, y: point.y - previous.y };
+  const out = { x: next.x - point.x, y: next.y - point.y };
+  if (into.x * out.y !== into.y * out.x) return "turn";
+  return into.x * out.x + into.y * out.y > 0 ? "straight" : "back";
+}
+
+// How the path goes on at each of its points but the first and last, which are kept apart from repeated points.
+function turns(points: readonly Point[]): readonly { readonly point: Point; readonly turn: Turn }[] {
+  return points.slice(1, -1).flatMap((point, index) => {
+    const previous = points[index];
+    const next = points[index + 2];
+    return previous && next ? [{ point, turn: turnAt(previous, point, next) }] : [];
   });
 }
 
+// Whether the path runs back over itself somewhere.
+function turnsBack(points: readonly Point[]): boolean {
+  return turns(distinct(points)).some(({ turn }) => turn === "back");
+}
+
+// The path without repeated points, and without corners where it runs straight on.
+function simplified(points: readonly Point[]): readonly Point[] {
+  const all = distinct(points);
+  const straightOn = turns(all).flatMap(({ point, turn }) => (turn === "straight" ? [point] : []));
+  return all.filter((point) => !straightOn.includes(point));
+}
+
 // When the ends leave one along x and the other along y, a single turn joins them, if neither has to turn back for it.
-function singleTurn(start: Lead, end: Lead): readonly Point[] | undefined {
+function singleTurn(start: ElbowEnd, end: ElbowEnd): readonly Point[] | undefined {
   if (!start.out || !end.out || (start.out.x === 0) === (end.out.x === 0)) return undefined;
   const corner = start.out.x === 0 ? { x: start.point.x, y: end.point.y } : { x: end.point.x, y: start.point.y };
   const ahead = (point: Point, out: Point) => (corner.x - point.x) * out.x + (corner.y - point.y) * out.y > 0;
   return ahead(start.point, start.out) && ahead(end.point, end.out) ? [start.point, corner, end.point] : undefined;
 }
 
-// The fewest segments wins, then a middle segment halfway between the ends, then one across the shorter distance, so
-// the path runs mostly straight. A middle segment the user moved keeps its axis while that is still among the best.
-function chosen(start: Lead, end: Lead, offset: ElbowOffset | undefined): Candidate {
+// A path that doesn't run back over itself wins, then the fewest segments, then a middle segment halfway between the
+// ends, then one across the shorter distance, so the path runs mostly straight. A middle segment the user moved keeps
+// its axis while that is still among the best.
+function chosen(start: ElbowEnd, end: ElbowEnd, offset: ElbowOffset | undefined): Candidate {
+  // There is always a way: when the ends rule out a middle segment on one axis, both leave along it, so the other axis
+  // has stubs at both ends and nothing in the way.
   const possible = (["x", "y"] as const).map((axis) => candidate(start, end, axis)).filter(isPossible);
-  const fewest = Math.min(...possible.map(({ segments }) => segments));
-  const best = possible.filter(({ segments }) => segments === fewest);
+  const clean = possible.filter(({ axis, natural }) => !turnsBack(layoutAt(start, end, axis, natural).points));
+  const pool = clean.length > 0 ? clean : possible;
+  const fewest = Math.min(...pool.map(({ segments }) => segments));
+  const best = pool.filter(({ segments }) => segments === fewest);
   const kept = best.find(({ axis }) => axis === offset?.axis);
   if (kept) return kept;
   const wide = Math.abs(end.point.x - start.point.x) >= Math.abs(end.point.y - start.point.y);
   const rank = ({ centred, axis }: Candidate) => (centred ? 2 : 0) + ((axis === "x") === wide ? 1 : 0);
-  // There is always a way: when the ends rule out a middle segment on one axis, both leave along it, so the other axis
-  // has stubs at both ends and nothing in the way.
   return best.reduce((winner, other) => (rank(other) > rank(winner) ? other : winner));
 }
 
 /**
  * An orthogonal path from `start` to `end`. It leaves and enters each bound end at right angles to the side it is on,
- * and has one middle segment, moved by `offset` along its axis unless that would make the path double back at an end.
- * Ends that can be joined by a single turn are, with no middle segment.
+ * and has one middle segment, moved by `offset` along its axis unless that would make the path double back. Ends that
+ * can be joined by a single turn are, with no middle segment.
  */
-export function elbowRoute(start: Lead, end: Lead, offset: ElbowOffset | undefined): ElbowRoute {
+export function elbowRoute(start: ElbowEnd, end: ElbowEnd, offset: ElbowOffset | undefined): ElbowRoute {
   const turn = singleTurn(start, end);
   if (turn) return { path: turn, followsOffset: false };
-  const route = chosen(start, end, offset);
-  const { axis, natural, min, max } = route;
+  const { axis, natural, min, max } = chosen(start, end, offset);
   const moved = offset?.axis === axis ? natural + offset.by : undefined;
-  const followsOffset = moved !== undefined && min < moved && moved < max;
-  const at = followsOffset ? moved : natural;
-  const fromStart = lead(start, axis, at);
-  const fromEnd = lead(end, axis, at);
-  const from = fromStart.at(-1) ?? start.point;
-  const to = fromEnd.at(-1) ?? end.point;
-  const path = simplified([...fromStart, ...fromEnd.toReversed()]);
+  const followsOffset =
+    moved !== undefined && min < moved && moved < max && !turnsBack(layoutAt(start, end, axis, moved).points);
+  const { points, from, to } = layoutAt(start, end, axis, followsOffset ? moved : natural);
   const hasMiddle = from.x !== to.x || from.y !== to.y;
-  return { path, ...(hasMiddle ? { middle: { axis, from, to, natural, min, max } } : {}), followsOffset };
+  return {
+    path: simplified(points),
+    ...(hasMiddle ? { middle: { axis, from, to, natural, min, max } } : {}),
+    followsOffset,
+  };
 }
 
 // How short dragging the middle segment can make the segment at either end, so the middle segment never reaches an end.
@@ -168,7 +237,7 @@ const shortestEnd = 10;
  * The offset that moves `middle` by how far it was dragged, `moved`, along its axis, as far as it can go while the
  * segments at both ends stay at least `shortestEnd` long. `undefined` when that leaves it where it is on its own.
  */
-export function offsetDraggedBy(middle: Middle, moved: Point): ElbowOffset | undefined {
+export function offsetDraggedBy(middle: MiddleSegment, moved: Point): ElbowOffset | undefined {
   const { axis, natural, min, max } = middle;
   const lowest = min + shortestEnd;
   const highest = max - shortestEnd;
