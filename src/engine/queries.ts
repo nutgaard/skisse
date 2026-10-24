@@ -14,7 +14,7 @@ import { handlePositions, type ResizeHandle } from "./resize";
 import { lineColor, type FontSize, type Style } from "./style";
 import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
-import type { HorizontalAlignment, LabelAlignment, VerticalAlignment } from "./symbols/symbol";
+import type { LabelAlignment } from "./symbols/symbol";
 import type { Tool } from "./tools";
 import type { Viewport } from "./viewport";
 
@@ -77,6 +77,15 @@ export function shapeStyle(state: EditorState, id: ShapeId): Style | undefined {
   return state.sketch.shapes[id]?.style;
 }
 
+// The value of `property` that `first` and all of `others` have, or `mixed` when they differ.
+function commonOrMixed<T, Property extends keyof T>(
+  first: T,
+  others: readonly T[],
+  property: Property,
+): T[Property] | "mixed" {
+  return others.every((other) => other[property] === first[property]) ? first[property] : "mixed";
+}
+
 /** A style as the style panel shows it, where each property can be mixed among the selected Shapes. */
 export type SelectionStyle = { readonly [Property in keyof Style]: Style[Property] | "mixed" };
 
@@ -87,21 +96,18 @@ export type SelectionStyle = { readonly [Property in keyof Style]: Style[Propert
 export function selectionStyle(state: EditorState): SelectionStyle {
   const styles = state.selection.flatMap((id) => state.sketch.shapes[id]?.style ?? []);
   const [first = state.style, ...others] = styles;
-  const common = <Property extends keyof Style>(property: Property): Style[Property] | "mixed" =>
-    others.every((style) => style[property] === first[property]) ? first[property] : "mixed";
   return {
-    strokeColor: common("strokeColor"),
-    fill: common("fill"),
-    strokePattern: common("strokePattern"),
-    strokeWidth: common("strokeWidth"),
-    fontSize: common("fontSize"),
+    strokeColor: commonOrMixed(first, others, "strokeColor"),
+    fill: commonOrMixed(first, others, "fill"),
+    strokePattern: commonOrMixed(first, others, "strokePattern"),
+    strokeWidth: commonOrMixed(first, others, "strokeWidth"),
+    fontSize: commonOrMixed(first, others, "fontSize"),
   };
 }
 
 /** A Label alignment as the style panel shows it, where each direction can be mixed among the selected Shapes. */
 export type SelectionAlignment = {
-  readonly horizontal: HorizontalAlignment | "mixed";
-  readonly vertical: VerticalAlignment | "mixed";
+  readonly [Direction in keyof LabelAlignment]: LabelAlignment[Direction] | "mixed";
 };
 
 /**
@@ -111,9 +117,10 @@ export type SelectionAlignment = {
 export function selectionAlignment(state: EditorState): SelectionAlignment | undefined {
   const [first, ...others] = state.selection.flatMap((id) => state.sketch.shapes[id]?.label.alignment ?? []);
   if (!first) return undefined;
-  const common = <Direction extends keyof LabelAlignment>(direction: Direction): LabelAlignment[Direction] | "mixed" =>
-    others.every((alignment) => alignment[direction] === first[direction]) ? first[direction] : "mixed";
-  return { horizontal: common("horizontal"), vertical: common("vertical") };
+  return {
+    horizontal: commonOrMixed(first, others, "horizontal"),
+    vertical: commonOrMixed(first, others, "vertical"),
+  };
 }
 
 /** The Sketch as of the last finished change, leaving out any gesture still in progress. This is what to save. */

@@ -171,8 +171,13 @@ body,
 
 .style-choices {
   display: grid;
+  grid-template-columns: repeat(4, auto);
   justify-content: start;
   gap: 2px;
+}
+
+.style-choices[data-columns="3"] {
+  grid-template-columns: repeat(3, auto);
 }
 
 .toolbar button:has(.swatch, .stroke-icon, .alignment-icon) {

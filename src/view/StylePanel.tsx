@@ -11,6 +11,7 @@ import {
   type FontSize,
   type HorizontalAlignment,
   type Input,
+  type LabelAlignment,
   type SelectionAlignment,
   type SelectionStyle,
   type StrokePattern,
@@ -101,15 +102,21 @@ const verticalAlignmentChoices: readonly Choice<VerticalAlignment>[] = [
   { value: "bottom", content: <AlignmentIcon path="M 5 11 H 11" framed />, title: "Align bottom" },
 ];
 
+// What a group shows as chosen when the selected Shapes differ in it: nothing.
+function unlessMixed<T>(value: T | "mixed"): T | undefined {
+  return value === "mixed" ? undefined : value;
+}
+
 type PanelGroupProps = {
   readonly name: string;
   /** Whether the selected Shapes differ in what the group shows, which it then says. */
   readonly mixed: boolean;
   /** How many choices go on a row. */
-  readonly columns: number;
+  readonly columns: 3 | 4;
   readonly children: ReactNode;
 };
 
+// A named group of choices in the panel, laid out in rows.
 function PanelGroup({ name, mixed, columns, children }: PanelGroupProps) {
   return (
     <div className="style-group" role="group" aria-label={name}>
@@ -117,7 +124,7 @@ function PanelGroup({ name, mixed, columns, children }: PanelGroupProps) {
         {name}
         {mixed && <span className="style-mixed"> · mixed</span>}
       </span>
-      <div className="style-choices" style={{ gridTemplateColumns: `repeat(${columns}, auto)` }}>
+      <div className="style-choices" data-columns={columns}>
         {children}
       </div>
     </div>
@@ -133,10 +140,9 @@ type StyleGroupProps<T> = {
 
 // One property of the style, which shows no choice as chosen when the selected Shapes differ in it.
 function StyleGroup<T extends string>({ name, choices, chosen, onChoose }: StyleGroupProps<T>) {
-  const mixed = chosen === "mixed";
   return (
-    <PanelGroup name={name} mixed={mixed} columns={4}>
-      <Choices choices={choices} chosen={mixed ? undefined : chosen} onChoose={onChoose} />
+    <PanelGroup name={name} mixed={chosen === "mixed"} columns={4}>
+      <Choices choices={choices} chosen={unlessMixed(chosen)} onChoose={onChoose} />
     </PanelGroup>
   );
 }
@@ -148,7 +154,7 @@ type AlignmentGroupProps = {
 
 // The Label alignment, a row for each direction. With nothing selected there is no Label to align.
 function AlignmentGroup({ alignment, dispatch }: AlignmentGroupProps) {
-  const unlessMixed = <T,>(value: T | "mixed" | undefined) => (value === "mixed" ? undefined : value);
+  const align = (change: Partial<LabelAlignment>) => dispatch({ type: "changeLabelAlignment", alignment: change });
   return (
     <PanelGroup
       name="Align"
@@ -157,15 +163,15 @@ function AlignmentGroup({ alignment, dispatch }: AlignmentGroupProps) {
     >
       <Choices
         choices={horizontalAlignmentChoices}
-        chosen={unlessMixed(alignment?.horizontal)}
+        chosen={alignment && unlessMixed(alignment.horizontal)}
         disabled={!alignment}
-        onChoose={(horizontal) => dispatch({ type: "changeLabelAlignment", alignment: { horizontal } })}
+        onChoose={(horizontal) => align({ horizontal })}
       />
       <Choices
         choices={verticalAlignmentChoices}
-        chosen={unlessMixed(alignment?.vertical)}
+        chosen={alignment && unlessMixed(alignment.vertical)}
         disabled={!alignment}
-        onChoose={(vertical) => dispatch({ type: "changeLabelAlignment", alignment: { vertical } })}
+        onChoose={(vertical) => align({ vertical })}
       />
     </PanelGroup>
   );
