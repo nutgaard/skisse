@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
 /** One of a few values to choose, as a button: what it shows, such as a short name, and what it does in full. */
-export type Choice<T> = { readonly value: T; readonly name: ReactNode; readonly title: string };
+export type Choice<T> = { readonly value: T; readonly content: ReactNode; readonly title: string };
 
 type ChoicesProps<T> = {
   readonly choices: readonly Choice<T>[];
@@ -25,7 +25,7 @@ export function Choices<T extends string>({ choices, chosen, onChoose }: Choices
       onMouseDown={(event) => event.preventDefault()}
       onClick={() => onChoose(choice.value)}
     >
-      {choice.name}
+      {choice.content}
     </button>
   ));
 }

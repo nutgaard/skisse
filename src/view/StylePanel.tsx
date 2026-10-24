@@ -1,6 +1,10 @@
 import {
+  fills,
+  fontSizes,
   palette,
   shades,
+  strokePatterns,
+  strokeWidths,
   type Color,
   type Fill,
   type FontSize,
@@ -12,28 +16,26 @@ import {
 } from "../engine";
 import { Choices, type Choice } from "./Choices";
 
-function colorName(color: Color) {
-  return color.charAt(0).toUpperCase() + color.slice(1);
+function capitalized(word: string) {
+  return word.charAt(0).toUpperCase() + word.slice(1);
 }
 
 function Swatch({ color }: { readonly color: string }) {
   return <span className="swatch" style={{ background: color }} />;
 }
 
-const strokeColors: readonly Choice<Color>[] = palette.map((color) => ({
+const strokeColorChoices: readonly Choice<Color>[] = palette.map((color) => ({
   value: color,
-  name: <Swatch color={shades[color].stroke} />,
-  title: `${colorName(color)} stroke`,
+  content: <Swatch color={shades[color].stroke} />,
+  title: `${capitalized(color)} stroke`,
 }));
 
-const fills: readonly Choice<Fill>[] = [
-  { value: "transparent", name: <span className="swatch transparent" />, title: "Transparent fill" },
-  ...palette.map((color) => ({
-    value: color,
-    name: <Swatch color={shades[color].fill} />,
-    title: `${colorName(color)} fill`,
-  })),
-];
+// No fill shows as white, struck through.
+const fillChoices: readonly Choice<Fill>[] = fills.map((fill) => ({
+  value: fill,
+  content: fill === "transparent" ? <span className="swatch transparent" /> : <Swatch color={shades[fill].fill} />,
+  title: `${capitalized(fill)} fill`,
+}));
 
 // A short line drawn as the choice would draw a Shape's lines.
 function StrokeIcon({ dashes, width = 2 }: { readonly dashes?: string; readonly width?: number }) {
@@ -44,22 +46,34 @@ function StrokeIcon({ dashes, width = 2 }: { readonly dashes?: string; readonly 
   );
 }
 
-const strokePatterns: readonly Choice<StrokePattern>[] = [
-  { value: "solid", name: <StrokeIcon />, title: "Solid stroke" },
-  { value: "dashed", name: <StrokeIcon dashes="4 5" />, title: "Dashed stroke" },
-  { value: "dotted", name: <StrokeIcon dashes="0 4.5" />, title: "Dotted stroke" },
-];
+// The dashes of each stroke pattern's icon, in the icon's pixels.
+const iconDashes: Readonly<Record<StrokePattern, string | undefined>> = {
+  solid: undefined,
+  dashed: "4 5",
+  dotted: "0 4.5",
+};
 
-const strokeWidths: readonly Choice<StrokeWidth>[] = [
-  { value: "thin", name: <StrokeIcon width={1.5} />, title: "Thin stroke" },
-  { value: "thick", name: <StrokeIcon width={3.5} />, title: "Thick stroke" },
-];
+const strokePatternChoices: readonly Choice<StrokePattern>[] = strokePatterns.map((pattern) => ({
+  value: pattern,
+  content: <StrokeIcon dashes={iconDashes[pattern]} />,
+  title: `${capitalized(pattern)} stroke`,
+}));
 
-const fontSizes: readonly Choice<FontSize>[] = [
-  { value: "small", name: "S", title: "Small text" },
-  { value: "medium", name: "M", title: "Medium text" },
-  { value: "large", name: "L", title: "Large text" },
-];
+// The width of each stroke width's icon, in the icon's pixels.
+const iconWidths: Readonly<Record<StrokeWidth, number>> = { thin: 1.5, thick: 3.5 };
+
+const strokeWidthChoices: readonly Choice<StrokeWidth>[] = strokeWidths.map((width) => ({
+  value: width,
+  content: <StrokeIcon width={iconWidths[width]} />,
+  title: `${capitalized(width)} stroke`,
+}));
+
+// S, M and L.
+const fontSizeChoices: readonly Choice<FontSize>[] = fontSizes.map((size) => ({
+  value: size,
+  content: size.charAt(0).toUpperCase(),
+  title: `${capitalized(size)} text`,
+}));
 
 type StyleGroupProps<T> = {
   readonly name: string;
@@ -96,26 +110,26 @@ export function StylePanel({ style, dispatch }: StylePanelProps) {
     <div className="toolbar style-panel" role="toolbar" aria-label="Style">
       <StyleGroup
         name="Stroke"
-        choices={strokeColors}
+        choices={strokeColorChoices}
         chosen={style.strokeColor}
         onChoose={(strokeColor) => choose({ strokeColor })}
       />
-      <StyleGroup name="Fill" choices={fills} chosen={style.fill} onChoose={(fill) => choose({ fill })} />
+      <StyleGroup name="Fill" choices={fillChoices} chosen={style.fill} onChoose={(fill) => choose({ fill })} />
       <StyleGroup
         name="Stroke style"
-        choices={strokePatterns}
+        choices={strokePatternChoices}
         chosen={style.strokePattern}
         onChoose={(strokePattern) => choose({ strokePattern })}
       />
       <StyleGroup
         name="Stroke width"
-        choices={strokeWidths}
+        choices={strokeWidthChoices}
         chosen={style.strokeWidth}
         onChoose={(strokeWidth) => choose({ strokeWidth })}
       />
       <StyleGroup
         name="Text size"
-        choices={fontSizes}
+        choices={fontSizeChoices}
         chosen={style.fontSize}
         onChoose={(fontSize) => choose({ fontSize })}
       />

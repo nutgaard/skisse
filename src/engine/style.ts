@@ -17,6 +17,11 @@ export const shades: Readonly<Record<Color, { readonly stroke: string; readonly 
   violet: { stroke: "#6741d9", fill: "#d0bfff" },
 };
 
+/** The colour a Shape's lines and its Label's text are drawn in. */
+export function lineColor(style: Style): string {
+  return shades[style.strokeColor].stroke;
+}
+
 /** A Shape's fill: a colour of the palette, or none, which still hit-tests as if filled. */
 export type Fill = Color | "transparent";
 

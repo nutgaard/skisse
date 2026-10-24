@@ -87,4 +87,3 @@ describe("loading a Sketch", () => {
     expect(canUndo(loaded)).toBe(false);
   });
 });
-

@@ -171,15 +171,15 @@ function ToolButton({ info, active, onSelect }: ToolButtonProps) {
 }
 
 const horizontalAlignments: readonly Choice<HorizontalAlignment>[] = [
-  { value: "left", name: "Left", title: "Align left" },
-  { value: "center", name: "Centre", title: "Align centre" },
-  { value: "right", name: "Right", title: "Align right" },
+  { value: "left", content: "Left", title: "Align left" },
+  { value: "center", content: "Centre", title: "Align centre" },
+  { value: "right", content: "Right", title: "Align right" },
 ];
 
 const verticalAlignments: readonly Choice<VerticalAlignment>[] = [
-  { value: "top", name: "Top", title: "Align top" },
-  { value: "middle", name: "Middle", title: "Align middle" },
-  { value: "bottom", name: "Bottom", title: "Align bottom" },
+  { value: "top", content: "Top", title: "Align top" },
+  { value: "middle", content: "Middle", title: "Align middle" },
+  { value: "bottom", content: "Bottom", title: "Align bottom" },
 ];
 
 // What the selected Shapes' Labels have in common, such as their alignment, or `undefined` when they differ.

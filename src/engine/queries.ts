@@ -11,7 +11,7 @@ import * as history from "./history";
 import { displayedBounds, shapeLayout, type LabelLine } from "./label";
 import { onScreen, renderShapes, type ShapeToRender } from "./render";
 import { handlePositions, type ResizeHandle } from "./resize";
-import { shades, type FontSize, type Style } from "./style";
+import { lineColor, type FontSize, type Style } from "./style";
 import type { SvgElement } from "./svg";
 import type { SymbolId } from "./symbols";
 import type { LabelAlignment } from "./symbols/symbol";
@@ -54,7 +54,7 @@ export function labelLayout(state: EditorState, id: ShapeId): LabelView | undefi
     text: shape.label.text,
     alignment: shape.label.alignment,
     fontSize: shape.style.fontSize,
-    color: shades[shape.style.strokeColor].stroke,
+    color: lineColor(shape.style),
     fontPixels,
     lineHeight,
     area: labelArea,
@@ -72,6 +72,7 @@ export function shapes(state: EditorState): readonly ShapeView[] {
   }));
 }
 
+/** How a Shape is drawn, as last chosen for it. */
 export function shapeStyle(state: EditorState, id: ShapeId): Style | undefined {
   return state.sketch.shapes[id]?.style;
 }

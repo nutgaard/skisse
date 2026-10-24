@@ -2,7 +2,7 @@ import type { ShapeId, ShapeWithoutId, Sketch, TextMeasurer } from "./editor";
 import { labelFontFamily, shapeLayout, shareOfSpace, type ShapeLayout } from "./label";
 import { isClosed, pathData, pathPieces, pieceLength, type Path } from "./path";
 import { shapeGeometry } from "./shape-geometry";
-import { shades, type Style, type StrokePattern, type StrokeWidth } from "./style";
+import { lineColor, shades, type Style, type StrokePattern, type StrokeWidth } from "./style";
 import { svgElement, type SvgElement } from "./svg";
 import type { HorizontalAlignment } from "./symbols/symbol";
 
@@ -50,7 +50,7 @@ function renderLines(lines: Path, style: Style): readonly SvgElement[] {
     return svgElement("path", {
       d: pathData(piece),
       fill: "none",
-      stroke: shades[style.strokeColor].stroke,
+      stroke: lineColor(style),
       "stroke-width": strokePixels[style.strokeWidth],
       "stroke-linejoin": "round",
       "stroke-linecap": "round",
@@ -91,7 +91,7 @@ function renderLabel(
         y: bounds.y + bounds.height / 2,
         "font-family": labelFontFamily,
         "font-size": fontPixels,
-        fill: shades[style.strokeColor].stroke,
+        fill: lineColor(style),
         "text-anchor": textAnchors[horizontal],
         "dominant-baseline": "central",
         "xml:space": "preserve",

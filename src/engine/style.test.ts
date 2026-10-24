@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { canUndo, selection, selectionStyle, shapeStyle, shapes } from "./queries";
 import type { Style } from "./style";
+import { symbolIds } from "./symbols";
 import {
   apply,
   click,
@@ -93,7 +94,6 @@ describe("styling Shapes", () => {
     expect(canUndo(apply(chosen, undoInput))).toBe(false);
   });
 
-
   test("takes only colours of the palette, leaving out any other, such as one typed in", () => {
     const changed = apply(
       rectangle(),
@@ -124,7 +124,7 @@ describe("styling Shapes", () => {
     expect(shapeStyle(drawn, "shape-2")?.fill).toBe("transparent");
   });
 
-  test.each(["rectangle", "cylinder", "cloud", "person"] as const)(
+  test.each(symbolIds.filter((id) => id !== "text"))(
     "a click inside a %s with a transparent fill, away from its lines, selects it",
     (symbol) => {
       const drawn = press(drawSymbol(newEditor(), symbol, { x: 100, y: 100 }, { x: 300, y: 300 }), "Escape");
@@ -142,7 +142,6 @@ describe("styling Shapes", () => {
     expect(shapes(dragged)[0]?.bounds).toEqual({ x: 200, y: 200, width: 100, height: 80 });
   });
 });
-
 
 describe("the style shown for the selection", () => {
   test("is the selected Shape's style", () => {

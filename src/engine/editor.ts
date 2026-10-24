@@ -212,7 +212,7 @@ export const emptySketch: Sketch = { shapes: {} };
 // Sketches saved before Shapes had Labels and a style have Shapes without them, which get an empty Label and the
 // default style. Those saved before a style had colours and strokes have Shapes with just a font size, and get the
 // default for the rest.
-function withLabels(sketch: Sketch): Sketch {
+function completeShapes(sketch: Sketch): Sketch {
   const complete = (shape: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds">): SymbolShape => ({
     ...newShape(shape.symbol, shape.bounds, defaultStyle),
     ...shape,
@@ -228,7 +228,7 @@ function withLabels(sketch: Sketch): Sketch {
  * A fresh editor on the `saved` Sketch, a new empty one by default. Nothing is selected and there is nothing to undo.
  */
 export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): EditorState {
-  const sketch = withLabels(saved);
+  const sketch = completeShapes(saved);
   return {
     deps,
     sketch,
