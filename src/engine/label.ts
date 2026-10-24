@@ -1,6 +1,7 @@
 import type { FontSize, ShapeWithoutId, TextMeasurer } from "./editor";
 import type { Bounds } from "./geometry";
 import { symbolDefinition } from "./symbols";
+import type { HorizontalAlignment, VerticalAlignment } from "./symbols/symbol";
 
 /** The font Labels are drawn in. Text must be measured in it too, so it wraps where it is drawn. */
 export const labelFontFamily = "system-ui, sans-serif";
@@ -18,6 +19,8 @@ export type ShapeLayout = {
   /** The Shape's Bounds, taller than the user set them when its Label needs more room. */
   readonly bounds: Bounds;
   readonly labelArea: Bounds;
+  /** Where the lines go together, as wide as the Label area. At least one line high, for a caret. */
+  readonly textBlock: Bounds;
   readonly fontPixels: number;
   readonly lineHeight: number;
   readonly lines: readonly LabelLine[];
@@ -78,27 +81,39 @@ function lineHeightOf(shape: ShapeWithoutId): number {
   return fontPixels[shape.style.fontSize] * lineSpacing;
 }
 
+// How much of the space left beside a Label goes before it, in each direction.
+const shareOfSpace: Readonly<Record<HorizontalAlignment | VerticalAlignment, number>> = {
+  left: 0,
+  top: 0,
+  center: 0.5,
+  middle: 0.5,
+  right: 1,
+  bottom: 1,
+};
+
 function layoutIn(shape: ShapeWithoutId, bounds: Bounds, measure: TextMeasurer): ShapeLayout {
   const labelArea = symbolDefinition(shape.symbol).labelArea(bounds);
   const pixels = fontPixels[shape.style.fontSize];
   const lineHeight = lineHeightOf(shape);
   const texts = wrapLabel(shape, labelArea, measure);
-  const centred = shape.label.alignment === "center";
-  const top = centred ? labelArea.y + (labelArea.height - texts.length * lineHeight) / 2 : labelArea.y;
+  const { horizontal, vertical } = shape.label.alignment;
+  const blockHeight = Math.max(1, texts.length) * lineHeight;
+  const top = labelArea.y + (labelArea.height - blockHeight) * shareOfSpace[vertical];
   const lines = texts.map((text, index) => {
     // Placed by its text, leaving out the spaces that hang at its end.
     const width = measure(text.trimEnd(), pixels);
     return {
       text,
       bounds: {
-        x: centred ? labelArea.x + (labelArea.width - width) / 2 : labelArea.x,
+        x: labelArea.x + (labelArea.width - width) * shareOfSpace[horizontal],
         y: top + index * lineHeight,
         width,
         height: lineHeight,
       },
     };
   });
-  return { bounds, labelArea, fontPixels: pixels, lineHeight, lines };
+  const textBlock = { x: labelArea.x, y: top, width: labelArea.width, height: blockHeight };
+  return { bounds, labelArea, textBlock, fontPixels: pixels, lineHeight, lines };
 }
 
 // Whether the Label's lines fit the height of the Label area when the Shape is `height` high.

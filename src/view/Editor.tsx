@@ -23,14 +23,15 @@ import {
   type Dependencies,
   type EditorState,
   type FontSize,
+  type HorizontalAlignment,
   type Input,
   type KeyInput,
-  type LabelAlignment,
   type LabelView,
   type PointerInput,
   type Size,
   type Sketch,
   type ToolInfo,
+  type VerticalAlignment,
   type Viewport,
   type WheelInput,
 } from "../engine";
@@ -167,16 +168,50 @@ function ToolButton({ info, active, onSelect }: ToolButtonProps) {
   );
 }
 
-const alignments: readonly { readonly alignment: LabelAlignment; readonly name: string }[] = [
-  { alignment: "center", name: "Centre" },
-  { alignment: "topLeft", name: "Top left" },
+// One of a few values to choose, as a button: its short name, and what it does in full.
+type Choice<T> = { readonly value: T; readonly name: string; readonly title: string };
+
+const horizontalAlignments: readonly Choice<HorizontalAlignment>[] = [
+  { value: "left", name: "Left", title: "Align left" },
+  { value: "center", name: "Centre", title: "Align centre" },
+  { value: "right", name: "Right", title: "Align right" },
 ];
 
-const fontSizes: readonly { readonly fontSize: FontSize; readonly name: string; readonly title: string }[] = [
-  { fontSize: "small", name: "S", title: "Small text" },
-  { fontSize: "medium", name: "M", title: "Medium text" },
-  { fontSize: "large", name: "L", title: "Large text" },
+const verticalAlignments: readonly Choice<VerticalAlignment>[] = [
+  { value: "top", name: "Top", title: "Align top" },
+  { value: "middle", name: "Middle", title: "Align middle" },
+  { value: "bottom", name: "Bottom", title: "Align bottom" },
 ];
+
+const fontSizes: readonly Choice<FontSize>[] = [
+  { value: "small", name: "S", title: "Small text" },
+  { value: "medium", name: "M", title: "Medium text" },
+  { value: "large", name: "L", title: "Large text" },
+];
+
+type ChoicesProps<T> = {
+  readonly choices: readonly Choice<T>[];
+  /** The value chosen, or `undefined` when the selected Shapes differ. */
+  readonly chosen: T | undefined;
+  readonly onChoose: (value: T) => void;
+};
+
+// The buttons keep the focus where it is, so they change a Label being edited without finishing the editing.
+function Choices<T extends string>({ choices, chosen, onChoose }: ChoicesProps<T>) {
+  return choices.map((choice) => (
+    <button
+      key={choice.value}
+      type="button"
+      aria-pressed={choice.value === chosen}
+      aria-label={choice.title}
+      title={choice.title}
+      onMouseDown={(event) => event.preventDefault()}
+      onClick={() => onChoose(choice.value)}
+    >
+      {choice.name}
+    </button>
+  ));
+}
 
 // What the selected Shapes' Labels have in common, such as their font size, or `undefined` when they differ.
 function commonToSelection<T>(state: EditorState, of: (label: LabelView) => T): T | undefined {
@@ -189,39 +224,28 @@ function commonToSelection<T>(state: EditorState, of: (label: LabelView) => T): 
 
 type LabelControlsProps = { readonly state: EditorState; readonly dispatch: (input: Input) => void };
 
-// Shown while Shapes are selected. The buttons keep the focus where it is, so they change a Label being edited without
-// finishing the editing.
+// Shown while Shapes are selected.
 function LabelControls({ state, dispatch }: LabelControlsProps) {
   if (selection(state).length === 0) return null;
-  const alignment = commonToSelection(state, (label) => label.alignment);
-  const fontSize = commonToSelection(state, (label) => label.fontSize);
   return (
     <div className="toolbar label-controls" role="toolbar" aria-label="Label">
-      {alignments.map((option) => (
-        <button
-          key={option.alignment}
-          type="button"
-          aria-pressed={option.alignment === alignment}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => dispatch({ type: "changeLabelAlignment", alignment: option.alignment })}
-        >
-          {option.name}
-        </button>
-      ))}
+      <Choices
+        choices={horizontalAlignments}
+        chosen={commonToSelection(state, (label) => label.alignment.horizontal)}
+        onChoose={(horizontal) => dispatch({ type: "changeLabelAlignment", alignment: { horizontal } })}
+      />
       <span className="toolbar-separator" />
-      {fontSizes.map((option) => (
-        <button
-          key={option.fontSize}
-          type="button"
-          aria-pressed={option.fontSize === fontSize}
-          aria-label={option.title}
-          title={option.title}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => dispatch({ type: "changeStyle", style: { fontSize: option.fontSize } })}
-        >
-          {option.name}
-        </button>
-      ))}
+      <Choices
+        choices={verticalAlignments}
+        chosen={commonToSelection(state, (label) => label.alignment.vertical)}
+        onChoose={(vertical) => dispatch({ type: "changeLabelAlignment", alignment: { vertical } })}
+      />
+      <span className="toolbar-separator" />
+      <Choices
+        choices={fontSizes}
+        chosen={commonToSelection(state, (label) => label.fontSize)}
+        onChoose={(fontSize) => dispatch({ type: "changeStyle", style: { fontSize } })}
+      />
     </div>
   );
 }

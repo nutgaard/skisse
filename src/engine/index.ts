@@ -39,7 +39,7 @@ export {
 export type { HandleView, InteractionView, LabelView, ShapeView } from "./queries";
 export type { SvgElement } from "./svg";
 export type { SymbolId } from "./symbols";
-export type { LabelAlignment } from "./symbols/symbol";
+export type { HorizontalAlignment, LabelAlignment, VerticalAlignment } from "./symbols/symbol";
 export { symbolIcon, tools } from "./tools";
 export type { Tool, ToolInfo } from "./tools";
 export type { Size, Viewport } from "./viewport";

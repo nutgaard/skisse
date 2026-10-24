@@ -158,14 +158,20 @@ describe("Containers", () => {
   test.each(["rectangle", "roundedRectangle", "cloud"] as const)(
     "a %s can be a Container, and its Label defaults to the top-left corner",
     (symbol) => {
-      expect(symbolDefinition(symbol)).toMatchObject({ canBeContainer: true, defaultLabelAlignment: "topLeft" });
+      expect(symbolDefinition(symbol)).toMatchObject({
+        canBeContainer: true,
+        defaultLabelAlignment: { horizontal: "left", vertical: "top" },
+      });
     },
   );
 
   test.each(["ellipse", "diamond", "cylinder", "horizontalCylinder", "document", "person", "text"] as const)(
     "a %s can't be a Container, and its Label defaults to the middle",
     (symbol) => {
-      expect(symbolDefinition(symbol)).toMatchObject({ canBeContainer: false, defaultLabelAlignment: "center" });
+      expect(symbolDefinition(symbol)).toMatchObject({
+        canBeContainer: false,
+        defaultLabelAlignment: { horizontal: "center", vertical: "middle" },
+      });
     },
   );
 });

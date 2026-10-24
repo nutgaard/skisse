@@ -1,5 +1,5 @@
 import { ellipse as ellipsePath } from "../path";
-import { inset, labelMargin, type SymbolDefinition } from "./symbol";
+import { centred, inset, labelMargin, type SymbolDefinition } from "./symbol";
 
 export const ellipse: SymbolDefinition = {
   name: "Ellipse",
@@ -7,7 +7,7 @@ export const ellipse: SymbolDefinition = {
   defaultSize: { width: 120, height: 80 },
   canBeContainer: false,
   labelOnly: false,
-  defaultLabelAlignment: "center",
+  defaultLabelAlignment: centred,
   outline: ellipsePath,
   // The largest rectangle inside the ellipse, whose corners touch it.
   labelArea: (box) =>

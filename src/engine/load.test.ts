@@ -52,7 +52,11 @@ describe("loading a Sketch", () => {
 
     const loaded = newEditor(saved);
 
-    expect(labelLayout(loaded, "shape-1")).toMatchObject({ text: "", alignment: "topLeft", fontSize: "medium" });
+    expect(labelLayout(loaded, "shape-1")).toMatchObject({
+      text: "",
+      alignment: { horizontal: "left", vertical: "top" },
+      fontSize: "medium",
+    });
     expect(() => rendering(loaded)).not.toThrow();
     expect(canUndo(loaded)).toBe(false);
   });

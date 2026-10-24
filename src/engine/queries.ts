@@ -37,6 +37,8 @@ export type LabelView = {
   readonly lineHeight: number;
   /** Where the Label's text goes, in the Shape as displayed. */
   readonly area: Bounds;
+  /** Where the lines go together, as wide as the Label area. At least one line high, for a caret. */
+  readonly textBlock: Bounds;
   /** The text as wrapped, each line where it is drawn. */
   readonly lines: readonly LabelLine[];
 };
@@ -45,7 +47,7 @@ export type LabelView = {
 export function labelLayout(state: EditorState, id: ShapeId): LabelView | undefined {
   const shape = state.sketch.shapes[id];
   if (!shape) return undefined;
-  const { labelArea, fontPixels, lineHeight, lines } = shapeLayout(shape, state.deps.measureText);
+  const { labelArea, textBlock, fontPixels, lineHeight, lines } = shapeLayout(shape, state.deps.measureText);
   return {
     text: shape.label.text,
     alignment: shape.label.alignment,
@@ -53,6 +55,7 @@ export function labelLayout(state: EditorState, id: ShapeId): LabelView | undefi
     fontPixels,
     lineHeight,
     area: labelArea,
+    textBlock,
     lines,
   };
 }

@@ -1,6 +1,6 @@
 import type { Bounds, Point } from "../geometry";
 import { arc, close, moveTo, type Path } from "../path";
-import type { SymbolDefinition } from "./symbol";
+import { topLeft, type SymbolDefinition } from "./symbol";
 
 // The cloud is drawn in a unit box and stretched to fit. It is a ring of bumps, each a circular arc from one dip to
 // the next, bulging outwards by `bulge`. The bumps on top, right, bottom and left are centred on the box's sides and
@@ -63,7 +63,7 @@ export const cloud: SymbolDefinition = {
   defaultSize: { width: 160, height: 100 },
   canBeContainer: true,
   labelOnly: false,
-  defaultLabelAlignment: "topLeft",
+  defaultLabelAlignment: topLeft,
   outline,
   // Inside the dips between the bumps.
   labelArea: (box) => ({

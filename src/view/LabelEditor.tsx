@@ -28,10 +28,7 @@ export function LabelEditor({ label, viewport, dispatch }: LabelEditorProps) {
     field.current?.select();
   }, []);
 
-  const { area, alignment, lines, lineHeight, fontPixels, text } = label;
-  // At least one line high, so the caret shows in an empty Label.
-  const height = Math.max(1, lines.length) * lineHeight;
-  const top = alignment === "center" ? area.y + (area.height - height) / 2 : area.y;
+  const { textBlock, alignment, lineHeight, fontPixels, text } = label;
   const { zoom } = viewport;
 
   return (
@@ -44,15 +41,15 @@ export function LabelEditor({ label, viewport, dispatch }: LabelEditorProps) {
       // Laid out in Sketch units and then scaled, as the Sketch is, so the text wraps just as it was measured at any
       // zoom. Text set in a font size scaled by the zoom would be measured differently.
       style={{
-        left: (area.x - viewport.x) * zoom,
-        top: (top - viewport.y) * zoom,
-        width: area.width,
-        height,
+        left: (textBlock.x - viewport.x) * zoom,
+        top: (textBlock.y - viewport.y) * zoom,
+        width: textBlock.width,
+        height: textBlock.height,
         transform: `scale(${zoom})`,
         fontFamily: labelFontFamily,
         fontSize: fontPixels,
         lineHeight: `${lineHeight}px`,
-        textAlign: alignment === "center" ? "center" : "left",
+        textAlign: alignment.horizontal,
       }}
       onChange={(event) => dispatch({ type: "changeLabelText", text: event.target.value })}
       onKeyDown={(event) => {

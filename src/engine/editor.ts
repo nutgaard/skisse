@@ -65,7 +65,8 @@ export type Input =
   | { readonly type: "commitLabel" | "cancelLabel" }
   // Change the selected Shapes.
   | { readonly type: "changeStyle"; readonly style: Partial<Style> }
-  | { readonly type: "changeLabelAlignment"; readonly alignment: LabelAlignment };
+  // Either direction alone keeps each Shape's alignment in the other.
+  | { readonly type: "changeLabelAlignment"; readonly alignment: Partial<LabelAlignment> };
 
 export type TextMeasurer = (text: string, fontSize: number) => number;
 
@@ -823,7 +824,10 @@ function applyInput(state: EditorState, input: Input): EditorState {
     case "changeStyle":
       return changeSelected(state, (shape) => ({ ...shape, style: { ...shape.style, ...input.style } }));
     case "changeLabelAlignment":
-      return changeSelected(state, (shape) => ({ ...shape, label: { ...shape.label, alignment: input.alignment } }));
+      return changeSelected(state, (shape) => ({
+        ...shape,
+        label: { ...shape.label, alignment: { ...shape.label.alignment, ...input.alignment } },
+      }));
   }
 }
 

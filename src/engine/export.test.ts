@@ -182,6 +182,18 @@ describe("SVG export", () => {
     ]);
   });
 
+  test("draws a right-aligned Label from the end of each line", () => {
+    const state = apply(click(labelledRectangle(), { x: 200, y: 150 }), {
+      type: "changeLabelAlignment",
+      alignment: { horizontal: "right" },
+    });
+
+    expect(textElements(exported(state)).map(({ attributes }) => attributes)).toEqual([
+      expect.objectContaining({ x: "292", "text-anchor": "end" }),
+      expect.objectContaining({ x: "292", "text-anchor": "end" }),
+    ]);
+  });
+
   test("draws a centred Label from the middle of each line", () => {
     const [text] = shapeElements(exported(textShape()));
 

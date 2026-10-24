@@ -2,8 +2,20 @@ import type { Bounds, Point } from "../geometry";
 import type { Path } from "../path";
 import type { Size } from "../viewport";
 
-/** Where a Label sits in its Label area: in the middle, or from the top-left corner. */
-export type LabelAlignment = "center" | "topLeft";
+/** Where a Label's lines sit across its Label area. */
+export type HorizontalAlignment = "left" | "center" | "right";
+
+/** Where a Label's lines sit, together, from top to bottom of its Label area. */
+export type VerticalAlignment = "top" | "middle" | "bottom";
+
+/** Where a Label sits in its Label area, in each direction. */
+export type LabelAlignment = { readonly horizontal: HorizontalAlignment; readonly vertical: VerticalAlignment };
+
+/** In the top-left corner, as for a Container, whose children take up its middle. */
+export const topLeft: LabelAlignment = { horizontal: "left", vertical: "top" };
+
+/** In the middle. */
+export const centred: LabelAlignment = { horizontal: "center", vertical: "middle" };
 
 /**
  * Everything the editor knows about one Symbol. Each geometry function gets the box the Shape fills, in Sketch

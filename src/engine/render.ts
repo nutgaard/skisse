@@ -3,6 +3,7 @@ import { labelFontFamily, shapeLayout, type ShapeLayout } from "./label";
 import { pathData } from "./path";
 import { shapeGeometry } from "./shape-geometry";
 import { svgElement, type SvgElement } from "./svg";
+import type { HorizontalAlignment } from "./symbols/symbol";
 
 /** How a Sketch is rendered: on screen, it shows aids for editing that an export leaves out. */
 export type RenderOptions = {
@@ -35,20 +36,28 @@ const placeholderStyle = {
 /** A Shape to render. A Shape being drawn has no ID yet. */
 export type ShapeToRender = ShapeWithoutId & { readonly id?: ShapeId };
 
+// Where each line of a Label is drawn from: its start, middle or end, so it stays aligned even if the font is drawn
+// slightly wider or narrower than measured.
+const textAnchors: Readonly<Record<HorizontalAlignment, { readonly anchor: string; readonly along: number }>> = {
+  left: { anchor: "start", along: 0 },
+  center: { anchor: "middle", along: 0.5 },
+  right: { anchor: "end", along: 1 },
+};
+
 // One text element per line, leaving out blank lines. Spaces are drawn as typed, as they were measured, except those
-// hanging at the end of a line. A centred line is drawn from its middle, so it stays centred even if the font is
-// drawn slightly wider or narrower than measured.
-function renderLabel({ lines, fontPixels }: ShapeLayout, centred: boolean): readonly SvgElement[] {
+// hanging at the end of a line.
+function renderLabel({ lines, fontPixels }: ShapeLayout, horizontal: HorizontalAlignment): readonly SvgElement[] {
+  const { anchor, along } = textAnchors[horizontal];
   return lines.filter(({ text }) => text.trim() !== "").map(({ text, bounds }) =>
     svgElement(
       "text",
       {
-        x: centred ? bounds.x + bounds.width / 2 : bounds.x,
+        x: bounds.x + bounds.width * along,
         y: bounds.y + bounds.height / 2,
         "font-family": labelFontFamily,
         "font-size": fontPixels,
         fill: lineStyle.stroke,
-        "text-anchor": centred ? "middle" : "start",
+        "text-anchor": anchor,
         "dominant-baseline": "central",
         "xml:space": "preserve",
       },
@@ -66,7 +75,7 @@ function renderShape(shape: ShapeToRender, measure: TextMeasurer, options: Rende
   const layout = shapeLayout(shape, measure);
   const { outline, lines } = shapeGeometry(symbol, layout.bounds);
   const labelHidden = id !== undefined && id === options.hiddenLabel;
-  const label = labelHidden ? [] : renderLabel(layout, shape.label.alignment === "center");
+  const label = labelHidden ? [] : renderLabel(layout, shape.label.alignment.horizontal);
   const placeholder = options.placeholders && lines.length === 0 && label.length === 0;
   return svgElement("g", { ...(id === undefined ? {} : { "data-shape": id }), "data-symbol": symbol }, [
     svgElement("path", { d: pathData(outline), ...(placeholder ? placeholderStyle : { fill: "none" }) }),

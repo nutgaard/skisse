@@ -1,5 +1,5 @@
 import { lineTo, moveTo, rectangle } from "../path";
-import { inset, type SymbolDefinition } from "./symbol";
+import { centred, inset, type SymbolDefinition } from "./symbol";
 
 // Standalone text: just a Label, with a box to click but no lines of its own.
 export const text: SymbolDefinition = {
@@ -8,7 +8,7 @@ export const text: SymbolDefinition = {
   defaultSize: { width: 120, height: 40 },
   canBeContainer: false,
   labelOnly: true,
-  defaultLabelAlignment: "center",
+  defaultLabelAlignment: centred,
   outline: rectangle,
   lines: () => [],
   labelArea: (box) => inset(box, 4),

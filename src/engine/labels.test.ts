@@ -345,32 +345,78 @@ describe("a Shape grown to fit its Label", () => {
 });
 
 describe("alignment and font size", () => {
+  const topLeft = { horizontal: "left", vertical: "top" } as const;
+  const centred = { horizontal: "center", vertical: "middle" } as const;
+
   test.each([
-    ["rectangle", "topLeft"],
-    ["roundedRectangle", "topLeft"],
-    ["cloud", "topLeft"],
-    ["ellipse", "center"],
-    ["cylinder", "center"],
-    ["text", "center"],
-  ] as const)("a new %s's Label is aligned %s", (symbol, alignment) => {
+    ["rectangle", topLeft],
+    ["roundedRectangle", topLeft],
+    ["cloud", topLeft],
+    ["ellipse", centred],
+    ["cylinder", centred],
+    ["text", centred],
+  ] as const)("a new %s's Label is aligned %o", (symbol, alignment) => {
     const created = drawWithLabelOpen(newEditor(), symbol, { x: 100, y: 100 }, { x: 300, y: 200 });
 
-    expect(labelLayout(created, "shape-1")?.alignment).toBe(alignment);
+    expect(labelLayout(created, "shape-1")?.alignment).toEqual(alignment);
   });
 
-  test("centring a Label centres its lines in the Label area", () => {
-    const centred = apply(click(labelledRectangle("the quick brown fox"), { x: 200, y: 150 }), {
+  // The two lines are 150 and 30 wide, 50 high together, in the Label area at (108,108)–(292,192).
+  test.each([
+    ["left", "top", [108, 108], [108, 133]],
+    ["center", "top", [125, 108], [185, 133]],
+    ["right", "top", [142, 108], [262, 133]],
+    ["left", "middle", [108, 125], [108, 150]],
+    ["center", "middle", [125, 125], [185, 150]],
+    ["right", "middle", [142, 125], [262, 150]],
+    ["left", "bottom", [108, 142], [108, 167]],
+    ["center", "bottom", [125, 142], [185, 167]],
+    ["right", "bottom", [142, 142], [262, 167]],
+  ] as const)("a Label aligned %s and %s places its lines in the Label area", (horizontal, vertical, first, second) => {
+    const aligned = apply(click(labelledRectangle("the quick brown fox"), { x: 200, y: 150 }), {
       type: "changeLabelAlignment",
-      alignment: "center",
+      alignment: { horizontal, vertical },
     });
 
-    expect(labelLayout(centred, "shape-1")).toMatchObject({
-      alignment: "center",
+    expect(labelLayout(aligned, "shape-1")).toMatchObject({
+      alignment: { horizontal, vertical },
       lines: [
-        { text: "the quick brown", bounds: { x: 125, y: 125, width: 150, height: 25 } },
-        { text: "fox", bounds: { x: 185, y: 150, width: 30, height: 25 } },
+        { text: "the quick brown", bounds: { x: first[0], y: first[1], width: 150, height: 25 } },
+        { text: "fox", bounds: { x: second[0], y: second[1], width: 30, height: 25 } },
       ],
     });
+  });
+
+  test("the text block spans the lines, as aligned, and is one line high for an empty Label, for its caret", () => {
+    const bottom = (text: string) =>
+      apply(
+        drawWithLabelOpen(newEditor(), "rectangle", { x: 100, y: 100 }, { x: 300, y: 200 }),
+        {
+          type: "changeLabelAlignment",
+          alignment: { vertical: "bottom" },
+        },
+        { type: "changeLabelText", text },
+      );
+
+    expect(labelLayout(bottom("the quick brown fox"), "shape-1")?.textBlock).toEqual({
+      x: 108,
+      y: 142,
+      width: 184,
+      height: 50,
+    });
+    expect(labelLayout(bottom(""), "shape-1")?.textBlock).toEqual({ x: 108, y: 167, width: 184, height: 25 });
+  });
+
+  test("changing one direction of the alignment keeps the other of each selected Shape", () => {
+    const rectangle = labelledRectangle("A");
+    const both = press(drawLabelled(rectangle, "ellipse", { x: 400, y: 100 }, { x: 500, y: 200 }, "B"), "a", {
+      meta: true,
+    });
+
+    const bottom = apply(both, { type: "changeLabelAlignment", alignment: { vertical: "bottom" } });
+
+    expect(labelLayout(bottom, "shape-1")?.alignment).toEqual({ horizontal: "left", vertical: "bottom" });
+    expect(labelLayout(bottom, "shape-2")?.alignment).toEqual({ horizontal: "center", vertical: "bottom" });
   });
 
   test("a larger font size wraps and grows the Shape for the larger text", () => {
@@ -404,15 +450,15 @@ describe("alignment and font size", () => {
     const changed = apply(
       press(two, "a", { meta: true }),
       { type: "changeStyle", style: { fontSize: "small" } },
-      { type: "changeLabelAlignment", alignment: "center" },
+      { type: "changeLabelAlignment", alignment: { horizontal: "right" } },
     );
 
     for (const id of ["shape-1", "shape-2"]) {
-      expect(labelLayout(changed, id)).toMatchObject({ fontSize: "small", alignment: "center" });
+      expect(labelLayout(changed, id)).toMatchObject({ fontSize: "small", alignment: { horizontal: "right" } });
     }
     expect(labelLayout(apply(changed, undoInput), "shape-1")).toMatchObject({
       fontSize: "small",
-      alignment: "topLeft",
+      alignment: { horizontal: "left" },
     });
     expect(labelLayout(apply(changed, undoInput, undoInput), "shape-2")).toMatchObject({ fontSize: "medium" });
   });

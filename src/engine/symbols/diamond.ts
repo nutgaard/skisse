@@ -1,5 +1,5 @@
 import { polygon } from "../path";
-import { inset, labelMargin, sideMidpoints, type SymbolDefinition } from "./symbol";
+import { centred, inset, labelMargin, sideMidpoints, type SymbolDefinition } from "./symbol";
 
 export const diamond: SymbolDefinition = {
   name: "Diamond",
@@ -7,7 +7,7 @@ export const diamond: SymbolDefinition = {
   defaultSize: { width: 140, height: 100 },
   canBeContainer: false,
   labelOnly: false,
-  defaultLabelAlignment: "center",
+  defaultLabelAlignment: centred,
   outline: (box) => polygon(sideMidpoints(box)),
   // The largest rectangle inside the diamond, whose corners touch its sides.
   labelArea: (box) =>
