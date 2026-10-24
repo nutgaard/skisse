@@ -167,7 +167,7 @@ export function pieceLength(piece: Path): number {
   const points = piecePoints(piece);
   return points.slice(1).reduce((length, point, index) => {
     const previous = points[index] ?? point;
-    return length + Math.hypot(point.x - previous.x, point.y - previous.y);
+    return length + distance(point, previous);
   }, 0);
 }
 

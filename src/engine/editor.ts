@@ -1,5 +1,5 @@
 import {
-  bindingTarget,
+  boundTo,
   endAt,
   isArrow,
   isSymbolShape,
@@ -442,23 +442,23 @@ function sketchDistance(state: EditorState, screenDistance: number): number {
   return screenDistance / state.viewport.zoom;
 }
 
+// Whether a press at `point` grabs the handle at `position`.
+function grabsHandle(state: EditorState, position: Point, point: Point): boolean {
+  const reach = sketchDistance(state, handleReach);
+  return Math.abs(position.x - point.x) <= reach && Math.abs(position.y - point.y) <= reach;
+}
+
 function handleAt(state: EditorState, point: Point): { shape: SymbolShape; handle: ResizeHandle } | undefined {
   const shape = resizableShape(state);
-  const reach = sketchDistance(state, handleReach);
   const nearby = shape
-    ? handlePositions(displayed(state, shape)).find(
-        ({ position }) => Math.abs(position.x - point.x) <= reach && Math.abs(position.y - point.y) <= reach,
-      )
+    ? handlePositions(displayed(state, shape)).find(({ position }) => grabsHandle(state, position, point))
     : undefined;
   return shape && nearby ? { shape, handle: nearby.handle } : undefined;
 }
 
 function arrowEndAt(state: EditorState, point: Point): { arrow: Arrow; end: EndName } | undefined {
   const arrow = selectedArrow(state);
-  const reach = sketchDistance(state, handleReach);
-  const nearby = arrowEndHandles(state).find(
-    ({ position }) => Math.abs(position.x - point.x) <= reach && Math.abs(position.y - point.y) <= reach,
-  );
+  const nearby = arrowEndHandles(state).find(({ position }) => grabsHandle(state, position, point));
   return arrow && nearby ? { arrow, end: nearby.end } : undefined;
 }
 
@@ -521,15 +521,14 @@ function movesItself(shape: Shape): boolean {
   return isSymbolShape(shape) || (shape.start.kind === "floating" && shape.end.kind === "floating");
 }
 
+function translateEnd(end: ArrowEnd, offset: Point): ArrowEnd {
+  return end.kind === "floating" ? { ...end, at: translatePoint(end.at, offset) } : end;
+}
+
 function translateShape(shape: Shape, offset: Point): Shape {
   if (isSymbolShape(shape)) return { ...shape, bounds: translate(shape.bounds, offset) };
-  const { start, end } = shape;
-  return start.kind === "floating" && end.kind === "floating"
-    ? {
-        ...shape,
-        start: { ...start, at: translatePoint(start.at, offset) },
-        end: { ...end, at: translatePoint(end.at, offset) },
-      }
+  return movesItself(shape)
+    ? { ...shape, start: translateEnd(shape.start, offset), end: translateEnd(shape.end, offset) }
     : shape;
 }
 
@@ -550,11 +549,11 @@ function moveShapes(sketch: Sketch, ids: readonly ShapeId[], offset: Point): Ske
 }
 
 // The Bounds around the selected Shapes that move, which move as one block, or `undefined` when none of them does.
-function selectionBlock(state: EditorState, sketch: Sketch, selection: readonly ShapeId[]): Bounds | undefined {
+function selectionBlock(sketch: Sketch, selection: readonly ShapeId[], measure: TextMeasurer): Bounds | undefined {
   const all = selection.flatMap((id) => {
     const shape = sketch.shapes[id];
     if (!shape || !movesItself(shape)) return [];
-    return isSymbolShape(shape) ? [shape.bounds] : (shapeBounds(sketch, shape, state.deps.measureText) ?? []);
+    return isSymbolShape(shape) ? [shape.bounds] : (shapeBounds(sketch, shape, measure) ?? []);
   });
   return all.length === 0 ? undefined : enclosingBounds(all);
 }
@@ -583,7 +582,7 @@ function pointerOffset(drag: Drag, pointer: PointerState): Point {
 function dragOffset(state: EditorState, drag: Drag, pointer: PointerState): Point {
   const offset = pointerOffset(drag, pointer);
   if (!drag.dragged || !snapsToGrid(pointer.modifiers)) return offset;
-  const block = selectionBlock(state, drag.before, state.selection);
+  const block = selectionBlock(drag.before, state.selection, state.deps.measureText);
   if (!block) return offset;
   return {
     x: snapToGrid(block.x + offset.x) - block.x,
@@ -641,7 +640,7 @@ function placedEnd(state: EditorState, sketch: Sketch, point: Point): ArrowEnd {
   return endAt(sketch, point, sketchDistance(state, portReach), state.deps.measureText);
 }
 
-// The dragged end attaches wherever the pointer is, once the pointer has travelled past the drag threshold.
+// The dragged end is placed wherever the pointer is, once the pointer has travelled past the drag threshold.
 function dragArrowEnd(
   state: EditorState,
   interaction: Extract<Interaction, { kind: "draggingArrowEnd" }>,
@@ -649,8 +648,8 @@ function dragArrowEnd(
   const { before, arrowId, end, current } = interaction;
   const arrow = before.shapes[arrowId];
   if (!arrow || !isArrow(arrow) || !interaction.dragged) return { ...state, sketch: before, interaction };
-  const reattached: Arrow = { ...arrow, [end]: placedEnd(state, before, current) };
-  return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: reattached } }, interaction };
+  const replaced: Arrow = { ...arrow, [end]: placedEnd(state, before, current) };
+  return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: replaced } }, interaction };
 }
 
 function dragTo(
@@ -908,10 +907,10 @@ function arrowEndBeingPlaced(state: EditorState): Point | undefined {
 export function portTarget(state: EditorState): { shape: SymbolShape; snapsTo: number | undefined } | undefined {
   const point = arrowEndBeingPlaced(state);
   if (!point) return undefined;
-  const shape = bindingTarget(state.sketch, point, sketchDistance(state, portReach), state.deps.measureText);
-  if (!shape) return undefined;
   const end = placedEnd(state, state.sketch, point);
-  return { shape, snapsTo: end.kind === "port" ? end.port : undefined };
+  const id = boundTo(end);
+  const shape = id === undefined ? undefined : state.sketch.shapes[id];
+  return shape && isSymbolShape(shape) ? { shape, snapsTo: end.kind === "port" ? end.port : undefined } : undefined;
 }
 
 /**
@@ -1009,7 +1008,7 @@ function nudgeOffset(state: EditorState, direction: Point, modifiers: Modifiers)
     const step = modifiers.shift ? gridSize : 1;
     return { x: direction.x * step, y: direction.y * step };
   }
-  const block = selectionBlock(state, state.sketch, state.selection);
+  const block = selectionBlock(state.sketch, state.selection, state.deps.measureText);
   if (!block) return { x: 0, y: 0 };
   return {
     x: direction.x === 0 ? 0 : nextGridLine(block.x, direction.x) - block.x,

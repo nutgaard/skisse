@@ -113,6 +113,40 @@ describe("drawing an Arrow", () => {
     expect(onlyArrow(state).end).toEqual({ point: { x: 330, y: 192 } });
   });
 
+  test("letting go on a Port binds to it even with another Shape's outline within reach", () => {
+    // shape-1 at (100,100)–(200,180), and shape-2 just beside it at (205,100)–(305,180).
+    const sideBySide = drawRectangle(
+      drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 }),
+      { x: 205, y: 100 },
+      { x: 305, y: 180 },
+    );
+
+    const state = drawArrow(sideBySide, { x: 150, y: 300 }, { x: 200, y: 140 });
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 200, y: 140 }, binding: { shape: "shape-1", port: 1 } });
+  });
+
+  // A Container, shape-1, at (100,100)–(400,300), and a child, shape-2, close to its left side at (107,150)–(207,250).
+  function childNearContainerSide(): EditorState {
+    return drawRectangle(
+      drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 400, y: 300 }),
+      { x: 107, y: 150 },
+      { x: 207, y: 250 },
+    );
+  }
+
+  test("letting go on a Container's Port binds to it even with a child's Port within reach", () => {
+    const state = drawArrow(childNearContainerSide(), { x: 250, y: 400 }, { x: 100, y: 200 });
+
+    expect(onlyArrow(state).end.binding).toEqual({ shape: "shape-1", port: 3 });
+  });
+
+  test("letting go on a child's edge inside a Container binds to the child", () => {
+    const state = drawArrow(childNearContainerSide(), { x: 250, y: 400 }, { x: 207, y: 170 });
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 207, y: 170 }, binding: { shape: "shape-2" } });
+  });
+
   test("letting go over empty space leaves the end floating there", () => {
     const state = drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 250, y: 300 });
 

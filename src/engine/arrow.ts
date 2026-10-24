@@ -1,8 +1,8 @@
 import type { Shape, ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
-import { distance, type Point } from "./geometry";
+import { distance, type Bounds, type Point } from "./geometry";
 import { displayedBounds } from "./label";
-import { nearestOnPath } from "./path";
-import { hitsOutline, shapeGeometry } from "./shape-geometry";
+import { insidePath, nearestOnPath } from "./path";
+import { shapeGeometry, type ShapeGeometry } from "./shape-geometry";
 import type { Style } from "./style";
 import { drawOrder } from "./tree";
 
@@ -74,56 +74,58 @@ export function resolveArrow(sketch: Sketch, arrow: ArrowWithoutId, measure: Tex
   return start && end ? { start, end, path: [start, end] } : undefined;
 }
 
-// The place in `ports` of the Port nearest to `point` within `reach`, if there is one.
-function portWithin(ports: readonly Point[], point: Point, reach: number): number | undefined {
-  const nearest = ports
-    .map((port, index) => ({ index, distance: distance(port, point) }))
-    .filter((port) => port.distance <= reach)
-    .sort((a, b) => a.distance - b.distance)[0];
-  return nearest?.index;
+// A Shape an end can bind to, as displayed.
+type Candidate = { readonly shape: SymbolShape; readonly box: Bounds; readonly geometry: ShapeGeometry };
+
+// Of `items`, the one nearest to the point by `distanceOf`, if it is within `reach`. A tie goes to the first.
+function nearestWithin<T>(items: readonly T[], distanceOf: (item: T) => number, reach: number): T | undefined {
+  return items
+    .map((item) => ({ item, distance: distanceOf(item) }))
+    .filter(({ distance }) => distance <= reach)
+    .reduce<{ item: T; distance: number } | undefined>(
+      (nearest, candidate) => (nearest === undefined || candidate.distance < nearest.distance ? candidate : nearest),
+      undefined,
+    )?.item;
 }
 
-/**
- * The Shape an Arrow end at `point` binds to: the topmost Shape under it, or with its outline or a Port within `reach`
- * of it, so an end dropped on the line drawn around a Shape binds to it. Arrows never bind to other Arrows.
- */
-export function bindingTarget(
-  sketch: Sketch,
-  point: Point,
-  reach: number,
-  measure: TextMeasurer,
-): SymbolShape | undefined {
-  return drawOrder(sketch)
-    .filter(isSymbolShape)
-    .findLast((shape) => {
-      const box = displayedBounds(shape, measure);
-      const { outline, ports } = shapeGeometry(shape.symbol, box);
-      const nearOutline = nearestOnPath(outline, point);
-      return (
-        hitsOutline(shape.symbol, box, point) ||
-        (nearOutline !== undefined && distance(nearOutline, point) <= reach) ||
-        portWithin(ports, point, reach) !== undefined
-      );
-    });
-}
-
-/**
- * The end an Arrow gets when it is let go at `point`. Within `reach` of a Port, it snaps to that Port. Elsewhere over
- * a Shape, it binds to the nearest point on the Shape's outline. Over empty space, it floats.
- */
-export function endAt(sketch: Sketch, point: Point, reach: number, measure: TextMeasurer): ArrowEnd {
-  const target = bindingTarget(sketch, point, reach, measure);
-  if (!target) return { kind: "floating", at: point };
-  const box = displayedBounds(target, measure);
-  const { outline, ports } = shapeGeometry(target.symbol, box);
-  const port = portWithin(ports, point, reach);
-  if (port !== undefined) return { kind: "port", shape: target.id, port };
-  const onOutline = nearestOnPath(outline, point) ?? point;
+function outlineEnd({ shape, box }: Candidate, onOutline: Point): ArrowEnd {
   return {
     kind: "outline",
-    shape: target.id,
+    shape: shape.id,
     at: { x: (onOutline.x - box.x) / box.width, y: (onOutline.y - box.y) / box.height },
   };
+}
+
+/**
+ * The end an Arrow gets when it is let go at `point`. Arrows never bind to other Arrows. In order:
+ * - Within `reach` of a Port, it snaps to the nearest such Port.
+ * - Within `reach` of a Shape's outline, it binds to the nearest point on the nearest such outline, so an end let go
+ *   on the line drawn around a Shape binds to that Shape, even inside a Container.
+ * - Over a Shape, it binds to the nearest point on the outline of the topmost Shape under it.
+ * - Over empty space, it floats.
+ * A tie goes to the Shape on top.
+ */
+export function endAt(sketch: Sketch, point: Point, reach: number, measure: TextMeasurer): ArrowEnd {
+  const candidates: readonly Candidate[] = drawOrder(sketch)
+    .filter(isSymbolShape)
+    .toReversed()
+    .map((shape) => {
+      const box = displayedBounds(shape, measure);
+      return { shape, box, geometry: shapeGeometry(shape.symbol, box) };
+    });
+  const ports = candidates.flatMap((candidate) =>
+    candidate.geometry.ports.map((position, port) => ({ shape: candidate.shape.id, port, position })),
+  );
+  const port = nearestWithin(ports, ({ position }) => distance(position, point), reach);
+  if (port) return { kind: "port", shape: port.shape, port: port.port };
+  const outlines = candidates.flatMap((candidate) => {
+    const onOutline = nearestOnPath(candidate.geometry.outline, point);
+    return onOutline ? [{ candidate, onOutline }] : [];
+  });
+  const near = nearestWithin(outlines, ({ onOutline }) => distance(onOutline, point), reach);
+  if (near) return outlineEnd(near.candidate, near.onOutline);
+  const under = outlines.find(({ candidate }) => insidePath(candidate.geometry.outline, point));
+  return under ? outlineEnd(under.candidate, under.onOutline) : { kind: "floating", at: point };
 }
 
 /** The Shape an end is bound to, or `undefined` when it floats. */
