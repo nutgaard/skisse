@@ -82,21 +82,25 @@ type Candidate = {
 
 // Where the middle segment goes on its own: at `preferred`, unless the path would then run back over itself or through
 // the Shape of an end. It then goes just outside one of those Shapes instead, the nearest place to `preferred`, or the
-// top or left on a tie, that keeps clear of both Shapes and leaves the path clean. Failing that, the nearest such place
-// where the path at least doesn't run back over itself, as when the Shapes are too close together to keep clear of.
+// top or left on a tie, that keeps clear of both Shapes and leaves the path clean. Failing that, as when the Shapes are
+// too close together to keep clear of, it stays at `preferred` if the path there at least doesn't run back over
+// itself, or else goes to the nearest such place just outside a Shape that doesn't. With none, it stays.
 function placed(start: ElbowEnd, end: ElbowEnd, axis: Axis, within: Extent, preferred: number): number {
   const extents = [start, end].flatMap(({ box }) => (box ? [extentOf(box, axis)] : []));
-  const pointsAt = (at: number) => layoutAt(start, end, axis, at).points;
-  const goesOn = (at: number) => !turnsBack(pointsAt(at));
-  const isClean = (at: number) => goesOn(at) && !crossesShapes(start, end, pointsAt(at));
+  const goesOn = (at: number) => !turnsBack(layoutAt(start, end, axis, at).points);
+  const isClean = (at: number) => {
+    const { points } = layoutAt(start, end, axis, at);
+    return !turnsBack(points) && !crossesShapes(start, end, points);
+  };
   if (isClean(preferred)) return preferred;
   const clear = (at: number) => extents.every((extent) => at <= extent.start - stub || extent.end + stub <= at);
   const beside = extents
     .flatMap((extent) => [extent.start - stub, extent.end + stub])
     .filter((at) => within.start < at && at < within.end)
     .toSorted((a, b) => Math.abs(a - preferred) - Math.abs(b - preferred) || a - b);
-  const fallback = goesOn(preferred) ? preferred : (beside.find(goesOn) ?? preferred);
-  return beside.find((at) => clear(at) && isClean(at)) ?? fallback;
+  const clean = beside.find((at) => clear(at) && isClean(at));
+  if (clean !== undefined) return clean;
+  return goesOn(preferred) ? preferred : (beside.find(goesOn) ?? preferred);
 }
 
 // An end that leaves along the axis must not have the middle segment behind it, or the path would double back there.
