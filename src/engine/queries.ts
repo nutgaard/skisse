@@ -306,8 +306,8 @@ export function currentInteraction(state: EditorState): InteractionView {
 
 // The Shapes drawn above all the others until let go. Shapes being dragged are, so they never pass behind a Shape they
 // cross, and the Arrows bound to them come along. So does an Arrow whose end is being dragged, as the end can be bound
-// to a Shape outside its Container before it joins that Shape's level on letting go. Either way, an Arrow never passes
-// behind a Shape it is bound to.
+// to a Shape outside its Container before the Arrow joins the Container holding both its ends on letting go. Either
+// way, an Arrow never passes behind a Shape it is bound to.
 function liftedWhileDragging(state: EditorState): readonly ShapeId[] {
   const { interaction } = state;
   if (interaction.kind === "draggingArrowEnd") return [interaction.arrowId];
@@ -318,7 +318,7 @@ function liftedWhileDragging(state: EditorState): readonly ShapeId[] {
 
 /**
  * The Sketch as rendered on screen, in Sketch coordinates, including a Shape or Arrow being drawn, and with Shapes
- * being dragged in front. The selection, handles and Ports are not part of it.
+ * being dragged, or an Arrow whose end is being dragged, in front. The selection, handles and Ports are not part of it.
  */
 export function rendering(state: EditorState): SvgElement {
   const interaction = currentInteraction(state);
