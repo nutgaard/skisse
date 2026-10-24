@@ -5,7 +5,7 @@ export type Choice<T> = { readonly value: T; readonly content: ReactNode; readon
 
 type ChoicesProps<T> = {
   readonly choices: readonly Choice<T>[];
-  /** The value chosen, or `undefined` when the selected Shapes differ. */
+  /** The value chosen, or `undefined` when none is, such as when the selected Shapes differ. */
   readonly chosen: T | undefined;
   readonly onChoose: (value: T) => void;
   /** Whether there is nothing to choose for, such as no Label to align with nothing selected. */

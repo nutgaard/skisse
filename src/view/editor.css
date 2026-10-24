@@ -171,6 +171,7 @@ body,
 
 .style-choices {
   display: grid;
+  /* Four choices on a row, unless the group says otherwise. */
   grid-template-columns: repeat(4, auto);
   justify-content: start;
   gap: 2px;

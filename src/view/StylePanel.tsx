@@ -149,12 +149,11 @@ function StyleGroup<T extends string>({ name, choices, chosen, onChoose }: Style
 
 type AlignmentGroupProps = {
   readonly alignment: SelectionAlignment | undefined;
-  readonly dispatch: (input: Input) => void;
+  readonly onAlign: (alignment: Partial<LabelAlignment>) => void;
 };
 
 // The Label alignment, a row for each direction. With nothing selected there is no Label to align.
-function AlignmentGroup({ alignment, dispatch }: AlignmentGroupProps) {
-  const align = (change: Partial<LabelAlignment>) => dispatch({ type: "changeLabelAlignment", alignment: change });
+function AlignmentGroup({ alignment, onAlign }: AlignmentGroupProps) {
   return (
     <PanelGroup
       name="Align"
@@ -165,13 +164,13 @@ function AlignmentGroup({ alignment, dispatch }: AlignmentGroupProps) {
         choices={horizontalAlignmentChoices}
         chosen={alignment && unlessMixed(alignment.horizontal)}
         disabled={!alignment}
-        onChoose={(horizontal) => align({ horizontal })}
+        onChoose={(horizontal) => onAlign({ horizontal })}
       />
       <Choices
         choices={verticalAlignmentChoices}
         chosen={alignment && unlessMixed(alignment.vertical)}
         disabled={!alignment}
-        onChoose={(vertical) => align({ vertical })}
+        onChoose={(vertical) => onAlign({ vertical })}
       />
     </PanelGroup>
   );
@@ -189,6 +188,7 @@ type StylePanelProps = {
  */
 export function StylePanel({ style, alignment, dispatch }: StylePanelProps) {
   const choose = (chosen: Partial<Style>) => dispatch({ type: "changeStyle", style: chosen });
+  const align = (aligned: Partial<LabelAlignment>) => dispatch({ type: "changeLabelAlignment", alignment: aligned });
   return (
     <div className="toolbar style-panel" role="toolbar" aria-label="Style">
       <StyleGroup
@@ -216,7 +216,7 @@ export function StylePanel({ style, alignment, dispatch }: StylePanelProps) {
         chosen={style.fontSize}
         onChoose={(fontSize) => choose({ fontSize })}
       />
-      <AlignmentGroup alignment={alignment} dispatch={dispatch} />
+      <AlignmentGroup alignment={alignment} onAlign={align} />
     </div>
   );
 }
