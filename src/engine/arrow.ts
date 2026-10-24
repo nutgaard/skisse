@@ -96,24 +96,34 @@ function outlineEnd({ shape, box }: Candidate, onOutline: Point): ArrowEnd {
   };
 }
 
-// The Shapes an end at `point` can bind to, topmost first: the topmost Shape under it and those drawn above it, such
-// as its children. The Shapes it covers are hidden there, as Shapes are hit as if filled. Over empty space, all of
-// them.
-function candidatesAt(sketch: Sketch, point: Point, measure: TextMeasurer): readonly Candidate[] {
-  const all = drawOrder(sketch)
+// Every Shape an end can bind to, as displayed, topmost first.
+function candidates(sketch: Sketch, measure: TextMeasurer): readonly Candidate[] {
+  return drawOrder(sketch)
     .filter(isSymbolShape)
     .toReversed()
     .map((shape) => {
       const box = displayedBounds(shape, measure);
       return { shape, box, geometry: shapeGeometry(shape.symbol, box) };
     });
-  const under = all.findIndex(({ geometry }) => insidePath(geometry.outline, point));
-  return under === -1 ? all : all.slice(0, under + 1);
+}
+
+// How close, in Sketch units, to a Shape's outline a point counts as on it, rather than inside it, so that rounding
+// never hides a Port that lies on the outline of a Shape drawn above.
+const onOutlineTolerance = 0.5;
+
+// Whether `point` is hidden under the Shape: inside its outline, and not on it. Shapes are hit as if filled, so what
+// they cover can't be bound to.
+function hides({ geometry }: Candidate, point: Point): boolean {
+  const onOutline = nearestOnPath(geometry.outline, point);
+  return (
+    insidePath(geometry.outline, point) &&
+    (onOutline === undefined || distance(onOutline, point) > onOutlineTolerance)
+  );
 }
 
 /**
- * The end an Arrow gets when it is let go at `point`. Arrows never bind to other Arrows, nor to a Shape hidden at
- * `point` under the topmost Shape there. In order:
+ * The end an Arrow gets when it is let go at `point`. Arrows never bind to other Arrows, nor to a Port or a point on an
+ * outline that a Shape drawn above hides. In order:
  * - Within `reach` of a Port, it snaps to the nearest such Port.
  * - Within `reach` of a Shape's outline, it binds to the nearest point on the nearest such outline, so an end let go
  *   on the line drawn around a Shape binds to that Shape, even inside a Container.
@@ -122,20 +132,24 @@ function candidatesAt(sketch: Sketch, point: Point, measure: TextMeasurer): read
  * A tie goes to the Shape on top.
  */
 export function endLetGoAt(sketch: Sketch, point: Point, reach: number, measure: TextMeasurer): ArrowEnd {
-  const candidates = candidatesAt(sketch, point, measure);
-  const ports = candidates.flatMap((candidate) =>
-    candidate.geometry.ports.map((position, port) => ({ shape: candidate.shape.id, port, position })),
+  const all = candidates(sketch, measure);
+  const visible = (index: number, at: Point) => !all.slice(0, index).some((above) => hides(above, at));
+  const ports = all.flatMap((candidate, index) =>
+    candidate.geometry.ports
+      .map((position, port) => ({ shape: candidate.shape.id, port, position }))
+      .filter(({ position }) => visible(index, position)),
   );
   const port = nearestWithin(ports, ({ position }) => distance(position, point), reach);
   if (port) return { kind: "port", shape: port.shape, port: port.port };
-  const outlines = candidates.flatMap((candidate) => {
+  const outlines = all.flatMap((candidate, index) => {
     const onOutline = nearestOnPath(candidate.geometry.outline, point);
-    return onOutline ? [{ candidate, onOutline }] : [];
+    return onOutline && visible(index, onOutline) ? [{ candidate, onOutline }] : [];
   });
   const near = nearestWithin(outlines, ({ onOutline }) => distance(onOutline, point), reach);
   if (near) return outlineEnd(near.candidate, near.onOutline);
-  const under = outlines.find(({ candidate }) => insidePath(candidate.geometry.outline, point));
-  return under ? outlineEnd(under.candidate, under.onOutline) : { kind: "floating", at: point };
+  const under = all.find(({ geometry }) => insidePath(geometry.outline, point));
+  const onUnder = under && nearestOnPath(under.geometry.outline, point);
+  return under && onUnder ? outlineEnd(under, onUnder) : { kind: "floating", at: point };
 }
 
 /** The Shape an end is bound to, or `undefined` when it floats. */

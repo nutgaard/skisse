@@ -21,6 +21,7 @@ import {
   click,
   drag,
   drawArrow,
+  drawLabelled,
   drawRectangle,
   keyDown,
   newEditor,
@@ -160,6 +161,30 @@ describe("drawing an Arrow", () => {
 
     expect(onlyArrow(nearSide).end).toEqual({ point: { x: 180, y: 160 }, binding: { shape: "shape-2" } });
     expect(onlyArrow(nearPort).end.binding).toEqual({ shape: "shape-2" });
+  });
+
+  test("letting go on a Container's Port binds to it when a child shares that side", () => {
+    // A Container at (100,100)–(400,300), and a child on its left side at (100,150)–(200,220).
+    const sharedSide = drawRectangle(
+      drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 400, y: 300 }),
+      { x: 100, y: 150 },
+      { x: 200, y: 220 },
+    );
+
+    const state = drawArrow(sharedSide, { x: 250, y: 400 }, { x: 100, y: 200 });
+
+    expect(onlyArrow(state).end.binding).toEqual({ shape: "shape-1", port: 3 });
+  });
+
+  test("letting go near a Port covered by another Shape doesn't snap to it", () => {
+    // shape-1 at (100,100)–(200,180), its top Port at (150,100) covered by a text, shape-2, at (145,95)–(300,250),
+    // which is no Container, so it doesn't adopt shape-1.
+    const rectangle = drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 });
+    const covered = press(drawLabelled(rectangle, "text", { x: 145, y: 95 }, { x: 300, y: 250 }, "Cover"), "Escape");
+
+    const state = drawArrow(covered, { x: 250, y: 400 }, { x: 150, y: 92 });
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 150, y: 95 }, binding: { shape: "shape-2" } });
   });
 
   test("letting go over empty space leaves the end floating there", () => {

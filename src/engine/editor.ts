@@ -295,7 +295,7 @@ export function resolved(state: EditorState, arrow: ArrowWithoutId): ResolvedArr
 }
 
 // The smallest Bounds around any Shape as displayed: one made from a Symbol grown to fit its Label, or an Arrow's path.
-// `undefined` for an Arrow that can't be resolvedArrow.
+// `undefined` for an Arrow that can't be placed.
 function shapeBounds(sketch: Sketch, shape: Shape, measure: TextMeasurer): Bounds | undefined {
   if (isSymbolShape(shape)) return displayedBounds(shape, measure);
   const arrow = resolveArrow(sketch, shape, measure);
