@@ -1,4 +1,5 @@
 import type { Shape, ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
+import { elbowRoute, type ElbowEnd, type ElbowOffset, type MiddleSegment } from "./elbow";
 import { contains, distance, type Bounds, type Point } from "./geometry";
 import { displayedBounds } from "./label";
 import { insidePath, nearestOnPath } from "./path";
@@ -6,8 +7,8 @@ import { shapeGeometry, type ShapeGeometry } from "./shape-geometry";
 import type { Style } from "./style";
 import { drawOrder } from "./tree";
 
-/** How an Arrow's path runs between its ends. */
-export type Routing = "straight";
+/** How an Arrow's path runs between its ends. `curved` is kept for later, and drawn straight until then. */
+export type Routing = "straight" | "elbow" | "curved";
 
 /** Where an Arrow end is. A bound end follows its Shape when the Shape moves or is resized. */
 export type ArrowEnd =
@@ -31,6 +32,8 @@ export type Arrow = {
   readonly routing: Routing;
   readonly start: ArrowEnd;
   readonly end: ArrowEnd;
+  // For an elbow Arrow, how far the user dragged its middle segment from where it would be on its own.
+  readonly elbowOffset?: ElbowOffset;
 };
 
 /** An Arrow but for its ID and its place among the other Shapes, such as one still being drawn. */
@@ -52,26 +55,59 @@ function boundShape(sketch: Sketch, id: ShapeId): SymbolShape | undefined {
   return shape && isSymbolShape(shape) ? shape : undefined;
 }
 
-/** Where an end is on the Sketch, or `undefined` when the Shape it is bound to is missing. */
-export function endPoint(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): Point | undefined {
-  if (end.kind === "floating") return end.at;
+// The way straight out of the side of `box` nearest to `point`. A tie goes to the side first in the order top, right,
+// bottom, left.
+function outOfSide(box: Bounds, point: Point): Point {
+  const sides = [
+    { out: { x: 0, y: -1 }, distance: point.y - box.y },
+    { out: { x: 1, y: 0 }, distance: box.x + box.width - point.x },
+    { out: { x: 0, y: 1 }, distance: box.y + box.height - point.y },
+    { out: { x: -1, y: 0 }, distance: point.x - box.x },
+  ];
+  return sides.reduce((nearest, side) => (side.distance < nearest.distance ? side : nearest)).out;
+}
+
+// Where an end is on the Sketch, and for a bound end, its Shape's box as displayed and the way out of the side of it
+// the end is on. `undefined` when the Shape it is bound to is missing.
+function elbowEnd(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): ElbowEnd | undefined {
+  if (end.kind === "floating") return { point: end.at };
   const shape = boundShape(sketch, end.shape);
   if (!shape) return undefined;
   const box = displayedBounds(shape, measure);
   const { outline, ports } = shapeGeometry(shape.symbol, box);
-  if (end.kind === "port") return ports[end.port];
-  // A point on the outline at one size need not be on it at another, so the point is brought back onto it.
-  return nearestOnPath(outline, { x: box.x + end.at.x * box.width, y: box.y + end.at.y * box.height });
+  const point =
+    end.kind === "port"
+      ? ports[end.port]
+      : // A point on the outline at one size need not be on it at another, so the point is brought back onto it.
+        nearestOnPath(outline, { x: box.x + end.at.x * box.width, y: box.y + end.at.y * box.height });
+  return point && { point, out: outOfSide(box, point), box };
+}
+
+/** Where an end is on the Sketch, or `undefined` when the Shape it is bound to is missing. */
+export function endPoint(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): Point | undefined {
+  return elbowEnd(sketch, end, measure)?.point;
 }
 
 /** An Arrow placed on the Sketch: where its ends are, and the points its path runs through from start to end. */
-export type ResolvedArrow = { readonly start: Point; readonly end: Point; readonly path: readonly Point[] };
+export type ResolvedArrow = {
+  readonly start: Point;
+  readonly end: Point;
+  readonly path: readonly Point[];
+  /** The middle segment of an elbow path, which can be dragged sideways, unless it has none. */
+  readonly middle?: MiddleSegment;
+  /** Whether the path follows the Arrow's elbow offset. It doesn't when it has none, or once it would double back. */
+  readonly followsOffset: boolean;
+};
 
 /** Where an Arrow is on the Sketch, or `undefined` when an end can't be placed. */
 export function resolveArrow(sketch: Sketch, arrow: ArrowWithoutId, measure: TextMeasurer): ResolvedArrow | undefined {
-  const start = endPoint(sketch, arrow.start, measure);
-  const end = endPoint(sketch, arrow.end, measure);
-  return start && end ? { start, end, path: [start, end] } : undefined;
+  const start = elbowEnd(sketch, arrow.start, measure);
+  const end = elbowEnd(sketch, arrow.end, measure);
+  if (!start || !end) return undefined;
+  if (arrow.routing !== "elbow") {
+    return { start: start.point, end: end.point, path: [start.point, end.point], followsOffset: false };
+  }
+  return { start: start.point, end: end.point, ...elbowRoute(start, end, arrow.elbowOffset) };
 }
 
 // A Shape an end can bind to, as displayed.
@@ -173,4 +209,20 @@ export function unbindFrom(sketch: Sketch, removed: readonly ShapeId[], measure:
       ]),
     ),
   };
+}
+
+/** The Arrow without an elbow offset, its middle segment back where it is on its own. */
+export function withoutOffset(arrow: Arrow): Arrow {
+  const { elbowOffset, ...rest } = arrow;
+  return rest;
+}
+
+/** The Sketch with every elbow offset dropped that its Arrow's path no longer follows, as it would double back. */
+export function withoutStaleOffsets(sketch: Sketch, measure: TextMeasurer): Sketch {
+  const stale = Object.values(sketch.shapes).flatMap((shape) =>
+    isArrow(shape) && shape.elbowOffset && !resolveArrow(sketch, shape, measure)?.followsOffset ? [shape] : [],
+  );
+  if (stale.length === 0) return sketch;
+  const dropped = stale.map((arrow) => [arrow.id, withoutOffset(arrow)]);
+  return { ...sketch, shapes: { ...sketch.shapes, ...Object.fromEntries(dropped) } };
 }

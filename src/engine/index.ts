@@ -20,6 +20,7 @@ export type { LabelLine } from "./label";
 export { pathData } from "./path";
 export type { Path, PathCommand } from "./path";
 export type { EndName, Routing } from "./arrow";
+export type { Axis } from "./elbow";
 export type { ResizeHandle } from "./resize";
 export {
   activeTool,
@@ -29,11 +30,13 @@ export {
   canUndo,
   currentInteraction,
   labelLayout,
+  middleSegmentHandle,
   pansOnPress,
   rendering,
   resizeHandles,
   selection,
   selectionAlignment,
+  selectionRouting,
   selectionStyle,
   shapeStyle,
   shapeTree,
@@ -50,6 +53,7 @@ export type {
   HandleView,
   InteractionView,
   LabelView,
+  MiddleSegmentHandleView,
   PortsView,
   SelectionAlignment,
   SelectionStyle,
