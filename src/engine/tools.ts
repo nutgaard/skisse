@@ -2,7 +2,7 @@ import type { Path } from "./path";
 import { shapeGeometry } from "./shape-geometry";
 import { symbolDefinition, symbolIds, type SymbolId } from "./symbols";
 
-export type Tool = "select" | "pan" | SymbolId;
+export type Tool = "select" | "pan" | "arrow" | SymbolId;
 
 export type ToolInfo = {
   readonly tool: Tool;
@@ -13,10 +13,11 @@ export type ToolInfo = {
   readonly symbol?: SymbolId;
 };
 
-/** Every tool, in toolbar order: select, pan, then one per Symbol. */
+/** Every tool, in toolbar order: select, pan, Arrow, then one per Symbol. */
 export const tools: readonly ToolInfo[] = [
   { tool: "select", name: "Select", shortcut: "v" },
   { tool: "pan", name: "Pan", shortcut: "h" },
+  { tool: "arrow", name: "Arrow", shortcut: "a" },
   ...symbolIds.map((id) => ({
     tool: id,
     name: symbolDefinition(id).name,

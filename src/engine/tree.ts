@@ -1,17 +1,17 @@
-import type { ShapeId, Sketch, SymbolShape } from "./editor";
+import type { Shape, ShapeId, Sketch } from "./editor";
 
 /** Where a Shape is among the others: in which Container, and where among its siblings. */
-export type Placement = Pick<SymbolShape, "parent" | "z">;
+export type Placement = Pick<Shape, "parent" | "z">;
 
 /** The Shapes directly inside `parent`, or at the top level for `undefined`, from bottom to top. */
-export function childrenOf(sketch: Sketch, parent: ShapeId | undefined): readonly SymbolShape[] {
+export function childrenOf(sketch: Sketch, parent: ShapeId | undefined): readonly Shape[] {
   return Object.values(sketch.shapes)
     .filter((shape) => shape.parent === parent)
     .sort((a, b) => a.z - b.z);
 }
 
 /** Every Shape inside `parent`, or every Shape for `undefined`, as drawn: each just before its children. */
-export function drawOrder(sketch: Sketch, parent?: ShapeId): readonly SymbolShape[] {
+export function drawOrder(sketch: Sketch, parent?: ShapeId): readonly Shape[] {
   return childrenOf(sketch, parent).flatMap((shape) => [shape, ...drawOrder(sketch, shape.id)]);
 }
 
@@ -47,7 +47,7 @@ export function onTopIn(sketch: Sketch, parent: ShapeId | undefined): Placement 
 }
 
 /** Every Shape as drawn, but with the Shapes of `ids` and the Shapes inside them lifted above all the others. */
-export function drawOrderLifting(sketch: Sketch, ids: readonly ShapeId[]): readonly SymbolShape[] {
+export function drawOrderLifting(sketch: Sketch, ids: readonly ShapeId[]): readonly Shape[] {
   const lifted = withDescendants(sketch, ids);
   const all = drawOrder(sketch);
   return [...all.filter(({ id }) => !lifted.includes(id)), ...all.filter(({ id }) => lifted.includes(id))];

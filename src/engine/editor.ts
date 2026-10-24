@@ -1,4 +1,17 @@
 import {
+  arrowPath,
+  attachmentAt,
+  bindingTarget,
+  boundsOfPoints,
+  isArrow,
+  isSymbolShape,
+  unbindFrom,
+  type Arrow,
+  type ArrowEnd,
+  type ArrowWithoutId,
+  type EndName,
+} from "./arrow";
+import {
   boundsBetween,
   boundsOfSpans,
   containsBounds,
@@ -14,6 +27,7 @@ import { gridSize, nextGridLine, snapToGrid } from "./grid";
 import * as history from "./history";
 import { handlePositions, resizeBounds, type ResizeHandle } from "./resize";
 import { displayedBounds } from "./label";
+import { distanceToPolyline } from "./path";
 import { hitsOutline } from "./shape-geometry";
 import { bringForward, bringToFront, restack, sendBackward, sendToBack, type Reorder } from "./stacking";
 import { defaultStyle, validStyle, type Style } from "./style";
@@ -56,6 +70,8 @@ export type WheelInput = {
 export type Input =
   | { readonly type: "selectTool"; readonly tool: Tool }
   | PointerInput
+  // The pointer left the Sketch, so nothing is hovered any more.
+  | { readonly type: "pointerLeave" }
   | KeyInput
   | WheelInput
   | { readonly type: "pinch"; readonly position: Point; readonly scale: number }
@@ -114,8 +130,11 @@ export type SymbolShape = {
   readonly style: Style;
 };
 
+/** Every Shape is made from a Symbol, but for Arrows. */
+export type Shape = SymbolShape | Arrow;
+
 export type Sketch = {
-  readonly shapes: Readonly<Record<ShapeId, SymbolShape>>;
+  readonly shapes: Readonly<Record<ShapeId, Shape>>;
 };
 
 // A press that may become a drag: where it started and where the pointer is now. `dragged` is set once the pointer
@@ -146,6 +165,9 @@ type Interaction =
       readonly selectsOnClick: ShapeId | undefined;
     } & Drag)
   | ({ readonly kind: "resizing"; readonly shapeId: ShapeId; readonly handle: ResizeHandle } & Drag)
+  // Pressed with the Arrow tool, where the new Arrow starts. It ends wherever the pointer is let go.
+  | ({ readonly kind: "drawingArrow"; readonly start: ArrowEnd } & Press)
+  | ({ readonly kind: "draggingArrowEnd"; readonly arrowId: ShapeId; readonly end: EndName } & Drag)
   // The viewport follows the pointer so that the Sketch point it grabbed stays under it.
   | { readonly kind: "panning"; readonly grabbed: Point }
   // The text the Label had before, which cancelling puts back.
@@ -162,6 +184,8 @@ export type EditorState = {
   readonly viewport: viewport.Viewport;
   // While space is held, a press pans instead of using the active tool.
   readonly spaceHeld: boolean;
+  // Where the pointer is over the Sketch, in screen pixels, or `undefined` when it isn't over it.
+  readonly pointer: Point | undefined;
   readonly nextIdSequence: number;
   // Earlier and undone Sketches. Only changes to the Sketch are recorded, one step per finished gesture or command.
   readonly history: history.History<Sketch>;
@@ -218,7 +242,7 @@ export const emptySketch: Sketch = { shapes: {} };
 // Sketches saved before Shapes had Labels and a style have Shapes without them, which get an empty Label and the
 // default style. Those saved before a style had colours and strokes have Shapes with just a font size, and get the
 // default for the rest. Those saved before Containers have every Shape at the top level, stacked in the order saved,
-// and a JSON Sketch has no parent at the top level at all.
+// and a JSON Sketch has no parent at the top level at all. Arrows came after all of these.
 function completeShapes(sketch: Sketch): Sketch {
   const complete = (
     shape: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds">,
@@ -233,7 +257,7 @@ function completeShapes(sketch: Sketch): Sketch {
   return {
     ...sketch,
     shapes: Object.fromEntries(
-      Object.entries(sketch.shapes).map(([id, shape], index) => [id, complete(shape, index)]),
+      Object.entries(sketch.shapes).map(([id, shape], index) => [id, isArrow(shape) ? shape : complete(shape, index)]),
     ),
   };
 }
@@ -252,6 +276,7 @@ export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): E
     interaction: idle,
     viewport: viewport.initialViewport,
     spaceHeld: false,
+    pointer: undefined,
     nextIdSequence: 1,
     history: history.startHistory(sketch),
   };
@@ -262,16 +287,36 @@ function displayed(state: EditorState, shape: ShapeWithoutId): Bounds {
   return displayedBounds(shape, state.deps.measureText);
 }
 
-// Shapes are hit-tested by their Symbol's outline, as if filled, even with a transparent fill. The topmost Shape that
-// `eligible` allows wins.
+/** The points an Arrow's path runs through, as the Sketch is now. */
+export function resolvedPath(state: EditorState, arrow: ArrowWithoutId): readonly Point[] | undefined {
+  return arrowPath(state.sketch, arrow, state.deps.measureText);
+}
+
+/** The smallest Bounds around a Shape as displayed, or `undefined` for an Arrow that can't be placed. */
+export function shownBounds(sketch: Sketch, shape: Shape, measure: TextMeasurer): Bounds | undefined {
+  if (isSymbolShape(shape)) return displayedBounds(shape, measure);
+  const path = arrowPath(sketch, shape, measure);
+  return path && boundsOfPoints(path);
+}
+
+// How far, in screen pixels, from an Arrow's line a press still hits it.
+const lineReach = 6;
+
+// Shapes are hit-tested by their Symbol's outline, as if filled, even with a transparent fill, and Arrows by their
+// line.
+function hits(state: EditorState, shape: Shape, point: Point): boolean {
+  if (isSymbolShape(shape)) return hitsOutline(shape.symbol, displayed(state, shape), point);
+  const path = resolvedPath(state, shape);
+  return path !== undefined && distanceToPolyline(path, point) <= sketchDistance(state, lineReach);
+}
+
+// The topmost Shape under `point` that `eligible` allows.
 function shapeAt(
   state: EditorState,
   point: Point,
-  eligible: (shape: SymbolShape) => boolean = () => true,
-): SymbolShape | undefined {
-  return drawOrder(state.sketch).findLast(
-    (shape) => eligible(shape) && hitsOutline(shape.symbol, displayed(state, shape), point),
-  );
+  eligible: (shape: Shape) => boolean = () => true,
+): Shape | undefined {
+  return drawOrder(state.sketch).findLast((shape) => eligible(shape) && hits(state, shape, point));
 }
 
 function centre(bounds: Bounds): Point {
@@ -282,6 +327,11 @@ function isContainer(shape: ShapeWithoutId): boolean {
   return symbolDefinition(shape.symbol).canBeContainer;
 }
 
+// The Shapes made from a Symbol among `shapes`, in the same order.
+function symbolShapes(shapes: readonly Shape[]): readonly SymbolShape[] {
+  return shapes.filter(isSymbolShape);
+}
+
 // The innermost Container under `point` that `eligible` allows. Of overlapping Containers that are not inside each
 // other, the topmost counts as the innermost.
 function containerAt(
@@ -289,7 +339,9 @@ function containerAt(
   point: Point,
   eligible: (container: SymbolShape) => boolean,
 ): SymbolShape | undefined {
-  return shapeAt(state, point, (shape) => isContainer(shape) && eligible(shape));
+  return symbolShapes(drawOrder(state.sketch)).findLast(
+    (shape) => isContainer(shape) && eligible(shape) && hits(state, shape, point),
+  );
 }
 
 // Moves a Shape into `parent`, on top of the Shapes already there, unless it is in there already.
@@ -305,7 +357,8 @@ function moveInto(sketch: Sketch, id: ShapeId, parent: ShapeId | undefined): Ske
 function settleMoved(state: EditorState, ids: readonly ShapeId[]): EditorState {
   return outermost(state.sketch, ids).reduce((settled, id) => {
     const shape = settled.sketch.shapes[id];
-    if (!shape) return settled;
+    // Arrows stay where they are among the Shapes.
+    if (!shape || isArrow(shape)) return settled;
     const container = containerAt(settled, centre(displayed(settled, shape)), (candidate) =>
       !isWithin(settled.sketch, candidate.id, id),
     );
@@ -315,7 +368,10 @@ function settleMoved(state: EditorState, ids: readonly ShapeId[]): EditorState {
 
 function shapesInside(state: EditorState, box: Bounds): readonly ShapeId[] {
   return Object.values(state.sketch.shapes)
-    .filter((shape) => containsBounds(box, displayed(state, shape)))
+    .filter((shape) => {
+      const bounds = shownBounds(state.sketch, shape, state.deps.measureText);
+      return bounds !== undefined && containsBounds(box, bounds);
+    })
     .map(({ id }) => id);
 }
 
@@ -345,10 +401,36 @@ function startMarquee(state: EditorState, input: PointerInput): EditorState {
   };
 }
 
-/** The one selected Shape, which is the only time resize handles are shown. */
-export function resizableShape(state: EditorState): SymbolShape | undefined {
+// The one selected Shape, if just one is selected.
+function selectedAlone(state: EditorState): Shape | undefined {
   const [id, ...others] = state.selection;
   return id !== undefined && others.length === 0 ? state.sketch.shapes[id] : undefined;
+}
+
+/** The one selected Shape, when it is made from a Symbol, which is the only time resize handles are shown. */
+export function resizableShape(state: EditorState): SymbolShape | undefined {
+  const shape = selectedAlone(state);
+  return shape && isSymbolShape(shape) ? shape : undefined;
+}
+
+/** The one selected Shape, when it is an Arrow, which is the only time handles on its ends are shown. */
+export function selectedArrow(state: EditorState): Arrow | undefined {
+  const shape = selectedAlone(state);
+  return shape && isArrow(shape) ? shape : undefined;
+}
+
+/** Where the handles on the ends of the selected Arrow are. */
+export function arrowEndPositions(state: EditorState): readonly { readonly end: EndName; readonly position: Point }[] {
+  const arrow = selectedArrow(state);
+  const path = arrow && resolvedPath(state, arrow);
+  const start = path?.[0];
+  const end = path?.at(-1);
+  return start && end
+    ? [
+        { end: "start", position: start },
+        { end: "end", position: end },
+      ]
+    : [];
 }
 
 // A distance in screen pixels, such as the drag threshold, as a distance on the Sketch at the current zoom.
@@ -367,7 +449,31 @@ function handleAt(state: EditorState, point: Point): { shape: SymbolShape; handl
   return shape && nearby ? { shape, handle: nearby.handle } : undefined;
 }
 
+function arrowEndAt(state: EditorState, point: Point): { arrow: Arrow; end: EndName } | undefined {
+  const arrow = selectedArrow(state);
+  const reach = sketchDistance(state, handleReach);
+  const nearby = arrowEndPositions(state).find(
+    ({ position }) => Math.abs(position.x - point.x) <= reach && Math.abs(position.y - point.y) <= reach,
+  );
+  return arrow && nearby ? { arrow, end: nearby.end } : undefined;
+}
+
 function pressWithSelectTool(state: EditorState, input: PointerInput): EditorState {
+  const grabbedEnd = arrowEndAt(state, input.position);
+  if (grabbedEnd) {
+    return {
+      ...state,
+      interaction: {
+        kind: "draggingArrowEnd",
+        arrowId: grabbedEnd.arrow.id,
+        end: grabbedEnd.end,
+        origin: input.position,
+        current: input.position,
+        before: state.sketch,
+        dragged: false,
+      },
+    };
+  }
   const grabbedHandle = handleAt(state, input.position);
   if (grabbedHandle) {
     return {
@@ -402,6 +508,27 @@ function pressWithSelectTool(state: EditorState, input: PointerInput): EditorSta
   };
 }
 
+function translatePoint(point: Point, offset: Point): Point {
+  return { x: point.x + offset.x, y: point.y + offset.y };
+}
+
+// An Arrow is moved only when both its ends float. A bound end follows its Shape instead, and the Arrow with it.
+function movesItself(shape: Shape): boolean {
+  return isSymbolShape(shape) || (shape.start.kind === "floating" && shape.end.kind === "floating");
+}
+
+function moved(shape: Shape, offset: Point): Shape {
+  if (isSymbolShape(shape)) return { ...shape, bounds: translate(shape.bounds, offset) };
+  const { start, end } = shape;
+  return start.kind === "floating" && end.kind === "floating"
+    ? {
+        ...shape,
+        start: { ...start, at: translatePoint(start.at, offset) },
+        end: { ...end, at: translatePoint(end.at, offset) },
+      }
+    : shape;
+}
+
 // The Shapes inside them come along.
 function moveShapes(sketch: Sketch, ids: readonly ShapeId[], offset: Point): Sketch {
   return {
@@ -412,15 +539,20 @@ function moveShapes(sketch: Sketch, ids: readonly ShapeId[], offset: Point): Ske
         withDescendants(sketch, ids)
           .map((id) => sketch.shapes[id])
           .filter((shape) => shape !== undefined)
-          .map((shape) => [shape.id, { ...shape, bounds: translate(shape.bounds, offset) }]),
+          .map((shape) => [shape.id, moved(shape, offset)]),
       ),
     },
   };
 }
 
-// The Bounds around the selection, which moves as one block.
-function selectionBlock(sketch: Sketch, selection: readonly ShapeId[]): Bounds {
-  return enclosingBounds(selection.flatMap((id) => sketch.shapes[id]?.bounds ?? []));
+// The Bounds around the selected Shapes that move, which move as one block, or `undefined` when none of them does.
+function selectionBlock(state: EditorState, sketch: Sketch, selection: readonly ShapeId[]): Bounds | undefined {
+  const all = selection.flatMap((id) => {
+    const shape = sketch.shapes[id];
+    if (!shape || !movesItself(shape)) return [];
+    return isSymbolShape(shape) ? [shape.bounds] : (shownBounds(sketch, shape, state.deps.measureText) ?? []);
+  });
+  return all.length === 0 ? undefined : enclosingBounds(all);
 }
 
 // Where the pointer is and which modifiers are held: all a drag needs, whether from a pointer move or a key press.
@@ -447,7 +579,8 @@ function pointerOffset(drag: Drag, pointer: PointerState): Point {
 function dragOffset(state: EditorState, drag: Drag, pointer: PointerState): Point {
   const offset = pointerOffset(drag, pointer);
   if (!drag.dragged || !snapsToGrid(pointer.modifiers)) return offset;
-  const block = selectionBlock(drag.before, state.selection);
+  const block = selectionBlock(state, drag.before, state.selection);
+  if (!block) return offset;
   return {
     x: snapToGrid(block.x + offset.x) - block.x,
     y: snapToGrid(block.y + offset.y) - block.y,
@@ -480,7 +613,7 @@ function resizeShape(
 ): EditorState {
   const { before, shapeId, handle } = interaction;
   const shape = before.shapes[shapeId];
-  if (!shape || !interaction.dragged) return { ...state, sketch: before, interaction };
+  if (!shape || isArrow(shape) || !interaction.dragged) return { ...state, sketch: before, interaction };
   // The resize starts from the Shape as displayed, so its handles move the edges the user sees.
   const from = displayed(state, shape);
   const resized = resizeBounds(from, handle, pointerOffset(interaction, pointer), {
@@ -496,9 +629,29 @@ function resizeShape(
   };
 }
 
+// How far, in screen pixels, from a Port an Arrow end snaps to it, so snapping feels the same at every zoom.
+const portReach = 10;
+
+/** Where an Arrow end let go at `point` attaches. */
+function attachment(state: EditorState, sketch: Sketch, point: Point): ArrowEnd {
+  return attachmentAt(sketch, point, sketchDistance(state, portReach), state.deps.measureText);
+}
+
+// The dragged end attaches wherever the pointer is, once the pointer has travelled past the drag threshold.
+function dragArrowEnd(
+  state: EditorState,
+  interaction: Extract<Interaction, { kind: "draggingArrowEnd" }>,
+): EditorState {
+  const { before, arrowId, end, current } = interaction;
+  const arrow = before.shapes[arrowId];
+  if (!arrow || !isArrow(arrow) || !interaction.dragged) return { ...state, sketch: before, interaction };
+  const reattached: Arrow = { ...arrow, [end]: attachment(state, before, current) };
+  return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: reattached } }, interaction };
+}
+
 function dragTo(
   state: EditorState,
-  interaction: Extract<Interaction, { kind: "moving" | "resizing" }>,
+  interaction: Extract<Interaction, { kind: "moving" | "resizing" | "draggingArrowEnd" }>,
   pointer: PointerState,
 ): EditorState {
   switch (interaction.kind) {
@@ -512,6 +665,8 @@ function dragTo(
     }
     case "resizing":
       return resizeShape(state, continuePress(state, interaction, pointer), pointer);
+    case "draggingArrowEnd":
+      return dragArrowEnd(state, continuePress(state, interaction, pointer));
   }
 }
 
@@ -530,6 +685,17 @@ function pointerDown(state: EditorState, input: PointerInput): EditorState {
     case "pan":
       // Already panning, as pansOnPress covers the pan tool.
       return state;
+    case "arrow":
+      return {
+        ...state,
+        interaction: {
+          kind: "drawingArrow",
+          start: attachment(state, state.sketch, input.position),
+          origin: input.position,
+          current: input.position,
+          dragged: false,
+        },
+      };
     default:
       return {
         ...state,
@@ -564,27 +730,35 @@ function pointerMove(state: EditorState, input: PointerInput): EditorState {
         interaction: { ...interaction, current: input.position },
       };
     }
+    case "drawingArrow":
+      return { ...state, interaction: continuePress(state, interaction, input) };
     case "moving":
     case "resizing":
+    case "draggingArrowEnd":
       return dragTo(state, interaction, input);
     case "panning":
       return { ...state, viewport: viewport.keepUnderPointer(state.viewport, interaction.grabbed, input.position) };
   }
 }
 
-function updateShape(sketch: Sketch, id: ShapeId, change: (shape: SymbolShape) => SymbolShape): Sketch {
+function updateShape(sketch: Sketch, id: ShapeId, change: (shape: Shape) => Shape): Sketch {
   const shape = sketch.shapes[id];
   return shape ? { ...sketch, shapes: { ...sketch.shapes, [id]: change(shape) } } : sketch;
 }
 
-function withLabelText(sketch: Sketch, id: ShapeId, text: string): Sketch {
-  return updateShape(sketch, id, (shape) => ({ ...shape, label: { ...shape.label, text } }));
+// Changes a Shape made from a Symbol, and leaves an Arrow as it is.
+function onSymbolShape(change: (shape: SymbolShape) => SymbolShape): (shape: Shape) => Shape {
+  return (shape) => (isSymbolShape(shape) ? change(shape) : shape);
 }
 
-// Only one Shape is selected while its Label is being edited.
+function withLabelText(sketch: Sketch, id: ShapeId, text: string): Sketch {
+  return updateShape(sketch, id, onSymbolShape((shape) => ({ ...shape, label: { ...shape.label, text } })));
+}
+
+// Only one Shape is selected while its Label is being edited. Arrows have no Label to edit.
 function startEditingLabel(state: EditorState, shapeId: ShapeId | undefined): EditorState {
   const shape = shapeId === undefined ? undefined : state.sketch.shapes[shapeId];
-  return shape
+  return shape && isSymbolShape(shape)
     ? {
         ...state,
         selection: [shape.id],
@@ -612,7 +786,7 @@ function canChangeSelected(state: EditorState): boolean {
   return isIdle(state) || state.interaction.kind === "editingLabel";
 }
 
-function changeSelected(state: EditorState, change: (shape: SymbolShape) => SymbolShape): EditorState {
+function changeSelected(state: EditorState, change: (shape: Shape) => Shape): EditorState {
   if (!canChangeSelected(state)) return state;
   return { ...state, sketch: state.selection.reduce((sketch, id) => updateShape(sketch, id, change), state.sketch) };
 }
@@ -630,7 +804,7 @@ function chooseStyle(state: EditorState, style: Partial<Style>): EditorState {
 // is only spaces and line breaks counts as empty.
 function removeIfEmpty(state: EditorState, id: ShapeId): EditorState {
   const shape = state.sketch.shapes[id];
-  return shape && symbolDefinition(shape.symbol).labelOnly && shape.label.text.trim() === ""
+  return shape && isSymbolShape(shape) && symbolDefinition(shape.symbol).labelOnly && shape.label.text.trim() === ""
     ? removeShapes(state, [id])
     : state;
 }
@@ -645,7 +819,7 @@ function finishEditingLabel(state: EditorState, how: "commit" | "cancel"): Edito
   return removeIfEmpty({ ...state, sketch, interaction: idle }, interaction.shapeId);
 }
 
-function addShape(sketch: Sketch, shape: SymbolShape): Sketch {
+function addShape(sketch: Sketch, shape: Shape): Sketch {
   return {
     ...sketch,
     shapes: { ...sketch.shapes, [shape.id]: shape },
@@ -668,7 +842,7 @@ function coversCentre(state: EditorState, container: ShapeWithoutId, other: Symb
 // A new Container adopts the Shapes beside it whose centres it covers, and the Shapes inside them come along.
 function adoptCovered(state: EditorState, container: SymbolShape): Sketch {
   const covered = isContainer(container)
-    ? childrenOf(state.sketch, container.parent).filter(
+    ? symbolShapes(childrenOf(state.sketch, container.parent)).filter(
         (shape) => shape.id !== container.id && coversCentre(state, container, shape),
       )
     : [];
@@ -688,7 +862,7 @@ function area({ width, height }: Bounds): number {
 function containerForNew(state: EditorState, shape: ShapeWithoutId): ShapeId | undefined {
   const bounds = displayed(state, shape);
   const covered = isContainer(shape)
-    ? Object.values(state.sketch.shapes).filter(
+    ? symbolShapes(Object.values(state.sketch.shapes)).filter(
         (other) => area(displayed(state, other)) <= area(bounds) && coversCentre(state, shape, other),
       )
     : [];
@@ -713,6 +887,54 @@ function createShape(state: EditorState, symbol: SymbolId, bounds: Bounds): Edit
   };
 }
 
+// Where an Arrow end is being placed: under the pointer while hovering with the Arrow tool, or where the end being
+// drawn or dragged is.
+function arrowEndBeingPlaced(state: EditorState): Point | undefined {
+  const { interaction, pointer } = state;
+  if (interaction.kind === "drawingArrow" || interaction.kind === "draggingArrowEnd") return interaction.current;
+  const hovering = isIdle(state) && state.tool === "arrow" && !state.spaceHeld;
+  return hovering && pointer ? viewport.toSketch(state.viewport, pointer) : undefined;
+}
+
+/**
+ * The Shape whose Ports are shown, as an Arrow end is being placed over it, and the place in its list of Ports of the
+ * Port the end would snap to, if any.
+ */
+export function portTarget(state: EditorState): { shape: SymbolShape; snapsTo: number | undefined } | undefined {
+  const point = arrowEndBeingPlaced(state);
+  if (!point) return undefined;
+  const shape = bindingTarget(state.sketch, point, sketchDistance(state, portReach), state.deps.measureText);
+  if (!shape) return undefined;
+  const end = attachment(state, state.sketch, point);
+  return { shape, snapsTo: end.kind === "port" ? end.port : undefined };
+}
+
+/** The Arrow that letting go of the pointer now would create, once the pointer has been dragged. */
+export function arrowBeingDrawn(state: EditorState): ArrowWithoutId | undefined {
+  const { interaction } = state;
+  return interaction.kind === "drawingArrow" && interaction.dragged
+    ? {
+        style: state.style,
+        routing: "straight",
+        start: interaction.start,
+        end: attachment(state, state.sketch, interaction.current),
+      }
+    : undefined;
+}
+
+// A new Arrow goes on top of the Shapes at the top level and becomes the selection, so it can be adjusted straight
+// away.
+function createArrow(state: EditorState, drawn: ArrowWithoutId): EditorState {
+  const sequence = freeIdSequence(state, state.nextIdSequence);
+  const arrow: Arrow = { id: state.deps.generateId(sequence), ...onTopIn(state.sketch, undefined), ...drawn };
+  return {
+    ...state,
+    sketch: addShape(state.sketch, arrow),
+    selection: [arrow.id],
+    nextIdSequence: sequence + 1,
+  };
+}
+
 function pointerUp(state: EditorState, input: PointerInput): EditorState {
   const moved = pointerMove(state, input);
   const { interaction } = moved;
@@ -722,6 +944,11 @@ function pointerUp(state: EditorState, input: PointerInput): EditorState {
       const created = createShape(finished, interaction.symbol, creationBounds(interaction));
       return { ...startEditingLabel(created, created.selection[0]), tool: "select" };
     }
+    // A click without dragging draws nothing.
+    case "drawingArrow": {
+      const drawn = arrowBeingDrawn(moved);
+      return drawn ? { ...createArrow(finished, drawn), tool: "select" } : finished;
+    }
     case "moving": {
       if (interaction.dragged) return settleMoved(finished, finished.selection);
       const clicked = interaction.selectsOnClick;
@@ -730,6 +957,7 @@ function pointerUp(state: EditorState, input: PointerInput): EditorState {
     case "idle":
     case "marqueeSelecting":
     case "resizing":
+    case "draggingArrowEnd":
     case "panning":
       return finished;
     case "editingLabel":
@@ -743,6 +971,7 @@ function cancelGesture(state: EditorState): EditorState {
   switch (interaction.kind) {
     case "idle":
     case "creatingShape":
+    case "drawingArrow":
     case "panning":
       return cancelled;
     // Editing a Label is not a pointer gesture, so a lost pointer leaves it open.
@@ -752,6 +981,7 @@ function cancelGesture(state: EditorState): EditorState {
       return { ...cancelled, selection: interaction.previousSelection };
     case "moving":
     case "resizing":
+    case "draggingArrowEnd":
       return { ...cancelled, sketch: interaction.before };
   }
 }
@@ -770,7 +1000,8 @@ function nudgeOffset(state: EditorState, direction: Point, modifiers: Modifiers)
     const step = modifiers.shift ? gridSize : 1;
     return { x: direction.x * step, y: direction.y * step };
   }
-  const block = selectionBlock(state.sketch, state.selection);
+  const block = selectionBlock(state, state.sketch, state.selection);
+  if (!block) return { x: 0, y: 0 };
   return {
     x: direction.x === 0 ? 0 : nextGridLine(block.x, direction.x) - block.x,
     y: direction.y === 0 ? 0 : nextGridLine(block.y, direction.y) - block.y,
@@ -784,14 +1015,15 @@ function nudge(state: EditorState, direction: Point, modifiers: Modifiers): Edit
   return settleMoved({ ...state, sketch }, state.selection);
 }
 
-// The Shapes inside them go too.
+// The Shapes inside them go too. Arrows bound to them stay, with those ends floating where they were.
 function removeShapes(state: EditorState, ids: readonly ShapeId[]): EditorState {
   const removed = withDescendants(state.sketch, ids);
+  const unbound = unbindFrom(state.sketch, removed, state.deps.measureText);
   return {
     ...state,
     sketch: {
-      ...state.sketch,
-      shapes: Object.fromEntries(Object.entries(state.sketch.shapes).filter(([id]) => !removed.includes(id))),
+      ...unbound,
+      shapes: Object.fromEntries(Object.entries(unbound.shapes).filter(([id]) => !removed.includes(id))),
     },
     selection: state.selection.filter((id) => !removed.includes(id)),
   };
@@ -818,6 +1050,8 @@ function updateDragModifiers(state: EditorState, modifiers: Modifiers): EditorSt
     case "resizing":
       return dragTo(state, interaction, { position: interaction.current, modifiers });
     case "idle":
+    case "drawingArrow":
+    case "draggingArrowEnd":
     case "marqueeSelecting":
     case "panning":
     case "editingLabel":
@@ -893,7 +1127,7 @@ function wheel(state: EditorState, input: WheelInput): EditorState {
 
 /** The smallest Bounds around everything on the Sketch as displayed, or `undefined` when it is empty. */
 export function contentBounds(sketch: Sketch, measure: TextMeasurer): Bounds | undefined {
-  const all = Object.values(sketch.shapes).map((shape) => displayedBounds(shape, measure));
+  const all = Object.values(sketch.shapes).flatMap((shape) => shownBounds(sketch, shape, measure) ?? []);
   return all.length === 0 ? undefined : enclosingBounds(all);
 }
 
@@ -918,7 +1152,9 @@ function applyInput(state: EditorState, input: Input): EditorState {
     case "pointerDown":
       return pointerDown(state, inSketch(state, input));
     case "pointerMove":
-      return pointerMove(state, inSketch(state, input));
+      return pointerMove({ ...state, pointer: input.position }, inSketch(state, input));
+    case "pointerLeave":
+      return { ...state, pointer: undefined };
     case "pointerUp":
       return pointerUp(state, inSketch(state, input));
     case "pointerCancel":
@@ -950,10 +1186,13 @@ function applyInput(state: EditorState, input: Input): EditorState {
     case "changeStyle":
       return chooseStyle(state, input.style);
     case "changeLabelAlignment":
-      return changeSelected(state, (shape) => ({
-        ...shape,
-        label: { ...shape.label, alignment: { ...shape.label.alignment, ...input.alignment } },
-      }));
+      return changeSelected(
+        state,
+        onSymbolShape((shape) => ({
+          ...shape,
+          label: { ...shape.label, alignment: { ...shape.label.alignment, ...input.alignment } },
+        })),
+      );
   }
 }
 

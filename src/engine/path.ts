@@ -150,11 +150,16 @@ export function isClosed(piece: Path): boolean {
   return piece.at(-1)?.type === "close";
 }
 
-/** How long a piece of a Path is, back to its start too when it is closed. */
-export function pieceLength(piece: Path): number {
+// The points a piece of a Path runs through, in order, back to its start too when it is closed.
+function piecePoints(piece: Path): readonly Point[] {
   const [corners = []] = polygons(piece);
   const [start] = corners;
-  const points = isClosed(piece) && start ? [...corners, start] : corners;
+  return isClosed(piece) && start ? [...corners, start] : corners;
+}
+
+/** How long a piece of a Path is, back to its start too when it is closed. */
+export function pieceLength(piece: Path): number {
+  const points = piecePoints(piece);
   return points.slice(1).reduce((length, point, index) => {
     const previous = points[index] ?? point;
     return length + Math.hypot(point.x - previous.x, point.y - previous.y);
@@ -175,4 +180,53 @@ function insidePolygon(corners: readonly Point[], point: Point): boolean {
 /** Whether `point` is inside any closed piece of the Path. */
 export function insidePath(path: Path, point: Point): boolean {
   return polygons(path).some((corners) => insidePolygon(corners, point));
+}
+
+function distance(a: Point, b: Point): number {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+// The point on the segment from `from` to `to` closest to `point`.
+function nearestOnSegment(from: Point, to: Point, point: Point): Point {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const lengthSquared = dx * dx + dy * dy;
+  const along = lengthSquared === 0 ? 0 : ((point.x - from.x) * dx + (point.y - from.y) * dy) / lengthSquared;
+  const t = Math.max(0, Math.min(1, along));
+  return { x: from.x + t * dx, y: from.y + t * dy };
+}
+
+// Of `candidates`, the one closest to `point`, or `undefined` when there are none.
+function nearestOf(candidates: readonly Point[], point: Point): Point | undefined {
+  return candidates.reduce<Point | undefined>(
+    (nearest, candidate) =>
+      nearest === undefined || distance(candidate, point) < distance(nearest, point) ? candidate : nearest,
+    undefined,
+  );
+}
+
+/** The point on the line through `points` closest to `point`, or `undefined` when there are no points. */
+export function nearestOnPolyline(points: readonly Point[], point: Point): Point | undefined {
+  const [first] = points;
+  if (first === undefined) return undefined;
+  return points.length === 1
+    ? first
+    : nearestOf(
+        points.slice(1).map((to, index) => nearestOnSegment(points[index] ?? to, to, point)),
+        point,
+      );
+}
+
+/** The point on the Path's lines closest to `point`, closed pieces joined back to their start, if it has any lines. */
+export function nearestOnPath(path: Path, point: Point): Point | undefined {
+  return nearestOf(
+    pathPieces(path).flatMap((piece) => nearestOnPolyline(piecePoints(piece), point) ?? []),
+    point,
+  );
+}
+
+/** How far `point` is from the line through `points`, or infinitely far when there are no points. */
+export function distanceToPolyline(points: readonly Point[], point: Point): number {
+  const nearest = nearestOnPolyline(points, point);
+  return nearest === undefined ? Infinity : distance(nearest, point);
 }
