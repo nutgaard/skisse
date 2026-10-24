@@ -22,6 +22,11 @@ export type MiddleSegment = {
   /** How far along the axis it can go before the path would double back at an end, exclusive. */
   readonly min: number;
   readonly max: number;
+  /**
+   * Where along the axis it would line up with an end that runs out a stub first, which would make the path double
+   * back there.
+   */
+  readonly levels: readonly number[];
 };
 
 /** An elbow path, and the middle segment the user can drag sideways. */
@@ -176,6 +181,26 @@ function turnsBack(points: readonly Point[]): boolean {
   return turns(distinct(points)).some(({ turn }) => turn === "back");
 }
 
+// Whether the straight segment from `from` to `to` runs through the inside of the box, not just along its edge.
+function crosses(box: Bounds, from: Point, to: Point): boolean {
+  const through = (axis: Axis) => {
+    const { start, end } = extentOf(box, axis);
+    const low = Math.min(along(from, axis), along(to, axis));
+    const high = Math.max(along(from, axis), along(to, axis));
+    return low === high ? start < low && low < end : Math.max(low, start) < Math.min(high, end);
+  };
+  return through("x") && through("y");
+}
+
+// Whether the path runs through the Shape of a bound end.
+function crossesShapes(start: ElbowEnd, end: ElbowEnd, points: readonly Point[]): boolean {
+  const boxes = [start, end].flatMap(({ box }) => (box ? [box] : []));
+  return points.slice(1).some((to, index) => {
+    const from = points[index] ?? to;
+    return boxes.some((box) => crosses(box, from, to));
+  });
+}
+
 // The path without repeated points, and without corners where it runs straight on.
 function simplified(points: readonly Point[]): readonly Point[] {
   const all = distinct(points);
@@ -191,15 +216,17 @@ function singleTurn(start: ElbowEnd, end: ElbowEnd): readonly Point[] | undefine
   return ahead(start.point, start.out) && ahead(end.point, end.out) ? [start.point, corner, end.point] : undefined;
 }
 
-// A path that doesn't run back over itself wins, then the fewest segments, then a middle segment halfway between the
-// ends, then one across the shorter distance, so the path runs mostly straight. A middle segment the user moved keeps
-// its axis while that is still among the best.
+// A path that doesn't run back over itself wins, then one that doesn't run through the Shapes of its ends, then the
+// fewest segments, then a middle segment halfway between the ends, then one across the shorter distance, so the path
+// runs mostly straight. A middle segment the user moved keeps its axis while that is still among the best.
 function chosen(start: ElbowEnd, end: ElbowEnd, offset: ElbowOffset | undefined): Candidate {
   // There is always a way: when the ends rule out a middle segment on one axis, both leave along it, so the other axis
   // has stubs at both ends and nothing in the way.
   const possible = (["x", "y"] as const).map((axis) => candidate(start, end, axis)).filter(isPossible);
-  const clean = possible.filter(({ axis, natural }) => !turnsBack(layoutAt(start, end, axis, natural).points));
-  const pool = clean.length > 0 ? clean : possible;
+  const pointsOf = ({ axis, natural }: Candidate) => layoutAt(start, end, axis, natural).points;
+  const forwards = possible.filter((route) => !turnsBack(pointsOf(route)));
+  const clear = forwards.filter((route) => !crossesShapes(start, end, pointsOf(route)));
+  const pool = [clear, forwards, possible].find((routes) => routes.length > 0) ?? possible;
   const fewest = Math.min(...pool.map(({ segments }) => segments));
   const best = pool.filter(({ segments }) => segments === fewest);
   const kept = best.find(({ axis }) => axis === offset?.axis);
@@ -218,6 +245,7 @@ export function elbowRoute(start: ElbowEnd, end: ElbowEnd, offset: ElbowOffset |
   const turn = singleTurn(start, end);
   if (turn) return { path: turn, followsOffset: false };
   const { axis, natural, min, max } = chosen(start, end, offset);
+  const levels = [start, end].flatMap(({ point, out }) => (out && along(out, axis) === 0 ? [along(point, axis)] : []));
   const moved = offset?.axis === axis ? natural + offset.by : undefined;
   const followsOffset =
     moved !== undefined && min < moved && moved < max && !turnsBack(layoutAt(start, end, axis, moved).points);
@@ -225,23 +253,29 @@ export function elbowRoute(start: ElbowEnd, end: ElbowEnd, offset: ElbowOffset |
   const hasMiddle = from.x !== to.x || from.y !== to.y;
   return {
     path: simplified(points),
-    ...(hasMiddle ? { middle: { axis, from, to, natural, min, max } } : {}),
+    ...(hasMiddle ? { middle: { axis, from, to, natural, min, max, levels } } : {}),
     followsOffset,
   };
 }
 
-// How short dragging the middle segment can make the segment at either end, so the middle segment never reaches an end.
+// How short dragging the middle segment can make the segments joining it to the ends, so it never reaches an end, nor
+// lines up with one.
 const shortestEnd = 10;
 
 /**
  * The offset that moves `middle` by how far it was dragged, `moved`, along its axis, as far as it can go while the
- * segments at both ends stay at least `shortestEnd` long. `undefined` when that leaves it where it is on its own.
+ * segments joining it to the ends stay at least `shortestEnd` long. Where it would line up with an end, it stops short
+ * of it, on the nearer side. `undefined` when that leaves it where it is on its own.
  */
 export function offsetDraggedBy(middle: MiddleSegment, moved: Point): ElbowOffset | undefined {
-  const { axis, natural, min, max } = middle;
+  const { axis, natural, min, max, levels } = middle;
   const lowest = min + shortestEnd;
   const highest = max - shortestEnd;
   const wanted = along(middle.from, axis) + along(moved, axis);
-  const at = lowest > highest ? natural : Math.min(highest, Math.max(lowest, wanted));
+  const clamped = lowest > highest ? natural : Math.min(highest, Math.max(lowest, wanted));
+  const at = levels.toSorted((a, b) => a - b).reduce((placed, level) => {
+    if (Math.abs(placed - level) >= shortestEnd) return placed;
+    return placed < level ? level - shortestEnd : level + shortestEnd;
+  }, clamped);
   return at === natural ? undefined : { axis, by: at - natural };
 }

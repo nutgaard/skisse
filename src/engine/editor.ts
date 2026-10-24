@@ -899,9 +899,9 @@ function chooseStyle(state: EditorState, style: Partial<Style>): EditorState {
 // dragged into an elbow path goes with the old Routing.
 function chooseRouting(state: EditorState, routing: Routing): EditorState {
   if (!canChangeSelected(state)) return state;
-  const changed = changeSelected(state, (shape) => {
-    return isArrow(shape) && shape.routing !== routing ? { ...withoutOffset(shape), routing } : shape;
-  });
+  const changed = changeSelected(state, (shape) =>
+    isArrow(shape) && shape.routing !== routing ? { ...withoutOffset(shape), routing } : shape,
+  );
   return { ...changed, routing };
 }
 

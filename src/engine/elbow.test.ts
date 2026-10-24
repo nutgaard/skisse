@@ -158,6 +158,20 @@ describe("elbow paths between Ports", () => {
     ]);
   });
 
+  test("between two right sides nearly level go around both Shapes, not through the further one", () => {
+    // shape-2 at (300,110)–(400,190), its right Port at (400,150).
+    const state = elbowArrow([{ x: 300, y: 110 }, { x: 400, y: 190 }], { x: 198, y: 140 }, { x: 398, y: 150 });
+
+    expect(onlyArrow(state).path).toEqual([
+      { x: 200, y: 140 },
+      { x: 220, y: 140 },
+      { x: 220, y: 80 },
+      { x: 420, y: 80 },
+      { x: 420, y: 150 },
+      { x: 400, y: 150 },
+    ]);
+  });
+
   test("between two right sides run out past the further one", () => {
     // shape-2 at (300,200)–(400,280), its right Port at (400,240).
     const state = elbowArrow([{ x: 300, y: 200 }, { x: 400, y: 280 }], { x: 198, y: 140 }, { x: 398, y: 240 });
@@ -229,6 +243,18 @@ describe("elbow paths with floating ends", () => {
       { x: 220, y: 80 },
       { x: 50, y: 80 },
       { x: 50, y: 140 },
+    ]);
+  });
+
+  test("from a right side to a floating end nearly level with it behind the Shape go around the Shape", () => {
+    const state = elbow(drawArrow(shape1(), { x: 198, y: 140 }, { x: 50, y: 170 }));
+
+    expect(onlyArrow(state).path).toEqual([
+      { x: 200, y: 140 },
+      { x: 220, y: 140 },
+      { x: 220, y: 200 },
+      { x: 50, y: 200 },
+      { x: 50, y: 170 },
     ]);
   });
 
@@ -393,6 +419,23 @@ describe("the middle segment", () => {
   test("dragged past an end stops 10 short of it, so the path never doubles back", () => {
     expect(onlyArrow(drag(elbowCrossing(), handle, { x: 100, y: 190 })).path).toEqual(middleAt(210));
     expect(onlyArrow(drag(elbowCrossing(), handle, { x: 400, y: 190 })).path).toEqual(middleAt(290));
+  });
+
+  test("going around both Shapes, dragged level with the ends stops 10 short of them", () => {
+    // shape-2 at (-200,100)–(-100,180), with an Arrow from shape-1's right Port at (200,140) around the top of both
+    // Shapes to shape-2's left Port at (-200,140). Its middle segment runs from (220,80) to (-220,80).
+    const around = elbowArrow([{ x: -200, y: 100 }, { x: -100, y: 180 }], { x: 198, y: 140 }, { x: -198, y: 140 });
+
+    const state = drag(around, { x: 0, y: 80 }, { x: 0, y: 135 });
+
+    expect(onlyArrow(state).path).toEqual([
+      { x: 200, y: 140 },
+      { x: 220, y: 140 },
+      { x: 220, y: 130 },
+      { x: -220, y: 130 },
+      { x: -220, y: 140 },
+      { x: -200, y: 140 },
+    ]);
   });
 
   test("dragging it is one undo step", () => {
