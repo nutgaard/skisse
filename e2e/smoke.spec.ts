@@ -1,8 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("drawing a rectangle shows it on the Sketch, also while dragging, and it and its Label are still there after a reload", async ({
-  page,
-}) => {
+test("a drawn rectangle shows while dragging, and it and its Label are still there after a reload", async ({ page }) => {
   await page.goto("./");
   const rectangle = page.locator('[data-symbol="rectangle"]');
 

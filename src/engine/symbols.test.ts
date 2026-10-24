@@ -13,7 +13,7 @@ import {
   pointerUp,
   press,
   selectTool,
-  startDrawing,
+  drawWithLabelOpen,
   typeLabel,
 } from "./test-helpers";
 
@@ -41,7 +41,8 @@ const defaultBox: Bounds = { x: 100, y: 50, width: 160, height: 80 };
 // A Shape of the Symbol filling `box`, by default (100,50)–(260,130), with a Label so that a text Shape stays, and
 // nothing selected.
 function unselectedShape(symbol: SymbolId, box: Bounds = defaultBox): EditorState {
-  const created = startDrawing(newEditor(), symbol, { x: box.x, y: box.y }, { x: box.x + box.width, y: box.y + box.height });
+  const corner = { x: box.x + box.width, y: box.y + box.height };
+  const created = drawWithLabelOpen(newEditor(), symbol, { x: box.x, y: box.y }, corner);
   return press(press(typeLabel(created, "A"), "Escape"), "Escape");
 }
 

@@ -92,7 +92,7 @@ export type Label = { readonly text: string; readonly alignment: LabelAlignment 
  * A new Shape of `symbol` filling `bounds`, but for its ID: with an empty Label, aligned as the Symbol's Labels are by
  * default, and the default style.
  */
-export function newShape(symbol: SymbolId, bounds: Bounds): Omit<SymbolShape, "id"> {
+export function newShape(symbol: SymbolId, bounds: Bounds): ShapeWithoutId {
   return {
     symbol,
     bounds,
@@ -100,6 +100,9 @@ export function newShape(symbol: SymbolId, bounds: Bounds): Omit<SymbolShape, "i
     style: defaultStyle,
   };
 }
+
+/** A Shape but for its ID, such as one still being drawn. */
+export type ShapeWithoutId = Omit<SymbolShape, "id">;
 
 export type SymbolShape = {
   readonly id: ShapeId;
@@ -216,10 +219,15 @@ function withLabels(sketch: Sketch): Sketch {
     ...newShape(shape.symbol, shape.bounds),
     ...shape,
   });
-  return { ...sketch, shapes: Object.fromEntries(Object.entries(sketch.shapes).map(([id, shape]) => [id, complete(shape)])) };
+  return {
+    ...sketch,
+    shapes: Object.fromEntries(Object.entries(sketch.shapes).map(([id, shape]) => [id, complete(shape)])),
+  };
 }
 
-/** A fresh editor on the `saved` Sketch, a new empty one by default. Nothing is selected and there is nothing to undo. */
+/**
+ * A fresh editor on the `saved` Sketch, a new empty one by default. Nothing is selected and there is nothing to undo.
+ */
 export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): EditorState {
   const sketch = withLabels(saved);
   return {
@@ -387,14 +395,14 @@ function dragOffset(state: EditorState, drag: Drag, pointer: PointerState): Poin
   };
 }
 
-// A resize starts from the Shape as displayed, so its handles move the edges the user sees, and gives `resized`. The
-// Shape's own Bounds then follow it, but its Label still decides how tall it is shown:
+// The Shape's own Bounds after a resize from `from`, its Bounds as displayed, to `resized`. They follow the resize, but
+// the Shape's Label still decides how tall it is shown:
 // - A resize that leaves the top and bottom where they were keeps the Shape's own height, so it still shrinks back
 //   when its Label does.
 // - So does one that leaves the Shape shorter than its Label needs, unless it went below its own height. The Shape is
-//   then shown as tall as its Label needs, from the top, or up from the bottom when that edge stayed put.
-function resizedOwnBounds(state: EditorState, shape: SymbolShape, resized: Bounds): Bounds {
-  const from = displayed(state, shape);
+//   then shown as tall as its Label needs, down from its top, or up from its bottom when the edge that stayed put is
+//   at the bottom, such as when the top was dragged, or the bottom was flipped past the top.
+function resizedOwnBounds(state: EditorState, shape: SymbolShape, from: Bounds, resized: Bounds): Bounds {
   if (resized.y === from.y && resized.height === from.height) {
     return { ...resized, y: shape.bounds.y, height: shape.bounds.height };
   }
@@ -402,7 +410,8 @@ function resizedOwnBounds(state: EditorState, shape: SymbolShape, resized: Bound
   if (shown.height <= resized.height) return resized;
   const own = { ...resized, height: Math.min(resized.height, shape.bounds.height) };
   const bottom = resized.y + resized.height;
-  return bottom === from.y + from.height ? { ...own, y: bottom - shown.height } : own;
+  const stayedAtBottom = bottom === from.y + from.height || bottom === from.y;
+  return stayedAtBottom ? { ...own, y: bottom - shown.height } : own;
 }
 
 function resizeShape(
@@ -413,12 +422,14 @@ function resizeShape(
   const { before, shapeId, handle } = interaction;
   const shape = before.shapes[shapeId];
   if (!shape || !interaction.dragged) return { ...state, sketch: before, interaction };
-  const resized = resizeBounds(displayed(state, shape), handle, pointerOffset(interaction, pointer), {
+  // The resize starts from the Shape as displayed, so its handles move the edges the user sees.
+  const from = displayed(state, shape);
+  const resized = resizeBounds(from, handle, pointerOffset(interaction, pointer), {
     snap: snapperFor(snapsToGrid(pointer.modifiers)),
     keepAspectRatio: pointer.modifiers.shift,
     minimumSize: minimumShapeSize,
   });
-  const bounds = resizedOwnBounds(state, shape, resized);
+  const bounds = resizedOwnBounds(state, shape, from, resized);
   return {
     ...state,
     sketch: { ...before, shapes: { ...before.shapes, [shapeId]: { ...shape, bounds } } },
@@ -557,7 +568,8 @@ function removeIfEmpty(state: EditorState, id: ShapeId): EditorState {
 function finishEditingLabel(state: EditorState, how: "commit" | "cancel"): EditorState {
   const { interaction } = state;
   if (interaction.kind !== "editingLabel") return state;
-  const sketch = how === "commit" ? state.sketch : withLabelText(state.sketch, interaction.shapeId, interaction.originalText);
+  const sketch =
+    how === "commit" ? state.sketch : withLabelText(state.sketch, interaction.shapeId, interaction.originalText);
   return removeIfEmpty({ ...state, sketch, interaction: idle }, interaction.shapeId);
 }
 

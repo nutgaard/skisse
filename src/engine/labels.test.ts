@@ -10,14 +10,14 @@ import {
   drawRectangle,
   newEditor,
   press,
-  startDrawing,
+  drawWithLabelOpen,
   typeLabel,
   undoInput,
 } from "./test-helpers";
 
 describe("editing a Label", () => {
   test("starts right after a Shape is created, and Escape commits the typed text", () => {
-    const created = startDrawing(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 });
+    const created = drawWithLabelOpen(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 });
 
     expect(currentInteraction(created)).toEqual({ kind: "editingLabel", shapeId: "shape-1" });
 
@@ -29,7 +29,7 @@ describe("editing a Label", () => {
 
   test("clicking outside commits the typed text, and the click selects as usual", () => {
     const otherShape = drawRectangle(newEditor(), { x: 400, y: 100 }, { x: 500, y: 200 });
-    const editing = typeLabel(startDrawing(otherShape, "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API");
+    const editing = typeLabel(drawWithLabelOpen(otherShape, "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API");
 
     const clicked = click(editing, { x: 450, y: 150 });
 
@@ -39,7 +39,7 @@ describe("editing a Label", () => {
   });
 
   test("Enter commits the typed text", () => {
-    const editing = typeLabel(startDrawing(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API");
+    const editing = typeLabel(drawWithLabelOpen(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API");
 
     const committed = press(editing, "Enter");
 
@@ -48,7 +48,10 @@ describe("editing a Label", () => {
   });
 
   test("cancelling puts back the text from before", () => {
-    const named = press(typeLabel(startDrawing(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API"), "Escape");
+    const named = press(
+      typeLabel(drawWithLabelOpen(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API"),
+      "Escape",
+    );
     const editing = typeLabel(press(named, "Enter"), "Gateway");
     expect(labelLayout(editing, "shape-1")?.text).toBe("Gateway");
 
@@ -59,19 +62,30 @@ describe("editing a Label", () => {
   });
 
   test("Enter on the one selected Shape starts editing its Label", () => {
-    const state = press(click(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 200 }), { x: 150, y: 150 }), "Enter");
+    const state = press(
+      click(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 200 }), { x: 150, y: 150 }),
+      "Enter",
+    );
 
     expect(currentInteraction(state)).toEqual({ kind: "editingLabel", shapeId: "shape-1" });
   });
 
   test("Enter does nothing with several Shapes selected", () => {
-    const two = drawRectangle(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 200 }), { x: 300, y: 100 }, { x: 400, y: 200 });
+    const two = drawRectangle(
+      drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 200 }),
+      { x: 300, y: 100 },
+      { x: 400, y: 200 },
+    );
 
     expect(currentInteraction(press(press(two, "a", { meta: true }), "Enter"))).toEqual({ kind: "idle" });
   });
 
   test("double-clicking a Shape selects it and starts editing its Label", () => {
-    const two = drawRectangle(drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 200 }), { x: 300, y: 100 }, { x: 400, y: 200 });
+    const two = drawRectangle(
+      drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 200 }),
+      { x: 300, y: 100 },
+      { x: 400, y: 200 },
+    );
 
     const state = doubleClick(two, { x: 150, y: 150 });
 
@@ -98,7 +112,10 @@ describe("undoing Label edits", () => {
   });
 
   test("creating a Shape and typing its Label undo as one step", () => {
-    const named = press(typeLabel(startDrawing(newEditor(), "cylinder", { x: 100, y: 100 }, { x: 200, y: 200 }), "DB"), "Escape");
+    const named = press(
+      typeLabel(drawWithLabelOpen(newEditor(), "cylinder", { x: 100, y: 100 }, { x: 200, y: 200 }), "DB"),
+      "Escape",
+    );
 
     const undone = apply(named, undoInput);
 
@@ -108,7 +125,8 @@ describe("undoing Label edits", () => {
 });
 
 describe("a text Shape whose Label is empty when editing ends", () => {
-  const createText = (state: EditorState = newEditor()) => startDrawing(state, "text", { x: 100, y: 100 }, { x: 220, y: 140 });
+  const createText = (state: EditorState = newEditor()) =>
+    drawWithLabelOpen(state, "text", { x: 100, y: 100 }, { x: 220, y: 140 });
 
   test.each([
     ["Escape", (state: EditorState) => press(state, "Escape")],
@@ -141,7 +159,7 @@ describe("a text Shape whose Label is empty when editing ends", () => {
   });
 
   test("other Symbols keep their Shape with an empty Label", () => {
-    const state = press(startDrawing(newEditor(), "rectangle", { x: 100, y: 100 }, { x: 200, y: 200 }), "Escape");
+    const state = press(drawWithLabelOpen(newEditor(), "rectangle", { x: 100, y: 100 }, { x: 200, y: 200 }), "Escape");
 
     expect(shapes(state)).toHaveLength(1);
   });
@@ -150,7 +168,7 @@ describe("a text Shape whose Label is empty when editing ends", () => {
 // With the fake measurer, a character at the medium font size is 10 wide, and a line is 25 high. The rectangle at
 // (100,100)–(300,200) has its Label area inset by 8, at (108,108)–(292,192): 18 characters wide and 84 high.
 function labelledRectangle(text: string, to: Point = { x: 300, y: 200 }): EditorState {
-  return press(typeLabel(startDrawing(newEditor(), "rectangle", { x: 100, y: 100 }, to), text), "Escape");
+  return press(typeLabel(drawWithLabelOpen(newEditor(), "rectangle", { x: 100, y: 100 }, to), text), "Escape");
 }
 
 function lineTexts(state: EditorState, id = "shape-1"): readonly string[] {
@@ -184,8 +202,16 @@ describe("wrapping a Label", () => {
     expect(shapes(state)[0]?.bounds.height).toBe(100);
   });
 
+  test("never starts a line with the spaces between words, even when not one character fits a line", () => {
+    // The Label area of a rectangle 15 wide has no width.
+    expect(lineTexts(labelledRectangle("a  b", { x: 115, y: 200 }))).toEqual(["a ", "b"]);
+  });
+
   test("places a line by its text, not by the spaces at its end", () => {
-    const state = press(typeLabel(startDrawing(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API "), "Escape");
+    const state = press(
+      typeLabel(drawWithLabelOpen(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API "),
+      "Escape",
+    );
 
     expect(labelLayout(state, "shape-1")?.lines[0]?.bounds).toEqual({ x: 185, y: 137.5, width: 30, height: 25 });
   });
@@ -207,7 +233,10 @@ describe("wrapping a Label", () => {
 
   test("an ellipse's Label is centred in its Label area", () => {
     // The ellipse's Label area is centred on (200,150).
-    const state = press(typeLabel(startDrawing(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API\nGateway"), "Escape");
+    const state = press(
+      typeLabel(drawWithLabelOpen(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API\nGateway"),
+      "Escape",
+    );
 
     expect(labelLayout(state, "shape-1")?.lines).toEqual([
       { text: "API", bounds: { x: 185, y: 125, width: 30, height: 25 } },
@@ -234,7 +263,10 @@ describe("growing to fit a Label", () => {
   });
 
   test("grows while the Label is being typed", () => {
-    const typing = typeLabel(startDrawing(newEditor(), "rectangle", { x: 100, y: 100 }, { x: 300, y: 200 }), "1\n2\n3\n4\n5");
+    const typing = typeLabel(
+      drawWithLabelOpen(newEditor(), "rectangle", { x: 100, y: 100 }, { x: 300, y: 200 }),
+      "1\n2\n3\n4\n5",
+    );
 
     expect(shapes(typing)[0]?.bounds.height).toBe(141);
   });
@@ -248,7 +280,10 @@ describe("growing to fit a Label", () => {
   test("the Label of a cylinder sits in its body, below the lid and above the bottom curve, also when it grows", () => {
     // The lid is 30 high, and the bottom curve takes 15 off the body.
     const cylinder = (text: string) =>
-      press(typeLabel(startDrawing(newEditor(), "cylinder", { x: 100, y: 100 }, { x: 200, y: 220 }), text), "Escape");
+      press(
+        typeLabel(drawWithLabelOpen(newEditor(), "cylinder", { x: 100, y: 100 }, { x: 200, y: 220 }), text),
+        "Escape",
+      );
 
     for (const state of [cylinder("DB"), cylinder("1\n2\n3\n4\n5\n6")]) {
       const height = shapes(state)[0]?.bounds.height ?? 0;
@@ -302,6 +337,12 @@ describe("a Shape grown to fit its Label", () => {
     expect(shapes(resized)[0]?.bounds).toEqual({ x: 100, y: 100, width: 200, height: 141 });
   });
 
+  test("flipped upwards past its top without becoming taller than its Label needs, grows up from its old top", () => {
+    const resized = drag(click(grown(), { x: 200, y: 150 }), { x: 200, y: 241 }, { x: 200, y: 0 });
+
+    expect(shapes(resized)[0]?.bounds).toEqual({ x: 100, y: -41, width: 200, height: 141 });
+  });
+
   test("resized from its top to become taller, grows upwards", () => {
     const resized = drag(click(grown(), { x: 200, y: 150 }), { x: 200, y: 100 }, { x: 200, y: 80 });
 
@@ -326,7 +367,7 @@ describe("alignment and font size", () => {
     ["cylinder", "center"],
     ["text", "center"],
   ] as const)("a new %s's Label is aligned %s", (symbol, alignment) => {
-    const created = startDrawing(newEditor(), symbol, { x: 100, y: 100 }, { x: 300, y: 200 });
+    const created = drawWithLabelOpen(newEditor(), symbol, { x: 100, y: 100 }, { x: 300, y: 200 });
 
     expect(labelLayout(created, "shape-1")?.alignment).toBe(alignment);
   });
@@ -383,12 +424,15 @@ describe("alignment and font size", () => {
     for (const id of ["shape-1", "shape-2"]) {
       expect(labelLayout(changed, id)).toMatchObject({ fontSize: "small", alignment: "center" });
     }
-    expect(labelLayout(apply(changed, undoInput), "shape-1")).toMatchObject({ fontSize: "small", alignment: "topLeft" });
+    expect(labelLayout(apply(changed, undoInput), "shape-1")).toMatchObject({
+      fontSize: "small",
+      alignment: "topLeft",
+    });
     expect(labelLayout(apply(changed, undoInput, undoInput), "shape-2")).toMatchObject({ fontSize: "medium" });
   });
 
   test("applies to the Label being edited, as part of its editing session", () => {
-    const editing = typeLabel(startDrawing(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API");
+    const editing = typeLabel(drawWithLabelOpen(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API");
 
     const committed = press(apply(editing, { type: "changeStyle", style: { fontSize: "large" } }), "Escape");
 

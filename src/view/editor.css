@@ -96,6 +96,8 @@ body,
   color: #1e1e1e;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+  /* A tab is measured and drawn as wide as a space. */
+  tab-size: 1;
   background: transparent;
   border: none;
   outline: none;

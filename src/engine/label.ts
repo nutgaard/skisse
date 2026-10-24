@@ -1,4 +1,4 @@
-import type { FontSize, SymbolShape, TextMeasurer } from "./editor";
+import type { FontSize, ShapeWithoutId, TextMeasurer } from "./editor";
 import type { Bounds } from "./geometry";
 import { symbolDefinition } from "./symbols";
 
@@ -23,9 +23,6 @@ export type ShapeLayout = {
   readonly lines: readonly LabelLine[];
 };
 
-/** What laying out a Shape needs: all of it but its ID, which a Shape being drawn doesn't have yet. */
-export type ShapeToLayout = Omit<SymbolShape, "id">;
-
 // Whether a line of text fits the width of the Label area.
 type Fits = (line: string) => boolean;
 
@@ -34,7 +31,10 @@ type Fits = (line: string) => boolean;
 function breakWord(word: string, fits: Fits): readonly string[] {
   const characters = Array.from(word);
   if (characters.length <= 1 || fits(word)) return [word];
-  const length = Math.max(1, characters.findIndex((_, index) => !fits(characters.slice(0, index + 1).join(""))));
+  const length = Math.max(
+    1,
+    characters.findIndex((_, index) => !fits(characters.slice(0, index + 1).join(""))),
+  );
   return [characters.slice(0, length).join(""), ...breakWord(characters.slice(length).join(""), fits)];
 }
 
@@ -52,12 +52,13 @@ function pieces(paragraph: string): readonly Piece[] {
 }
 
 // Greedy wrapping: each piece goes on the current line if it fits there, and starts a new line otherwise. Spaces at
-// the end of a line hang past its end, as in the browser, so they never start a new line.
+// the end of a line hang past its end, as in the browser, so they never start a new line, even one too narrow for any
+// text.
 function wrapParagraph(paragraph: string, fits: Fits): readonly string[] {
   return pieces(paragraph).reduce<readonly string[]>((lines, { text, afterSpace }) => {
     const current = lines.at(-1);
     const joined = current === undefined ? undefined : `${current}${afterSpace ? " " : ""}${text}`;
-    return joined !== undefined && fits(joined.trimEnd())
+    return joined !== undefined && (text === "" || fits(joined.trimEnd()))
       ? [...lines.slice(0, -1), joined]
       : [...lines, ...breakWord(text, fits)];
   }, []);
@@ -68,16 +69,16 @@ function wrapText(text: string, fits: Fits): readonly string[] {
   return text === "" ? [] : text.split("\n").flatMap((paragraph) => wrapParagraph(paragraph, fits));
 }
 
-function wrapLabel(shape: ShapeToLayout, area: Bounds, measure: TextMeasurer): readonly string[] {
+function wrapLabel(shape: ShapeWithoutId, area: Bounds, measure: TextMeasurer): readonly string[] {
   const pixels = fontPixels[shape.style.fontSize];
   return wrapText(shape.label.text, (line) => measure(line, pixels) <= area.width);
 }
 
-function lineHeightOf(shape: ShapeToLayout): number {
+function lineHeightOf(shape: ShapeWithoutId): number {
   return fontPixels[shape.style.fontSize] * lineSpacing;
 }
 
-function layoutIn(shape: ShapeToLayout, bounds: Bounds, measure: TextMeasurer): ShapeLayout {
+function layoutIn(shape: ShapeWithoutId, bounds: Bounds, measure: TextMeasurer): ShapeLayout {
   const labelArea = symbolDefinition(shape.symbol).labelArea(bounds);
   const pixels = fontPixels[shape.style.fontSize];
   const lineHeight = lineHeightOf(shape);
@@ -101,7 +102,7 @@ function layoutIn(shape: ShapeToLayout, bounds: Bounds, measure: TextMeasurer): 
 }
 
 // Whether the Label's lines fit the height of the Label area when the Shape is `height` high.
-function fitsAtHeight(shape: ShapeToLayout, height: number, measure: TextMeasurer): boolean {
+function fitsAtHeight(shape: ShapeWithoutId, height: number, measure: TextMeasurer): boolean {
   const area = symbolDefinition(shape.symbol).labelArea({ ...shape.bounds, height });
   return wrapLabel(shape, area, measure).length * lineHeightOf(shape) <= area.height;
 }
@@ -113,7 +114,7 @@ const heightPrecision = 0.001;
 // the height is searched for: first doubling the growth until the Label fits, then halving the gap to the least
 // height that does. A height on a round number of precision steps is taken when it fits, so that the result is exact
 // whenever it can be.
-function heightToFit(shape: ShapeToLayout, measure: TextMeasurer): number {
+function heightToFit(shape: ShapeWithoutId, measure: TextMeasurer): number {
   const fits = (height: number) => fitsAtHeight(shape, height, measure);
   const own = shape.bounds.height;
   if (fits(own)) return own;
@@ -131,11 +132,11 @@ function heightToFit(shape: ShapeToLayout, measure: TextMeasurer): number {
 
 // Laying out a Label measures its text many times, and the same Shape is displayed again and again, such as on every
 // pointer move of a drag. Shapes are never changed, so each one's layout is kept for as long as the Shape exists.
-const layouts = new WeakMap<TextMeasurer, WeakMap<ShapeToLayout, ShapeLayout>>();
+const layouts = new WeakMap<TextMeasurer, WeakMap<ShapeWithoutId, ShapeLayout>>();
 
 /** The Shape as displayed, grown to fit its Label, with the Label laid out. */
-export function shapeLayout(shape: ShapeToLayout, measure: TextMeasurer): ShapeLayout {
-  const known = layouts.get(measure) ?? new WeakMap<ShapeToLayout, ShapeLayout>();
+export function shapeLayout(shape: ShapeWithoutId, measure: TextMeasurer): ShapeLayout {
+  const known = layouts.get(measure) ?? new WeakMap<ShapeWithoutId, ShapeLayout>();
   layouts.set(measure, known);
   const layout = known.get(shape) ?? layoutIn(shape, { ...shape.bounds, height: heightToFit(shape, measure) }, measure);
   known.set(shape, layout);
@@ -143,6 +144,6 @@ export function shapeLayout(shape: ShapeToLayout, measure: TextMeasurer): ShapeL
 }
 
 /** The Shape's Bounds as displayed, grown to fit its Label. */
-export function displayedBounds(shape: ShapeToLayout, measure: TextMeasurer): Bounds {
+export function displayedBounds(shape: ShapeWithoutId, measure: TextMeasurer): Bounds {
   return shapeLayout(shape, measure).bounds;
 }

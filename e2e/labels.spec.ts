@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const text = "Payments service handling refunds, chargebacks and settlement with the acquiring bank, client-server-architecture";
+const text =
+  "Payments service handling refunds, chargebacks and settlement with the acquiring bank, client-server-architecture";
 
 async function drawRectangle(page: Page) {
   await page.getByRole("button", { name: "Rectangle", exact: true }).click();
@@ -87,4 +88,20 @@ test("the Label's text field wraps as the Label does when zoomed", async ({ page
     clientHeight: element.clientHeight,
   }));
   expect(scrollHeight).toBeLessThanOrEqual(clientHeight);
+});
+
+test("scrolling with ctrl over the Label's text field zooms the Sketch, not the page", async ({ page }) => {
+  await page.goto("./");
+  await drawRectangle(page);
+  const field = page.getByRole("textbox", { name: "Label" });
+  const box = await field.boundingBox();
+  if (!box) throw new Error("the Label's text field is not shown");
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, 50);
+  await page.keyboard.up("Control");
+
+  await expect(page.getByRole("button", { name: "Reset zoom to 100%" })).toHaveText("71%");
+  await expect(field).toBeFocused();
 });

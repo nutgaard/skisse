@@ -238,6 +238,8 @@ type EditorProps = {
 export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, initialSketch));
   const svgRef = useRef<SVGSVGElement>(null);
+  // The Sketch and the text field laid over it while a Label is edited, which scroll and pinch alike.
+  const canvasRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const interaction = currentInteraction(state);
   const selected = new Set(selection(state));
@@ -292,8 +294,8 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
 
   // Wheel and gesture listeners are added directly, as React's are passive and can't stop the browser zooming the page.
   useEffect(() => {
-    const svg = svgRef.current;
-    if (!svg) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
     let pinchScale: number | undefined;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
@@ -314,15 +316,15 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
       event.preventDefault();
       pinchScale = undefined;
     };
-    svg.addEventListener("wheel", onWheel, { passive: false });
-    svg.addEventListener("gesturestart", onGestureStart);
-    svg.addEventListener("gesturechange", onGestureChange);
-    svg.addEventListener("gestureend", onGestureEnd);
+    canvas.addEventListener("wheel", onWheel, { passive: false });
+    canvas.addEventListener("gesturestart", onGestureStart);
+    canvas.addEventListener("gesturechange", onGestureChange);
+    canvas.addEventListener("gestureend", onGestureEnd);
     return () => {
-      svg.removeEventListener("wheel", onWheel);
-      svg.removeEventListener("gesturestart", onGestureStart);
-      svg.removeEventListener("gesturechange", onGestureChange);
-      svg.removeEventListener("gestureend", onGestureEnd);
+      canvas.removeEventListener("wheel", onWheel);
+      canvas.removeEventListener("gesturestart", onGestureStart);
+      canvas.removeEventListener("gesturechange", onGestureChange);
+      canvas.removeEventListener("gestureend", onGestureEnd);
     };
   }, []);
 
@@ -335,40 +337,44 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
 
   return (
     <>
-      <svg
-        ref={svgRef}
-        className="sketch"
-        data-pans={pansOnPress(state) || undefined}
-        data-panning={interaction.kind === "panning" || undefined}
-        onPointerDown={onPointer("pointerDown")}
-        onPointerMove={onPointer("pointerMove")}
-        onPointerUp={onPointer("pointerUp")}
-        onPointerCancel={onPointer("pointerCancel")}
-        onDoubleClick={(event) => dispatch({ type: "doubleClick", position: { x: event.clientX, y: event.clientY } })}
-      >
-        <Grid viewport={view} />
-        <g transform={`scale(${view.zoom}) translate(${-view.x} ${-view.y})`}>
-          <SvgElementView element={rendering(state)} />
-          {shapes(state)
-            .filter(({ id }) => selected.has(id))
-            .map(({ id, bounds }) => (
-              <rect key={id} data-selected={id} {...bounds} className="selection-outline" />
+      <div ref={canvasRef}>
+        <svg
+          ref={svgRef}
+          className="sketch"
+          data-pans={pansOnPress(state) || undefined}
+          data-panning={interaction.kind === "panning" || undefined}
+          onPointerDown={onPointer("pointerDown")}
+          onPointerMove={onPointer("pointerMove")}
+          onPointerUp={onPointer("pointerUp")}
+          onPointerCancel={onPointer("pointerCancel")}
+          onDoubleClick={(event) =>
+            dispatch({ type: "doubleClick", position: { x: event.clientX, y: event.clientY } })
+          }
+        >
+          <Grid viewport={view} />
+          <g transform={`scale(${view.zoom}) translate(${-view.x} ${-view.y})`}>
+            <SvgElementView element={rendering(state)} />
+            {shapes(state)
+              .filter(({ id }) => selected.has(id))
+              .map(({ id, bounds }) => (
+                <rect key={id} data-selected={id} {...bounds} className="selection-outline" />
+              ))}
+            {resizeHandles(state).map(({ handle, position }) => (
+              <rect
+                key={handle}
+                data-handle={handle}
+                x={position.x - handleSize / view.zoom / 2}
+                y={position.y - handleSize / view.zoom / 2}
+                width={handleSize / view.zoom}
+                height={handleSize / view.zoom}
+                className="resize-handle"
+              />
             ))}
-          {resizeHandles(state).map(({ handle, position }) => (
-            <rect
-              key={handle}
-              data-handle={handle}
-              x={position.x - handleSize / view.zoom / 2}
-              y={position.y - handleSize / view.zoom / 2}
-              width={handleSize / view.zoom}
-              height={handleSize / view.zoom}
-              className="resize-handle"
-            />
-          ))}
-          {interaction.kind === "marqueeSelecting" && <rect {...interaction.bounds} className="selection-box" />}
-        </g>
-      </svg>
-      {editedLabel && <LabelEditor label={editedLabel} viewport={view} dispatch={dispatch} />}
+            {interaction.kind === "marqueeSelecting" && <rect {...interaction.bounds} className="selection-box" />}
+          </g>
+        </svg>
+        {editedLabel && <LabelEditor label={editedLabel} viewport={view} dispatch={dispatch} />}
+      </div>
       <LabelControls state={state} dispatch={dispatch} />
       <div ref={toolbarRef} className="toolbar" role="toolbar">
         {tools.map((info) => (
