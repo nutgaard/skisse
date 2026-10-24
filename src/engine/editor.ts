@@ -167,9 +167,15 @@ type Interaction =
       readonly selectsOnClick: ShapeId | undefined;
     } & Drag)
   | ({ readonly kind: "resizing"; readonly shapeId: ShapeId; readonly handle: ResizeHandle } & Drag)
-  // Pressed with the Arrow tool, where the new Arrow starts. It ends wherever the pointer is let go.
-  | ({ readonly kind: "drawingArrow"; readonly start: ArrowEnd } & Press)
-  | ({ readonly kind: "draggingArrowEnd"; readonly arrowId: ShapeId; readonly end: EndName } & Drag)
+  // Pressed with the Arrow tool, where the new Arrow starts. It ends wherever the pointer is let go. `binds` is whether
+  // that end binds to a Shape there, which holding Alt turns off.
+  | ({ readonly kind: "drawingArrow"; readonly start: ArrowEnd; readonly binds: boolean } & Press)
+  | ({
+      readonly kind: "draggingArrowEnd";
+      readonly arrowId: ShapeId;
+      readonly end: EndName;
+      readonly binds: boolean;
+    } & Drag)
   // The viewport follows the pointer so that the Sketch point it grabbed stays under it.
   | { readonly kind: "panning"; readonly grabbed: Point }
   // The text the Label had before, which cancelling puts back.
@@ -186,8 +192,9 @@ export type EditorState = {
   readonly viewport: viewport.Viewport;
   // While space is held, a press pans instead of using the active tool.
   readonly spaceHeld: boolean;
-  // Where the pointer is over the Sketch, in screen pixels, or `undefined` when it isn't over it.
-  readonly pointer: Point | undefined;
+  // Where the pointer is over the Sketch, in screen pixels, and which modifiers are held, or `undefined` when it isn't
+  // over it.
+  readonly pointer: PointerState | undefined;
   readonly nextIdSequence: number;
   // Earlier and undone Sketches. Only changes to the Sketch are recorded, one step per finished gesture or command.
   readonly history: history.History<Sketch>;
@@ -233,6 +240,12 @@ const handleReach = 6;
 // Snapping to the grid is off by default. Holding Alt turns it on, for drags, resizes and arrow keys alike.
 function snapsToGrid(modifiers: Modifiers): boolean {
   return modifiers.alt;
+}
+
+// Arrow ends bind to the Shapes they are let go on by default. Holding Alt turns that off, so they float wherever they
+// are let go, like snapping to the grid, but the other way round.
+function bindsEnds(modifiers: Modifiers): boolean {
+  return !modifiers.alt;
 }
 
 function snapperFor(snaps: boolean): ((value: number) => number) {
@@ -471,6 +484,7 @@ function pressWithSelectTool(state: EditorState, input: PointerInput): EditorSta
         kind: "draggingArrowEnd",
         arrowId: grabbedEnd.arrow.id,
         end: grabbedEnd.end,
+        binds: bindsEnds(input.modifiers),
         origin: input.position,
         current: input.position,
         before: state.sketch,
@@ -635,9 +649,15 @@ function resizeShape(
 // How far, in screen pixels, from a Port an Arrow end snaps to it, so snapping feels the same at every zoom.
 const portReach = 10;
 
-// The end an Arrow gets when it is let go at `point` on `sketch`.
-function endLetGo(state: EditorState, sketch: Sketch, point: Point): ArrowEnd {
-  return endLetGoAt(sketch, point, sketchDistance(state, portReach), state.deps.measureText);
+// How close, in screen pixels, to a Shape's outline an Arrow end binds to it. Further away, even inside the Shape, it
+// floats, so a Container never takes an end let go beside one of its children.
+const outlineReach = 6;
+
+// The end an Arrow gets when it is let go at `point` on `sketch`, or a floating end when it doesn't bind.
+function endLetGo(state: EditorState, sketch: Sketch, point: Point, binds: boolean): ArrowEnd {
+  if (!binds) return { kind: "floating", at: point };
+  const reach = { port: sketchDistance(state, portReach), outline: sketchDistance(state, outlineReach) };
+  return endLetGoAt(sketch, point, reach, state.deps.measureText);
 }
 
 // The dragged end is placed wherever the pointer is, once the pointer has travelled past the drag threshold.
@@ -645,10 +665,10 @@ function dragArrowEnd(
   state: EditorState,
   interaction: Extract<Interaction, { kind: "draggingArrowEnd" }>,
 ): EditorState {
-  const { before, arrowId, end, current } = interaction;
+  const { before, arrowId, end, current, binds } = interaction;
   const arrow = before.shapes[arrowId];
   if (!arrow || !isArrow(arrow) || !interaction.dragged) return { ...state, sketch: before, interaction };
-  const replaced: Arrow = { ...arrow, [end]: endLetGo(state, before, current) };
+  const replaced: Arrow = { ...arrow, [end]: endLetGo(state, before, current, binds) };
   return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: replaced } }, interaction };
 }
 
@@ -669,7 +689,10 @@ function dragTo(
     case "resizing":
       return resizeShape(state, continuePress(state, interaction, pointer), pointer);
     case "draggingArrowEnd":
-      return dragArrowEnd(state, continuePress(state, interaction, pointer));
+      return dragArrowEnd(state, {
+        ...continuePress(state, interaction, pointer),
+        binds: bindsEnds(pointer.modifiers),
+      });
   }
 }
 
@@ -693,7 +716,8 @@ function pointerDown(state: EditorState, input: PointerInput): EditorState {
         ...state,
         interaction: {
           kind: "drawingArrow",
-          start: endLetGo(state, state.sketch, input.position),
+          start: endLetGo(state, state.sketch, input.position, bindsEnds(input.modifiers)),
+          binds: bindsEnds(input.modifiers),
           origin: input.position,
           current: input.position,
           dragged: false,
@@ -734,7 +758,10 @@ function pointerMove(state: EditorState, input: PointerInput): EditorState {
       };
     }
     case "drawingArrow":
-      return { ...state, interaction: continuePress(state, interaction, input) };
+      return {
+        ...state,
+        interaction: { ...continuePress(state, interaction, input), binds: bindsEnds(input.modifiers) },
+      };
     case "moving":
     case "resizing":
     case "draggingArrowEnd":
@@ -890,26 +917,32 @@ function createShape(state: EditorState, symbol: SymbolId, bounds: Bounds): Edit
   };
 }
 
-// Where an Arrow end is being placed: under the pointer while hovering with the Arrow tool, or where the end being
-// drawn or dragged is.
-function arrowEndBeingPlaced(state: EditorState): Point | undefined {
+// Where an Arrow end is being placed, and whether it binds there: under the pointer while hovering with the Arrow
+// tool, or where the end being drawn or dragged is.
+function arrowEndBeingPlaced(state: EditorState): { point: Point; binds: boolean } | undefined {
   const { interaction, pointer } = state;
-  if (interaction.kind === "drawingArrow") return interaction.current;
-  if (interaction.kind === "draggingArrowEnd") return interaction.dragged ? interaction.current : undefined;
+  if (interaction.kind === "drawingArrow") return { point: interaction.current, binds: interaction.binds };
+  if (interaction.kind === "draggingArrowEnd") {
+    return interaction.dragged ? { point: interaction.current, binds: interaction.binds } : undefined;
+  }
   const hovering = isIdle(state) && state.tool === "arrow" && !state.spaceHeld;
-  return hovering && pointer ? viewport.toSketch(state.viewport, pointer) : undefined;
+  return hovering && pointer
+    ? { point: viewport.toSketch(state.viewport, pointer.position), binds: bindsEnds(pointer.modifiers) }
+    : undefined;
 }
 
 /**
  * The Shape whose Ports are shown, as an Arrow end is being placed over it, and the place in its list of Ports of the
- * Port the end would snap to, if any.
+ * Port the end would snap to, if any. That is the Shape the end would bind to, or else the topmost Shape under it, so
+ * its Ports show where to aim.
  */
 export function portTarget(state: EditorState): { shape: SymbolShape; snapsTo: number | undefined } | undefined {
-  const point = arrowEndBeingPlaced(state);
-  if (!point) return undefined;
-  const end = endLetGo(state, state.sketch, point);
-  const id = boundTo(end);
-  const shape = id === undefined ? undefined : state.sketch.shapes[id];
+  const placing = arrowEndBeingPlaced(state);
+  if (!placing) return undefined;
+  const end = endLetGo(state, state.sketch, placing.point, placing.binds);
+  const bound = boundTo(end);
+  const shape =
+    bound === undefined ? shapeAt(state, placing.point, isSymbolShape) : state.sketch.shapes[bound];
   return shape && isSymbolShape(shape) ? { shape, snapsTo: end.kind === "port" ? end.port : undefined } : undefined;
 }
 
@@ -924,7 +957,7 @@ export function arrowBeingDrawn(state: EditorState): ArrowWithoutId | undefined 
     style: state.style,
     routing: "straight",
     start: interaction.start,
-    end: endLetGo(state, state.sketch, interaction.current),
+    end: endLetGo(state, state.sketch, interaction.current, interaction.binds),
   };
   const resolvedArrow = resolved(state, arrow);
   return resolvedArrow && distance(resolvedArrow.start, resolvedArrow.end) > 0 ? arrow : undefined;
@@ -1054,12 +1087,13 @@ function updateDragModifiers(state: EditorState, modifiers: Modifiers): EditorSt
   switch (interaction.kind) {
     case "creatingShape":
       return { ...state, interaction: { ...interaction, snaps: snapsToGrid(modifiers) } };
+    case "drawingArrow":
+      return { ...state, interaction: { ...interaction, binds: bindsEnds(modifiers) } };
     case "moving":
     case "resizing":
+    case "draggingArrowEnd":
       return dragTo(state, interaction, { position: interaction.current, modifiers });
     case "idle":
-    case "drawingArrow":
-    case "draggingArrowEnd":
     case "marqueeSelecting":
     case "panning":
     case "editingLabel":
@@ -1067,9 +1101,15 @@ function updateDragModifiers(state: EditorState, modifiers: Modifiers): EditorSt
   }
 }
 
-// Space is tracked on its own, whatever else is going on, as a press while it is held pans.
-function trackSpace(state: EditorState, input: KeyInput): EditorState {
-  return input.key === " " ? { ...state, spaceHeld: input.type === "keyDown" } : state;
+// Space is tracked on its own, whatever else is going on, as a press while it is held pans. So are the modifiers held
+// while the pointer hovers, which decide whether an Arrow end would bind there.
+function trackKeys(state: EditorState, input: KeyInput): EditorState {
+  const { pointer } = state;
+  return {
+    ...state,
+    spaceHeld: input.key === " " ? input.type === "keyDown" : state.spaceHeld,
+    pointer: pointer && { ...pointer, modifiers: input.modifiers },
+  };
 }
 
 // Escape and Enter finish editing a Label, keeping the text. Other keys while editing are typing, such as shift+Enter
@@ -1159,8 +1199,10 @@ function applyInput(state: EditorState, input: Input): EditorState {
       return { ...state, tool: input.tool };
     case "pointerDown":
       return pointerDown(state, inSketch(state, input));
-    case "pointerMove":
-      return pointerMove({ ...state, pointer: input.position }, inSketch(state, input));
+    case "pointerMove": {
+      const tracked = { ...state, pointer: { position: input.position, modifiers: input.modifiers } };
+      return pointerMove(tracked, inSketch(state, input));
+    }
     case "pointerLeave":
       return { ...state, pointer: undefined };
     case "pointerUp":
@@ -1170,9 +1212,9 @@ function applyInput(state: EditorState, input: Input): EditorState {
     case "doubleClick":
       return doubleClick(state, viewport.toSketch(state.viewport, input.position));
     case "keyDown":
-      return keyDown(trackSpace(state, input), input);
+      return keyDown(trackKeys(state, input), input);
     case "keyUp":
-      return updateDragModifiers(trackSpace(state, input), input.modifiers);
+      return updateDragModifiers(trackKeys(state, input), input.modifiers);
     case "wheel":
       return wheel(state, input);
     case "pinch":

@@ -120,37 +120,33 @@ function hides({ box, geometry }: Candidate, point: Point): boolean {
   return onOutline === undefined || distance(onOutline, point) > onOutlineTolerance;
 }
 
+/** How close, in Sketch units, an Arrow end must be to a Port to snap to it, and to an outline to bind to it. */
+export type Reach = { readonly port: number; readonly outline: number };
+
 /**
- * The end an Arrow gets when it is let go at `point`. Arrows never bind to other Arrows. In order:
- * - Within `reach` of a Port, it snaps to the nearest such Port.
- * - Within `reach` of a Shape's outline, it binds to the nearest point on the nearest such outline, so an end let go
- *   on the line drawn around a Shape binds to that Shape, even inside a Container.
- * - Over a Shape, it binds to the nearest point on the outline of the topmost Shape under it.
- * - Over empty space, it floats.
- * A Port or a point on an outline that a Shape drawn above hides doesn't count as within reach. A tie goes to the
- * Shape on top.
+ * The end an Arrow gets when it is let go at `point`. Within `reach.port` of a Port, it snaps to the nearest such
+ * Port. Otherwise, within `reach.outline` of a Shape's outline, it binds to the nearest point on the nearest such
+ * outline. Anywhere else, even inside a Shape, it floats. Arrows never bind to other Arrows, nor to a Port or a point
+ * on an outline that a Shape drawn above hides. A tie goes to the Shape on top.
  */
-export function endLetGoAt(sketch: Sketch, point: Point, reach: number, measure: TextMeasurer): ArrowEnd {
+export function endLetGoAt(sketch: Sketch, point: Point, reach: Reach, measure: TextMeasurer): ArrowEnd {
   const all = candidates(sketch, measure);
   // Only what is within reach is checked for being hidden, as only that can be bound to.
-  const visibleWithin = (index: number, at: Point) =>
-    distance(at, point) <= reach && !all.slice(0, index).some((above) => hides(above, at));
+  const visibleWithin = (index: number, at: Point, within: number) =>
+    distance(at, point) <= within && !all.slice(0, index).some((above) => hides(above, at));
   const ports = all.flatMap((candidate, index) =>
     candidate.geometry.ports
       .map((position, port) => ({ shape: candidate.shape.id, port, position }))
-      .filter(({ position }) => visibleWithin(index, position)),
+      .filter(({ position }) => visibleWithin(index, position, reach.port)),
   );
-  const port = nearestWithin(ports, ({ position }) => distance(position, point), reach);
+  const port = nearestWithin(ports, ({ position }) => distance(position, point), reach.port);
   if (port) return { kind: "port", shape: port.shape, port: port.port };
   const outlines = all.flatMap((candidate, index) => {
     const onOutline = nearestOnPath(candidate.geometry.outline, point);
-    return onOutline && visibleWithin(index, onOutline) ? [{ candidate, onOutline }] : [];
+    return onOutline && visibleWithin(index, onOutline, reach.outline) ? [{ candidate, onOutline }] : [];
   });
-  const near = nearestWithin(outlines, ({ onOutline }) => distance(onOutline, point), reach);
-  if (near) return outlineEnd(near.candidate, near.onOutline);
-  const under = all.find(({ geometry }) => insidePath(geometry.outline, point));
-  const onUnder = under && nearestOnPath(under.geometry.outline, point);
-  return under && onUnder ? outlineEnd(under, onUnder) : { kind: "floating", at: point };
+  const near = nearestWithin(outlines, ({ onOutline }) => distance(onOutline, point), reach.outline);
+  return near ? outlineEnd(near.candidate, near.onOutline) : { kind: "floating", at: point };
 }
 
 /** The Shape an end is bound to, or `undefined` when it floats. */

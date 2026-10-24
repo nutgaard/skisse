@@ -24,6 +24,7 @@ import {
   drawLabelled,
   drawRectangle,
   keyDown,
+  keyUp,
   newEditor,
   pinch,
   pointerDown,
@@ -36,7 +37,7 @@ import {
 
 // In twoRectangles(), shape-1 at (100,100)–(200,180) has its Ports at (150,100), (200,140), (150,180) and (100,140),
 // and shape-2 at (300,100)–(400,180) at (350,100), (400,140), (350,180) and (300,140). Ports are snapped to within 10
-// screen pixels.
+// screen pixels, and outlines within 6.
 
 // An Arrow, shape-3, from the right side of shape-1 at (200,130) to the left Port of shape-2 at (300,140). It is
 // selected.
@@ -84,10 +85,31 @@ describe("drawing an Arrow", () => {
     expect(onlyArrow(state).end).toEqual({ point: { x: 300, y: 140 }, binding: { shape: "shape-2", port: 3 } });
   });
 
-  test("letting go elsewhere over a Shape binds the end to the nearest point on its outline", () => {
-    const state = drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 310, y: 160 });
+  test("letting go close to a Shape's side binds the end to the nearest point on its outline", () => {
+    const state = drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 304, y: 160 });
 
     expect(onlyArrow(state).end).toEqual({ point: { x: 300, y: 160 }, binding: { shape: "shape-2" } });
+  });
+
+  test("letting go inside a Shape, away from its sides and Ports, leaves the end floating", () => {
+    const state = drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 310, y: 160 });
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 310, y: 160 } });
+  });
+
+  test("letting go inside a Container, beside a child, leaves the end floating rather than bound to the Container", () => {
+    // A Container at (0,0)–(600,400), with children A at (50,50)–(150,130) and B at (400,200)–(500,280).
+    const container = drawRectangle(newEditor(), { x: 0, y: 0 }, { x: 600, y: 400 });
+    const children = drawRectangle(
+      drawRectangle(container, { x: 50, y: 50 }, { x: 150, y: 130 }),
+      { x: 400, y: 200 },
+      { x: 500, y: 280 },
+    );
+
+    const state = drawArrow(children, { x: 150, y: 70 }, { x: 380, y: 240 });
+
+    expect(onlyArrow(state).start).toEqual({ point: { x: 150, y: 70 }, binding: { shape: "shape-2" } });
+    expect(onlyArrow(state).end).toEqual({ point: { x: 380, y: 240 } });
   });
 
   test("letting go just outside a Shape, but near a Port, snaps to the Port", () => {
@@ -102,16 +124,16 @@ describe("drawing an Arrow", () => {
     expect(onlyArrow(state).end).toEqual({ point: { x: 400, y: 115 }, binding: { shape: "shape-2" } });
   });
 
-  test("letting go just outside a Shape, within 10 screen pixels of its outline, binds the end to the outline", () => {
-    const state = drawArrow(twoRectangles(), { x: 250, y: 300 }, { x: 330, y: 188 });
+  test("letting go just outside a Shape, within 6 screen pixels of its outline, binds the end to the outline", () => {
+    const state = drawArrow(twoRectangles(), { x: 250, y: 300 }, { x: 330, y: 185 });
 
     expect(onlyArrow(state).end).toEqual({ point: { x: 330, y: 180 }, binding: { shape: "shape-2" } });
   });
 
   test("letting go further outside a Shape leaves the end floating", () => {
-    const state = drawArrow(twoRectangles(), { x: 250, y: 300 }, { x: 330, y: 192 });
+    const state = drawArrow(twoRectangles(), { x: 250, y: 300 }, { x: 330, y: 188 });
 
-    expect(onlyArrow(state).end).toEqual({ point: { x: 330, y: 192 } });
+    expect(onlyArrow(state).end).toEqual({ point: { x: 330, y: 188 } });
   });
 
   test("letting go on a Port binds to it even with another Shape's outline within reach", () => {
@@ -148,7 +170,7 @@ describe("drawing an Arrow", () => {
     expect(onlyArrow(state).end).toEqual({ point: { x: 207, y: 170 }, binding: { shape: "shape-2" } });
   });
 
-  test("letting go on a Shape ignores the Ports and outlines of the Shapes it covers there", () => {
+  test("letting go on a Shape doesn't bind to the Ports and outlines of the Shapes it covers there", () => {
     // shape-1 at (100,100)–(200,180), partly covered by shape-2 at (180,120)–(330,250).
     const overlapping = drawRectangle(
       drawRectangle(newEditor(), { x: 100, y: 100 }, { x: 200, y: 180 }),
@@ -159,8 +181,8 @@ describe("drawing an Arrow", () => {
     const nearSide = drawArrow(overlapping, { x: 250, y: 400 }, { x: 195, y: 160 });
     const nearPort = drawArrow(overlapping, { x: 250, y: 400 }, { x: 195, y: 140 });
 
-    expect(onlyArrow(nearSide).end).toEqual({ point: { x: 180, y: 160 }, binding: { shape: "shape-2" } });
-    expect(onlyArrow(nearPort).end.binding).toEqual({ shape: "shape-2" });
+    expect(onlyArrow(nearSide).end).toEqual({ point: { x: 195, y: 160 } });
+    expect(onlyArrow(nearPort).end).toEqual({ point: { x: 195, y: 140 } });
   });
 
   test("letting go on a Container's Port binds to it when a child shares that side", () => {
@@ -246,28 +268,93 @@ describe("drawing an Arrow", () => {
   });
 });
 
+describe("holding Alt", () => {
+  test("while drawing leaves both ends floating, even on Ports", () => {
+    const state = apply(
+      twoRectangles(),
+      selectTool("arrow"),
+      pointerDown({ x: 198, y: 140 }, { alt: true }),
+      pointerMove({ x: 302, y: 140 }, { alt: true }),
+      pointerUp({ x: 302, y: 140 }, { alt: true }),
+    );
+
+    expect(onlyArrow(state).start).toEqual({ point: { x: 198, y: 140 } });
+    expect(onlyArrow(state).end).toEqual({ point: { x: 302, y: 140 } });
+  });
+
+  test("pressed in the middle of drawing leaves the end floating", () => {
+    const drawing = drawingArrow({ x: 195, y: 130 }, { x: 302, y: 140 });
+
+    const state = apply(drawing, keyDown("Alt", { alt: true }), pointerUp({ x: 302, y: 140 }, { alt: true }));
+
+    expect(onlyArrow(state).start.binding).toEqual({ shape: "shape-1" });
+    expect(onlyArrow(state).end).toEqual({ point: { x: 302, y: 140 } });
+  });
+
+  test("let go in the middle of drawing lets the end snap again", () => {
+    const drawing = apply(
+      twoRectangles(),
+      selectTool("arrow"),
+      pointerDown({ x: 195, y: 130 }, { alt: true }),
+      pointerMove({ x: 302, y: 140 }, { alt: true }),
+    );
+
+    expect(visiblePorts(drawing)).toMatchObject({ shape: "shape-2", snapsTo: undefined });
+    expect(visiblePorts(apply(drawing, keyUp("Alt")))).toMatchObject({ shape: "shape-2", snapsTo: 3 });
+  });
+
+  test("while dragging an end leaves it floating", () => {
+    const state = drag(boundArrow(), { x: 300, y: 140 }, { x: 306, y: 146 }, { alt: true });
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 306, y: 146 } });
+  });
+
+  test("pressed in the middle of dragging an end leaves it floating at once", () => {
+    const dragging = apply(boundArrow(), pointerDown({ x: 300, y: 140 }), pointerMove({ x: 306, y: 146 }));
+
+    const state = apply(dragging, keyDown("Alt", { alt: true }));
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 306, y: 146 } });
+  });
+
+  test("while hovering shows the Ports, but none to snap to", () => {
+    const hovering = apply(twoRectangles(), selectTool("arrow"), pointerMove({ x: 196, y: 142 }));
+
+    expect(visiblePorts(apply(hovering, keyDown("Alt", { alt: true })))).toMatchObject({
+      shape: "shape-1",
+      snapsTo: undefined,
+    });
+  });
+});
+
 describe("snapping to Ports at any zoom", () => {
   // At 2×, a screen point is twice the Sketch point.
   function zoomedIn(): EditorState {
     return apply(twoRectangles(), pinch({ x: 0, y: 0 }, 2));
   }
 
-  test("zoomed in, an end 8.5 Sketch units from a Port, 17 screen pixels, doesn't snap to it", () => {
-    const state = drawArrow(zoomedIn(), { x: 390, y: 260 }, { x: 612, y: 292 });
+  test("zoomed in, an end 6 Sketch units from a side, 12 screen pixels, doesn't bind to it", () => {
+    const state = drawArrow(zoomedIn(), { x: 390, y: 260 }, { x: 612, y: 340 });
 
-    expect(onlyArrow(state).end).toEqual({ point: { x: 300, y: 146 }, binding: { shape: "shape-2" } });
+    expect(onlyArrow(state).end).toEqual({ point: { x: 306, y: 170 } });
+  });
+
+  test("zoomed in, an end 8.5 Sketch units from a Port, 17 screen pixels, doesn't snap to it", () => {
+    const state = drawArrow(zoomedIn(), { x: 390, y: 260 }, { x: 606, y: 296 });
+
+    expect(onlyArrow(state).end).toEqual({ point: { x: 300, y: 148 }, binding: { shape: "shape-2" } });
   });
 
   test("zoomed out, an end 16 Sketch units from a Port, 8 screen pixels, snaps to it", () => {
     const zoomedOut = apply(twoRectangles(), pinch({ x: 0, y: 0 }, 0.5));
 
-    const state = drawArrow(zoomedOut, { x: 97.5, y: 65 }, { x: 158, y: 70 });
+    const state = drawArrow(zoomedOut, { x: 97.5, y: 65 }, { x: 150, y: 62 });
 
     expect(onlyArrow(state).end.binding).toEqual({ shape: "shape-2", port: 3 });
   });
 
   test("at 100%, the same end 16 Sketch units from the Port doesn't snap to it", () => {
-    const state = drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 316, y: 140 });
+    const state = drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 300, y: 124 });
 
     expect(onlyArrow(state).end.binding).toEqual({ shape: "shape-2" });
   });
@@ -291,7 +378,7 @@ describe("bound ends follow their Shapes", () => {
 
   test("an end bound to the outline keeps its place along it when the Shape is resized", () => {
     // The end is at (300,160), three quarters of the way down shape-2's left side.
-    const outlineBound = drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 310, y: 160 });
+    const outlineBound = drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 304, y: 160 });
     const shape2Selected = click(outlineBound, { x: 350, y: 140 });
 
     // Drags the bottom handle down, making shape-2 160 high.
@@ -340,7 +427,7 @@ describe("changing an Arrow's ends", () => {
   });
 
   test("dragging the start onto another Shape rebinds it", () => {
-    const state = drag(withThirdRectangle(), { x: 200, y: 130 }, { x: 310, y: 360 });
+    const state = drag(withThirdRectangle(), { x: 200, y: 130 }, { x: 304, y: 360 });
 
     expect(onlyArrow(state).start).toEqual({ point: { x: 300, y: 360 }, binding: { shape: "shape-4" } });
   });
