@@ -10,6 +10,7 @@ import {
   apply,
   click,
   drag,
+  drawLabelled,
   drawRectangle,
   drawSymbol,
   newEditor,
@@ -88,8 +89,7 @@ function textShape(): EditorState {
 
 // A Shape of `symbol` at (100,100)–(300,200) with the Label `text`, and nothing selected.
 function labelled(symbol: SymbolId, text: string): EditorState {
-  const created = drawWithLabelOpen(newEditor(), symbol, { x: 100, y: 100 }, { x: 300, y: 200 });
-  return press(press(typeLabel(created, text), "Escape"), "Escape");
+  return press(drawLabelled(newEditor(), symbol, { x: 100, y: 100 }, { x: 300, y: 200 }, text), "Escape");
 }
 
 // A rectangle, its Label area inset by 8 at (108,108)–(292,192), with a Label of two lines.

@@ -239,7 +239,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, initialSketch));
   const svgRef = useRef<SVGSVGElement>(null);
   // The Sketch and the text field laid over it while a Label is edited, which scroll and pinch alike.
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const sketchAreaRef = useRef<HTMLDivElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const interaction = currentInteraction(state);
   const selected = new Set(selection(state));
@@ -294,8 +294,8 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
 
   // Wheel and gesture listeners are added directly, as React's are passive and can't stop the browser zooming the page.
   useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const sketchArea = sketchAreaRef.current;
+    if (!sketchArea) return;
     let pinchScale: number | undefined;
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
@@ -316,15 +316,15 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
       event.preventDefault();
       pinchScale = undefined;
     };
-    canvas.addEventListener("wheel", onWheel, { passive: false });
-    canvas.addEventListener("gesturestart", onGestureStart);
-    canvas.addEventListener("gesturechange", onGestureChange);
-    canvas.addEventListener("gestureend", onGestureEnd);
+    sketchArea.addEventListener("wheel", onWheel, { passive: false });
+    sketchArea.addEventListener("gesturestart", onGestureStart);
+    sketchArea.addEventListener("gesturechange", onGestureChange);
+    sketchArea.addEventListener("gestureend", onGestureEnd);
     return () => {
-      canvas.removeEventListener("wheel", onWheel);
-      canvas.removeEventListener("gesturestart", onGestureStart);
-      canvas.removeEventListener("gesturechange", onGestureChange);
-      canvas.removeEventListener("gestureend", onGestureEnd);
+      sketchArea.removeEventListener("wheel", onWheel);
+      sketchArea.removeEventListener("gesturestart", onGestureStart);
+      sketchArea.removeEventListener("gesturechange", onGestureChange);
+      sketchArea.removeEventListener("gestureend", onGestureEnd);
     };
   }, []);
 
@@ -337,7 +337,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
 
   return (
     <>
-      <div ref={canvasRef}>
+      <div ref={sketchAreaRef}>
         <svg
           ref={svgRef}
           className="sketch"

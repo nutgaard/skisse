@@ -13,8 +13,7 @@ import {
   pointerUp,
   press,
   selectTool,
-  drawWithLabelOpen,
-  typeLabel,
+  drawLabelled,
 } from "./test-helpers";
 
 type BuiltInSymbol = {
@@ -42,8 +41,7 @@ const defaultBox: Bounds = { x: 100, y: 50, width: 160, height: 80 };
 // nothing selected.
 function unselectedShape(symbol: SymbolId, box: Bounds = defaultBox): EditorState {
   const corner = { x: box.x + box.width, y: box.y + box.height };
-  const created = drawWithLabelOpen(newEditor(), symbol, { x: box.x, y: box.y }, corner);
-  return press(press(typeLabel(created, "A"), "Escape"), "Escape");
+  return press(drawLabelled(newEditor(), symbol, { x: box.x, y: box.y }, corner, "A"), "Escape");
 }
 
 // A point `distance` from `point` towards the middle of `box`, along one axis.

@@ -10,6 +10,7 @@ import {
   drawRectangle,
   newEditor,
   press,
+  drawLabelled,
   drawWithLabelOpen,
   typeLabel,
   undoInput,
@@ -48,10 +49,7 @@ describe("editing a Label", () => {
   });
 
   test("cancelling puts back the text from before", () => {
-    const named = press(
-      typeLabel(drawWithLabelOpen(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API"),
-      "Escape",
-    );
+    const named = drawLabelled(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }, "API");
     const editing = typeLabel(press(named, "Enter"), "Gateway");
     expect(labelLayout(editing, "shape-1")?.text).toBe("Gateway");
 
@@ -112,10 +110,7 @@ describe("undoing Label edits", () => {
   });
 
   test("creating a Shape and typing its Label undo as one step", () => {
-    const named = press(
-      typeLabel(drawWithLabelOpen(newEditor(), "cylinder", { x: 100, y: 100 }, { x: 200, y: 200 }), "DB"),
-      "Escape",
-    );
+    const named = drawLabelled(newEditor(), "cylinder", { x: 100, y: 100 }, { x: 200, y: 200 }, "DB");
 
     const undone = apply(named, undoInput);
 
@@ -168,7 +163,7 @@ describe("a text Shape whose Label is empty when editing ends", () => {
 // With the fake measurer, a character at the medium font size is 10 wide, and a line is 25 high. The rectangle at
 // (100,100)–(300,200) has its Label area inset by 8, at (108,108)–(292,192): 18 characters wide and 84 high.
 function labelledRectangle(text: string, to: Point = { x: 300, y: 200 }): EditorState {
-  return press(typeLabel(drawWithLabelOpen(newEditor(), "rectangle", { x: 100, y: 100 }, to), text), "Escape");
+  return drawLabelled(newEditor(), "rectangle", { x: 100, y: 100 }, to, text);
 }
 
 function lineTexts(state: EditorState, id = "shape-1"): readonly string[] {
@@ -208,10 +203,7 @@ describe("wrapping a Label", () => {
   });
 
   test("places a line by its text, not by the spaces at its end", () => {
-    const state = press(
-      typeLabel(drawWithLabelOpen(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API "),
-      "Escape",
-    );
+    const state = drawLabelled(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }, "API ");
 
     expect(labelLayout(state, "shape-1")?.lines[0]?.bounds).toEqual({ x: 185, y: 137.5, width: 30, height: 25 });
   });
@@ -233,10 +225,7 @@ describe("wrapping a Label", () => {
 
   test("an ellipse's Label is centred in its Label area", () => {
     // The ellipse's Label area is centred on (200,150).
-    const state = press(
-      typeLabel(drawWithLabelOpen(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }), "API\nGateway"),
-      "Escape",
-    );
+    const state = drawLabelled(newEditor(), "ellipse", { x: 100, y: 100 }, { x: 300, y: 200 }, "API\nGateway");
 
     expect(labelLayout(state, "shape-1")?.lines).toEqual([
       { text: "API", bounds: { x: 185, y: 125, width: 30, height: 25 } },
@@ -280,10 +269,7 @@ describe("growing to fit a Label", () => {
   test("the Label of a cylinder sits in its body, below the lid and above the bottom curve, also when it grows", () => {
     // The lid is 30 high, and the bottom curve takes 15 off the body.
     const cylinder = (text: string) =>
-      press(
-        typeLabel(drawWithLabelOpen(newEditor(), "cylinder", { x: 100, y: 100 }, { x: 200, y: 220 }), text),
-        "Escape",
-      );
+      drawLabelled(newEditor(), "cylinder", { x: 100, y: 100 }, { x: 200, y: 220 }, text);
 
     for (const state of [cylinder("DB"), cylinder("1\n2\n3\n4\n5\n6")]) {
       const height = shapes(state)[0]?.bounds.height ?? 0;

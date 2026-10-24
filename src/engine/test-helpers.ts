@@ -83,6 +83,11 @@ export function drawWithLabelOpen(state: EditorState, symbol: SymbolId, from: Po
   return apply(state, selectTool(symbol), pointerDown(from), pointerMove(to), pointerUp(to));
 }
 
+/** Draws a Shape of `symbol` by dragging from `from` to `to`, types `text` as its Label, and commits it with Escape. */
+export function drawLabelled(state: EditorState, symbol: SymbolId, from: Point, to: Point, text: string): EditorState {
+  return apply(drawWithLabelOpen(state, symbol, from, to), { type: "changeLabelText", text }, keyDown("Escape"));
+}
+
 /** Draws a Shape of `symbol` by dragging from `from` to `to`, and finishes editing its Label, leaving it empty. */
 export function drawSymbol(state: EditorState, symbol: SymbolId, from: Point, to: Point): EditorState {
   return apply(drawWithLabelOpen(state, symbol, from, to), keyDown("Escape"));
