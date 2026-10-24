@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import type { EditorState } from "./editor";
+import type { EditorState, ShapeId } from "./editor";
 import { exportSvg } from "./export";
 import { fixedWidthTextMeasurer } from "./fakes";
 import { rendering, shapes, sketch } from "./queries";
@@ -22,7 +22,7 @@ function select(state: EditorState, ...numbers: readonly number[]): EditorState 
   );
 }
 
-function drawn(state: EditorState) {
+function drawn(state: EditorState): readonly ShapeId[] {
   return shapes(state).map(({ id }) => id);
 }
 
@@ -89,9 +89,9 @@ describe("stacking order", () => {
   });
 
   test("a reorder that changes nothing adds no undo step", () => {
-    const selected = press(select(fourRectangles(), 4), "]");
+    const reordered = press(select(fourRectangles(), 4), "]");
 
-    const undone = press(selected, "z", { meta: true });
+    const undone = press(reordered, "z", { meta: true });
 
     expect(drawn(undone)).toEqual(["shape-1", "shape-2", "shape-3"]);
   });

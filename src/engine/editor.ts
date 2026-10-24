@@ -303,15 +303,14 @@ function moveInto(sketch: Sketch, id: ShapeId, parent: ShapeId | undefined): Ske
 // The Shapes inside it come along, so it can't join one of them. Each is settled in turn, so two moved Containers
 // can't each join the other.
 function settleMoved(state: EditorState, ids: readonly ShapeId[]): EditorState {
-  const sketch = outermost(state.sketch, ids).reduce((sketch, id) => {
-    const shape = sketch.shapes[id];
-    if (!shape) return sketch;
-    const container = containerAt({ ...state, sketch }, centre(displayed(state, shape)), (candidate) =>
-      !isWithin(sketch, candidate.id, id),
+  return outermost(state.sketch, ids).reduce((settled, id) => {
+    const shape = settled.sketch.shapes[id];
+    if (!shape) return settled;
+    const container = containerAt(settled, centre(displayed(settled, shape)), (candidate) =>
+      !isWithin(settled.sketch, candidate.id, id),
     );
-    return moveInto(sketch, id, container?.id);
-  }, state.sketch);
-  return { ...state, sketch };
+    return { ...settled, sketch: moveInto(settled.sketch, id, container?.id) };
+  }, state);
 }
 
 function shapesInside(state: EditorState, box: Bounds): readonly ShapeId[] {
@@ -676,18 +675,24 @@ function adoptCovered(state: EditorState, container: SymbolShape): Sketch {
   );
 }
 
+function area({ width, height }: Bounds): number {
+  return width * height;
+}
+
 // A new Shape joins the innermost Container under its centre, on top of the Shapes there. A new Container never joins
-// one it surrounds, as it adopts that one instead when it covers its centre, such as when drawn around a cluster with
-// its centre on the cluster. Nor does it join one inside a Container it surrounds, such as a child sticking out of it.
+// a smaller one whose centre it covers, as it adopts that one instead, such as when drawn around a cluster with its
+// centre on the cluster. Nor does it join one inside it, such as a child sticking out of it.
 function containerForNew(state: EditorState, shape: ShapeWithoutId): ShapeId | undefined {
   const bounds = displayed(state, shape);
-  const surrounded = isContainer(shape)
-    ? Object.values(state.sketch.shapes).filter((other) => containsBounds(bounds, displayed(state, other)))
-    : [];
+  const coversCentreOf = (other: SymbolShape): boolean => {
+    const otherBounds = displayed(state, other);
+    return area(otherBounds) < area(bounds) && hitsOutline(shape.symbol, bounds, centre(otherBounds));
+  };
+  const covered = isContainer(shape) ? Object.values(state.sketch.shapes).filter(coversCentreOf) : [];
   return containerAt(
     state,
     centre(bounds),
-    (candidate) => !surrounded.some(({ id }) => isWithin(state.sketch, candidate.id, id)),
+    (candidate) => !covered.some(({ id }) => isWithin(state.sketch, candidate.id, id)),
   )?.id;
 }
 

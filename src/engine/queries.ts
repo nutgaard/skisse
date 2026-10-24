@@ -76,9 +76,13 @@ export function shapes(state: EditorState): readonly ShapeView[] {
 /** A Shape and the Shapes directly inside it, from bottom to top. */
 export type ShapeTree = { readonly id: ShapeId; readonly children: readonly ShapeTree[] };
 
+function treeInside(state: EditorState, parent: ShapeId | undefined): readonly ShapeTree[] {
+  return childrenOf(state.sketch, parent).map(({ id }) => ({ id, children: treeInside(state, id) }));
+}
+
 /** The Shapes at the top level, each with the Shapes inside it, from bottom to top. */
-export function shapeTree(state: EditorState, parent?: ShapeId): readonly ShapeTree[] {
-  return childrenOf(state.sketch, parent).map(({ id }) => ({ id, children: shapeTree(state, id) }));
+export function shapeTree(state: EditorState): readonly ShapeTree[] {
+  return treeInside(state, undefined);
 }
 
 /** How a Shape is drawn, as last chosen for it. */

@@ -8,6 +8,14 @@ function shape(id: ShapeId, ...children: readonly ShapeTree[]): ShapeTree {
   return { id, children };
 }
 
+function undo(state: EditorState): EditorState {
+  return press(state, "z", { meta: true });
+}
+
+function redo(state: EditorState): EditorState {
+  return press(state, "z", { meta: true, shift: true });
+}
+
 // shape-1 is a Container at (100,100)–(500,400), and shape-2 a rectangle outside it at (600,100)–(700,180).
 function containerAndShape(): EditorState {
   return drawRectangle(
@@ -173,6 +181,13 @@ describe("drawing a Container", () => {
     expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-4", shape("shape-2", shape("shape-3"))))]);
   });
 
+  test("a Container drawn around most of a smaller Container adopts it", () => {
+    // Around the cluster but for its bottom 10, with its centre on the cluster.
+    const state = drawRectangle(nested(), { x: 150, y: 100 }, { x: 650, y: 440 });
+
+    expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-4", shape("shape-2", shape("shape-3"))))]);
+  });
+
   test("a Container drawn around a Container never goes inside a child sticking out of it", () => {
     // The cluster shrunk to (200,150)–(400,300), and the service widened to (350,260)–(700,340), sticking out of it.
     const shrunk = drag(click(nested(), { x: 250, y: 200 }), { x: 600, y: 450 }, { x: 400, y: 300 });
@@ -244,7 +259,7 @@ describe("deleting a Container", () => {
   test("undo puts back the Container and everything that was inside it, in one step", () => {
     const deleted = press(click(nested(), { x: 50, y: 50 }), "Delete");
 
-    const state = press(deleted, "z", { meta: true });
+    const state = undo(deleted);
 
     expect(shapeTree(state)).toEqual([shape("shape-1", shape("shape-2", shape("shape-3")))]);
     expect(boundsById(state)).toEqual(boundsById(nested()));
@@ -252,10 +267,6 @@ describe("deleting a Container", () => {
 });
 
 describe("undoing containment", () => {
-  function undo(state: EditorState): EditorState {
-    return press(state, "z", { meta: true });
-  }
-
   test("a drop into a Container undoes as one step, along with the move", () => {
     const dropped = drag(containerAndShape(), { x: 650, y: 140 }, { x: 300, y: 250 });
 
@@ -263,7 +274,7 @@ describe("undoing containment", () => {
 
     expect(shapeTree(state)).toEqual([shape("shape-1"), shape("shape-2")]);
     expect(boundsById(state)).toEqual(boundsById(containerAndShape()));
-    expect(shapeTree(press(state, "z", { meta: true, shift: true }))).toEqual(shapeTree(dropped));
+    expect(shapeTree(redo(state))).toEqual(shapeTree(dropped));
   });
 
   test("a drag out of a Container undoes as one step", () => {
