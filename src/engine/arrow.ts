@@ -1,5 +1,5 @@
 import type { Shape, ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
-import { distance, type Bounds, type Point } from "./geometry";
+import { contains, distance, type Bounds, type Point } from "./geometry";
 import { displayedBounds } from "./label";
 import { insidePath, nearestOnPath } from "./path";
 import { shapeGeometry, type ShapeGeometry } from "./shape-geometry";
@@ -113,37 +113,38 @@ const onOutlineTolerance = 0.5;
 
 // Whether `point` is hidden under the Shape: inside its outline, and not on it. Shapes are hit as if filled, so what
 // they cover can't be bound to.
-function hides({ geometry }: Candidate, point: Point): boolean {
+function hides({ box, geometry }: Candidate, point: Point): boolean {
+  // Most Shapes are nowhere near the point, and the box around the outline rules them out cheaply.
+  if (!contains(box, point) || !insidePath(geometry.outline, point)) return false;
   const onOutline = nearestOnPath(geometry.outline, point);
-  return (
-    insidePath(geometry.outline, point) &&
-    (onOutline === undefined || distance(onOutline, point) > onOutlineTolerance)
-  );
+  return onOutline === undefined || distance(onOutline, point) > onOutlineTolerance;
 }
 
 /**
- * The end an Arrow gets when it is let go at `point`. Arrows never bind to other Arrows, nor to a Port or a point on an
- * outline that a Shape drawn above hides. In order:
+ * The end an Arrow gets when it is let go at `point`. Arrows never bind to other Arrows. In order:
  * - Within `reach` of a Port, it snaps to the nearest such Port.
  * - Within `reach` of a Shape's outline, it binds to the nearest point on the nearest such outline, so an end let go
  *   on the line drawn around a Shape binds to that Shape, even inside a Container.
  * - Over a Shape, it binds to the nearest point on the outline of the topmost Shape under it.
  * - Over empty space, it floats.
- * A tie goes to the Shape on top.
+ * A Port or a point on an outline that a Shape drawn above hides doesn't count as within reach. A tie goes to the
+ * Shape on top.
  */
 export function endLetGoAt(sketch: Sketch, point: Point, reach: number, measure: TextMeasurer): ArrowEnd {
   const all = candidates(sketch, measure);
-  const visible = (index: number, at: Point) => !all.slice(0, index).some((above) => hides(above, at));
+  // Only what is within reach is checked for being hidden, as only that can be bound to.
+  const visibleWithin = (index: number, at: Point) =>
+    distance(at, point) <= reach && !all.slice(0, index).some((above) => hides(above, at));
   const ports = all.flatMap((candidate, index) =>
     candidate.geometry.ports
       .map((position, port) => ({ shape: candidate.shape.id, port, position }))
-      .filter(({ position }) => visible(index, position)),
+      .filter(({ position }) => visibleWithin(index, position)),
   );
   const port = nearestWithin(ports, ({ position }) => distance(position, point), reach);
   if (port) return { kind: "port", shape: port.shape, port: port.port };
   const outlines = all.flatMap((candidate, index) => {
     const onOutline = nearestOnPath(candidate.geometry.outline, point);
-    return onOutline && visible(index, onOutline) ? [{ candidate, onOutline }] : [];
+    return onOutline && visibleWithin(index, onOutline) ? [{ candidate, onOutline }] : [];
   });
   const near = nearestWithin(outlines, ({ onOutline }) => distance(onOutline, point), reach);
   if (near) return outlineEnd(near.candidate, near.onOutline);
