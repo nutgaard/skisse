@@ -66,29 +66,6 @@ function extentOf(box: Bounds, axis: Axis): Extent {
   return axis === "x" ? { start: box.x, end: box.x + box.width } : { start: box.y, end: box.y + box.height };
 }
 
-function overlaps(a: Extent, b: Extent): boolean {
-  return a.start <= b.end && b.start <= a.end;
-}
-
-// Halfway along the axis, unless that runs through a bound end's Shape, as when the ends face away from each other
-// and are about level. The middle segment then goes around the Shapes there, on the side nearer halfway, or the top or
-// left on a tie.
-function aroundShapes(start: ElbowEnd, end: ElbowEnd, axis: Axis, halfway: number): number {
-  const extents = [start, end].flatMap(({ box }) => (box ? [extentOf(box, axis)] : []));
-  const hit = extents.filter((extent) => extent.start < halfway && halfway < extent.end);
-  const [first] = hit;
-  if (!first) return halfway;
-  const span = extents
-    .filter((extent) => hit.some((other) => overlaps(extent, other)))
-    .reduce(
-      (joined, extent) => ({ start: Math.min(joined.start, extent.start), end: Math.max(joined.end, extent.end) }),
-      first,
-    );
-  const before = span.start - stub;
-  const after = span.end + stub;
-  return halfway - before <= after - halfway ? before : after;
-}
-
 // A way to route the path, with its middle segment moved along `axis`.
 type Candidate = {
   readonly axis: Axis;
@@ -103,6 +80,24 @@ type Candidate = {
   readonly segments: number;
 };
 
+// Where the middle segment goes on its own: at `preferred`, unless the path would then run back over itself or through
+// the Shape of an end. It then goes just outside one of those Shapes instead, the nearest place to `preferred` that
+// keeps clear of both and leaves the path clean, or the top or left on a tie. With no such place, it stays.
+function placed(start: ElbowEnd, end: ElbowEnd, axis: Axis, within: Extent, preferred: number): number {
+  const extents = [start, end].flatMap(({ box }) => (box ? [extentOf(box, axis)] : []));
+  const isClean = (at: number) => {
+    const { points } = layoutAt(start, end, axis, at);
+    return !turnsBack(points) && !crossesShapes(start, end, points);
+  };
+  if (isClean(preferred)) return preferred;
+  const clear = (at: number) => extents.every(({ start, end }) => at <= start - stub || end + stub <= at);
+  const [nearest] = extents
+    .flatMap(({ start, end }) => [start - stub, end + stub])
+    .filter((at) => within.start < at && at < within.end && clear(at) && isClean(at))
+    .toSorted((a, b) => Math.abs(a - preferred) - Math.abs(b - preferred) || a - b);
+  return nearest ?? preferred;
+}
+
 // An end that leaves along the axis must not have the middle segment behind it, or the path would double back there.
 // An end that leaves across it runs out a stub first, and turns towards the middle segment from there.
 function candidate(start: ElbowEnd, end: ElbowEnd, axis: Axis): Candidate {
@@ -110,18 +105,10 @@ function candidate(start: ElbowEnd, end: ElbowEnd, axis: Axis): Candidate {
   const min = Math.max(...leaves.filter(({ out }) => along(out, axis) > 0).map(({ point }) => along(point, axis)));
   const max = Math.min(...leaves.filter(({ out }) => along(out, axis) < 0).map(({ point }) => along(point, axis)));
   const halfway = (along(start.point, axis) + along(end.point, axis)) / 2;
-  const centred = min < halfway && halfway < max;
   const stubs = [start, end].filter(({ out }) => out && along(out, axis) === 0).length;
-  const beside = halfway <= min ? min + stub : max - stub;
-  return {
-    axis,
-    min,
-    max,
-    // With nothing to keep it to one side of an end, it can go anywhere, so it keeps clear of the Shapes.
-    natural: leaves.length === 0 ? aroundShapes(start, end, axis, halfway) : centred ? halfway : beside,
-    centred,
-    segments: 3 + stubs,
-  };
+  const preferred = min < halfway && halfway < max ? halfway : halfway <= min ? min + stub : max - stub;
+  const natural = placed(start, end, axis, { start: min, end: max }, preferred);
+  return { axis, min, max, natural, centred: natural === halfway, segments: 3 + stubs };
 }
 
 function isPossible({ min, max }: Candidate): boolean {
@@ -272,10 +259,13 @@ export function offsetDraggedBy(middle: MiddleSegment, moved: Point): ElbowOffse
   const lowest = min + shortestEnd;
   const highest = max - shortestEnd;
   const wanted = along(middle.from, axis) + along(moved, axis);
-  const clamped = lowest > highest ? natural : Math.min(highest, Math.max(lowest, wanted));
-  const at = levels.toSorted((a, b) => a - b).reduce((placed, level) => {
-    if (Math.abs(placed - level) >= shortestEnd) return placed;
-    return placed < level ? level - shortestEnd : level + shortestEnd;
-  }, clamped);
+  const allowed = (at: number) =>
+    lowest <= at && at <= highest && levels.every((level) => Math.abs(at - level) >= shortestEnd);
+  const [at = natural] = [
+    Math.min(highest, Math.max(lowest, wanted)),
+    ...levels.flatMap((level) => [level - shortestEnd, level + shortestEnd]),
+  ]
+    .filter(allowed)
+    .toSorted((a, b) => Math.abs(a - wanted) - Math.abs(b - wanted));
   return at === natural ? undefined : { axis, by: at - natural };
 }

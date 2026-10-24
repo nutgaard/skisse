@@ -172,6 +172,19 @@ describe("elbow paths between Ports", () => {
     ]);
   });
 
+  test("from a top to a right side whose Shape is in the way go above both Shapes", () => {
+    // shape-2 at (260,50)–(360,130), its right Port at (360,90), level with the space just above shape-1's top Port.
+    const state = elbowArrow([{ x: 260, y: 50 }, { x: 360, y: 130 }], { x: 150, y: 102 }, { x: 358, y: 90 });
+
+    expect(onlyArrow(state).path).toEqual([
+      { x: 150, y: 100 },
+      { x: 150, y: 30 },
+      { x: 380, y: 30 },
+      { x: 380, y: 90 },
+      { x: 360, y: 90 },
+    ]);
+  });
+
   test("between two right sides run out past the further one", () => {
     // shape-2 at (300,200)–(400,280), its right Port at (400,240).
     const state = elbowArrow([{ x: 300, y: 200 }, { x: 400, y: 280 }], { x: 198, y: 140 }, { x: 398, y: 240 });
@@ -435,6 +448,23 @@ describe("the middle segment", () => {
       { x: -220, y: 130 },
       { x: -220, y: 140 },
       { x: -200, y: 140 },
+    ]);
+  });
+
+  test("dragged towards an end it can't come within 10 of stops on the near side of the other end", () => {
+    // shape-2 at (300,150)–(400,230), with an Arrow from shape-1's left Port at (100,140) out to (80,140), up to
+    // (80,80) above both Shapes, across to (350,80) and down to shape-2's top Port at (350,150). The middle segment can
+    // come no closer than 10 to that Port, nor to the level of the Port it started from.
+    const around = elbowArrow([{ x: 300, y: 150 }, { x: 400, y: 230 }], { x: 102, y: 140 }, { x: 350, y: 152 });
+
+    const state = drag(around, { x: 215, y: 80 }, { x: 215, y: 145 });
+
+    expect(onlyArrow(state).path).toEqual([
+      { x: 100, y: 140 },
+      { x: 80, y: 140 },
+      { x: 80, y: 130 },
+      { x: 350, y: 130 },
+      { x: 350, y: 150 },
     ]);
   });
 
