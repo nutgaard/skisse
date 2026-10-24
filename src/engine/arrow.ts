@@ -1,8 +1,9 @@
 import type { ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
+import { arrowheadLength, arrowheadReach } from "./arrowhead";
 import { elbowRoute, type ElbowEnd, type ElbowOffset, type MiddleSegment } from "./elbow";
-import { contains, distance, type Bounds, type Point } from "./geometry";
+import { contains, distance, distanceToBounds, translate, type Bounds, type Point } from "./geometry";
 import { arrowLabelLayout, displayedBounds, type ArrowLabelLayout } from "./label";
-import { insidePath, nearestOnPath, pointAlongPolyline } from "./path";
+import { insidePath, nearestOnPath, pointAlongPolyline, polylineLength } from "./path";
 import { shapeGeometry, type ShapeGeometry } from "./shape-geometry";
 import { isArrow, isSymbolShape } from "./shape-kind";
 import type { Style } from "./style";
@@ -121,14 +122,49 @@ export function resolveArrow(sketch: Sketch, arrow: ArrowWithoutId, measure: Tex
   return { start: start.point, end: end.point, ...elbowRoute(start, end, arrow.elbowOffset) };
 }
 
-/** Where the Arrow's Label sits on its path, as resolved. */
-export function labelPoint(arrow: ResolvedArrow, label: ArrowLabel): Point {
-  return pointAlongPolyline(arrow.path, label.along) ?? arrow.start;
+// How much of the line, in Sketch units, shows at least between the gap around an Arrow's Label and each end, past the
+// head there, so the Label stays clear of the head, the Port and the Shape at that end.
+const lineBesideLabel = 12;
+
+// How close the gap around the Arrow's Label may come to its `end`.
+function labelClearance(arrow: ArrowWithoutId, end: EndName): number {
+  return arrowheadReach(arrow.heads[end], arrowheadLength(arrow.style.strokeWidth)) + lineBesideLabel;
+}
+
+/**
+ * Where along the Arrow's path, as a share of its length, its Label is shown when it is put at `along`: there, or else
+ * at the nearest share where the gap around it keeps clear of both ends and their heads. A Label with no room for that
+ * anywhere, on an Arrow too short for it, is shown in the middle.
+ */
+export function clearAlong(arrow: ArrowWithoutId, resolved: ResolvedArrow, along: number, measure: TextMeasurer): number {
+  const { gap } = arrowLabelLayout(arrow.label.text, arrow.style.fontSize, { x: 0, y: 0 }, measure);
+  const total = polylineLength(resolved.path);
+  const wanted = Math.max(0, Math.min(1, along)) * total;
+  if (!gap || total === 0) return along;
+  const clear = (length: number) => {
+    const around = translate(gap, pointAlongPolyline(resolved.path, length / total) ?? resolved.start);
+    return (
+      distanceToBounds(around, resolved.start) >= labelClearance(arrow, "start") &&
+      distanceToBounds(around, resolved.end) >= labelClearance(arrow, "end")
+    );
+  };
+  // Nearest first: where it was put, and then one Sketch unit further either way at a time.
+  const tried = [
+    wanted,
+    ...Array.from({ length: Math.ceil(total) }, (_, step) => [wanted - step - 1, wanted + step + 1]).flat(),
+  ].filter((length) => length >= 0 && length <= total);
+  const found = tried.find(clear);
+  return found === undefined ? 0.5 : found / total;
+}
+
+/** Where the Arrow's Label is shown on its path as resolved: at its share, or as near to it as keeps it clear of the ends. */
+export function labelPoint(arrow: ArrowWithoutId, resolved: ResolvedArrow, measure: TextMeasurer): Point {
+  return pointAlongPolyline(resolved.path, clearAlong(arrow, resolved, arrow.label.along, measure)) ?? resolved.start;
 }
 
 /** The Arrow's Label as displayed, at its place on the Arrow's path as resolved. */
 export function layoutArrowLabel(arrow: ArrowWithoutId, resolved: ResolvedArrow, measure: TextMeasurer): ArrowLabelLayout {
-  return arrowLabelLayout(arrow.label.text, arrow.style.fontSize, labelPoint(resolved, arrow.label), measure);
+  return arrowLabelLayout(arrow.label.text, arrow.style.fontSize, labelPoint(arrow, resolved, measure), measure);
 }
 
 // A Shape an end can bind to, as displayed.

@@ -53,11 +53,11 @@ test("an Arrow's Label is typed in place, without wrapping, and dragged along th
   await expect(label).toHaveText("publishes events");
   const before = await label.boundingBox();
   if (!before) throw new Error("the Label has no box");
-  // Grabbed above the line, and dragged right along it.
+  // Grabbed above the line, and dragged left along it, not so far that it comes near the start.
   const grabbed = { x: before.x + before.width / 2, y: before.y + 4 };
-  await dragOnPage(page, grabbed, { x: grabbed.x + 50, y: grabbed.y + 30 });
+  await dragOnPage(page, grabbed, { x: grabbed.x - 20, y: grabbed.y + 30 });
 
   const after = await label.boundingBox();
-  expect(after?.x).toBeCloseTo(before.x + 50);
+  expect(after?.x).toBeCloseTo(before.x - 20);
   expect(after?.y).toBeCloseTo(before.y);
 });

@@ -12,6 +12,13 @@ export function distance(a: Point, b: Point): number {
   return Math.hypot(a.x - b.x, a.y - b.y);
 }
 
+/** How far `point` is from the nearest point of `bounds`, or 0 when it is inside them. */
+export function distanceToBounds(bounds: Bounds, point: Point): number {
+  const dx = Math.max(bounds.x - point.x, 0, point.x - (bounds.x + bounds.width));
+  const dy = Math.max(bounds.y - point.y, 0, point.y - (bounds.y + bounds.height));
+  return Math.hypot(dx, dy);
+}
+
 /** The smallest Bounds around `points`. Expects at least one point. */
 export function boundsOfPoints(points: readonly Point[]): Bounds {
   return boundsBetween(

@@ -2,6 +2,7 @@ import {
   arrowheads,
   boundTo,
   defaultHeads,
+  clearAlong,
   endLetGoAt,
   labelPoint,
   layoutArrowLabel,
@@ -356,8 +357,8 @@ function shapeBounds(sketch: Sketch, shape: Shape, measure: TextMeasurer): Bound
   if (isSymbolShape(shape)) return displayedBounds(shape, measure);
   const arrow = resolveArrow(sketch, shape, measure);
   if (!arrow) return undefined;
-  const { background } = layoutArrowLabel(shape, arrow, measure);
-  return enclosingBounds([boundsOfPoints(arrow.path), ...(background ? [background] : [])]);
+  const { gap } = layoutArrowLabel(shape, arrow, measure);
+  return enclosingBounds([boundsOfPoints(arrow.path), ...(gap ? [gap] : [])]);
 }
 
 // How far, in screen pixels, from an Arrow's line a press still hits it.
@@ -368,10 +369,11 @@ function hitsSymbolShape(shape: SymbolShape, point: Point, measure: TextMeasurer
   return hitsOutline(shape.symbol, displayedBounds(shape, measure), point);
 }
 
-// Whether `point` is on the Arrow's Label, as far as its background reaches, on the Arrow's path as resolved.
+// Whether `point` is on the Arrow's Label, as far as the gap around it in the line reaches, on the Arrow's path as
+// resolved.
 function onArrowLabel(arrow: ArrowWithoutId, resolvedArrow: ResolvedArrow, point: Point, measure: TextMeasurer): boolean {
-  const { background } = layoutArrowLabel(arrow, resolvedArrow, measure);
-  return background !== undefined && contains(background, point);
+  const { gap } = layoutArrowLabel(arrow, resolvedArrow, measure);
+  return gap !== undefined && contains(gap, point);
 }
 
 // Arrows are hit-tested by their line and their Label.
@@ -844,10 +846,14 @@ function dragArrowLabel(
   const arrow = shape && isArrow(shape) ? shape : undefined;
   const resolvedArrow = arrow && resolveArrow(before, arrow, state.deps.measureText);
   if (!arrow || !resolvedArrow || !interaction.dragged) return { ...state, sketch: before, interaction };
-  const target = translatePoint(labelPoint(resolvedArrow, arrow.label), pointerOffset(interaction, pointer));
+  const { measureText } = state.deps;
+  const target = translatePoint(labelPoint(arrow, resolvedArrow, measureText), pointerOffset(interaction, pointer));
   // A path with no length has nowhere along it to go, so the Label keeps its share for when it has one again.
   const along = shareAlongPolyline(resolvedArrow.path, target) ?? arrow.label.along;
-  const replaced: Arrow = { ...arrow, label: { ...arrow.label, along } };
+  const replaced: Arrow = {
+    ...arrow,
+    label: { ...arrow.label, along: clearAlong(arrow, resolvedArrow, along, measureText) },
+  };
   return { ...state, sketch: { ...before, shapes: { ...before.shapes, [arrowId]: replaced } }, interaction };
 }
 

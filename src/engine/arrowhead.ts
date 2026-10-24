@@ -1,11 +1,31 @@
 import type { Arrowhead } from "./arrow";
 import { distance, type Point } from "./geometry";
 import { polygon, polyline, type Path } from "./path";
+import { strokePixels, type StrokeWidth } from "./style";
 
 /** An arrowhead as drawn: lines, filled or not, or a filled circle. */
 export type ArrowheadGeometry =
   | { readonly kind: "lines"; readonly path: Path; readonly filled: boolean }
   | { readonly kind: "circle"; readonly center: Point; readonly radius: number };
+
+/** How long, in Sketch units, an arrowhead is along the line, for each stroke width. It is half as wide across it. */
+export function arrowheadLength(width: StrokeWidth): number {
+  return 8 + 2 * strokePixels[width];
+}
+
+/** How far back along the line from its end the head reaches, as drawn by `arrowheadAt` at `length`. */
+export function arrowheadReach(head: Arrowhead, length: number): number {
+  switch (head) {
+    case "none":
+      return 0;
+    case "diamond":
+      return 2 * length;
+    case "arrow":
+    case "openArrow":
+    case "circle":
+      return length;
+  }
+}
 
 /**
  * The head at the last of `points`, lined up with the line running into it, `length` long along the line and half as

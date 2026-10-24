@@ -17,7 +17,7 @@ export { exportSvg } from "./export";
 export { gridSize } from "./grid";
 export { labelFontFamily } from "./label";
 export type { LabelLine } from "./label";
-export { pathData } from "./path";
+export { pathData, regionWithHole } from "./path";
 export type { Path, PathCommand } from "./path";
 export { arrowheads } from "./arrow";
 export type { Arrowhead, EndName, Routing } from "./arrow";

@@ -193,14 +193,14 @@ export type ArrowLabelLayout = {
   readonly lineHeight: number;
   readonly lines: readonly LabelLine[];
   /**
-   * Where the background goes that keeps the Arrow's line from running through the text: around the lines, with some
-   * space to spare. `undefined` when the Label shows nothing, such as when it is empty.
+   * The gap left in the Arrow's line, so it doesn't run through the text: around the lines, with some space to spare.
+   * `undefined` when the Label shows nothing, such as when it is empty.
    */
-  readonly background: Bounds | undefined;
+  readonly gap: Bounds | undefined;
 };
 
-// Space, in Sketch units, between an Arrow's Label and the edge of its background.
-const backgroundPadding = 4;
+// Space, in Sketch units, between an Arrow's Label and the ends of the gap in its line.
+const gapPadding = 4;
 
 /**
  * An Arrow's Label of `text` in `fontSize`, centred on `at`. It has no area to wrap in, so it has a line for each line
@@ -218,7 +218,7 @@ export function arrowLabelLayout(text: string, fontSize: FontSize, at: Point, me
   // A font size to spare keeps the text field from wrapping a line drawn a little wider than it was measured.
   const width = Math.max(0, ...lines.map(({ bounds }) => bounds.width)) + pixels;
   const textBlock = { x: at.x - width / 2, y: top, width, height: Math.max(1, typed.length) * lineHeight };
-  const background =
-    text.trim() === "" ? undefined : expandBounds(enclosingBounds(lines.map(({ bounds }) => bounds)), backgroundPadding);
-  return { textBlock, fontPixels: pixels, lineHeight, lines, background };
+  const gap =
+    text.trim() === "" ? undefined : expandBounds(enclosingBounds(lines.map(({ bounds }) => bounds)), gapPadding);
+  return { textBlock, fontPixels: pixels, lineHeight, lines, gap };
 }

@@ -14,6 +14,7 @@ import {
   noModifiers,
   pansOnPress,
   pathData,
+  regionWithHole,
   rendering,
   resizeHandles,
   selection,
@@ -158,27 +159,19 @@ function Grid({ viewport }: { readonly viewport: Viewport }) {
 }
 
 /**
- * The highlight along a selected Arrow's line, left out where its Label's background is, so it doesn't run through the
- * text, just as the line doesn't.
+ * The highlight along a selected Arrow's line, left out where the line has a gap for its Label, so it doesn't run
+ * through the text, just as the line doesn't.
  */
 function ArrowSelection({ arrow, zoom }: { readonly arrow: ArrowView; readonly zoom: number }) {
   const clipId = useId();
   const points = arrow.path.map(({ x, y }) => `${x},${y}`).join(" ");
-  const { background } = arrow.label;
-  if (!background) return <polyline data-selected={arrow.id} points={points} className="arrow-selection" />;
-  // A region around the whole highlight, with a hole for the Label. It reaches past the line by more than the highlight
-  // is wide, which is in screen pixels.
-  const margin = handleSize / zoom;
-  const xs = [...arrow.path.map(({ x }) => x), background.x, background.x + background.width];
-  const ys = [...arrow.path.map(({ y }) => y), background.y, background.y + background.height];
-  const left = Math.min(...xs) - margin;
-  const top = Math.min(...ys) - margin;
-  const frame = `M ${left} ${top} H ${Math.max(...xs) + margin} V ${Math.max(...ys) + margin} H ${left} Z`;
-  const hole = `M ${background.x} ${background.y} h ${background.width} v ${background.height} h ${-background.width} Z`;
+  const { gap } = arrow.label;
+  if (!gap) return <polyline data-selected={arrow.id} points={points} className="arrow-selection" />;
+  // The region clipped to reaches past the line by more than the highlight is wide, which is in screen pixels.
   return (
     <>
       <clipPath id={clipId}>
-        <path d={`${frame} ${hole}`} clipRule="evenodd" />
+        <path d={pathData(regionWithHole(arrow.path, gap, handleSize / zoom))} clipRule="evenodd" />
       </clipPath>
       <polyline data-selected={arrow.id} points={points} className="arrow-selection" clipPath={`url(#${clipId})`} />
     </>

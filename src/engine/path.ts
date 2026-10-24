@@ -1,4 +1,4 @@
-import { distance, type Bounds, type Point } from "./geometry";
+import { boundsOfPoints, distance, enclosingBounds, expandBounds, type Bounds, type Point } from "./geometry";
 
 /**
  * One step of a Path, in Sketch coordinates. A `move` starts a new piece, and `close` joins a piece back to its start.
@@ -250,6 +250,11 @@ function pointOnSegment({ from, to, length }: Segment, along: number): Point {
   return { x: from.x + t * (to.x - from.x), y: from.y + t * (to.y - from.y) };
 }
 
+/** How long the line through `points` is. */
+export function polylineLength(points: readonly Point[]): number {
+  return lengthOf(segmentsOf(points));
+}
+
 /**
  * The point `share` of the way along the line through `points`, by length, from 0 at its first point to 1 at its last,
  * or `undefined` when there are no points. A share outside 0–1 counts as the nearer of them.
@@ -282,4 +287,12 @@ export function shareAlongPolyline(points: readonly Point[], point: Point): numb
 export function distanceToPolyline(points: readonly Point[], point: Point): number {
   const nearest = nearestOnPolyline(points, point);
   return nearest === undefined ? Infinity : distance(nearest, point);
+}
+
+/**
+ * A region around the line through `points` and around `hole`, reaching `margin` past both, with `hole` cut out of it.
+ * Clipped to with the even-odd rule, it leaves the line out where the hole is. Expects at least one point.
+ */
+export function regionWithHole(points: readonly Point[], hole: Bounds, margin: number): Path {
+  return [...rectangle(expandBounds(enclosingBounds([boundsOfPoints(points), hole]), margin)), ...rectangle(hole)];
 }

@@ -1,12 +1,12 @@
 import { layoutArrowLabel, resolveArrow, type ArrowWithoutId, type EndName } from "./arrow";
-import { arrowheadAt } from "./arrowhead";
+import { arrowheadAt, arrowheadLength } from "./arrowhead";
 import type { Shape, ShapeId, ShapeWithoutId, Sketch, TextMeasurer } from "./editor";
 import type { Point } from "./geometry";
 import { labelFontFamily, shapeLayout, shareOfSpace, type ArrowLabelLayout, type ShapeLayout } from "./label";
-import { isClosed, pathData, pathPieces, pieceLength, polyline, type Path } from "./path";
+import { isClosed, pathData, pathPieces, pieceLength, polyline, regionWithHole, type Path } from "./path";
 import { shapeGeometry } from "./shape-geometry";
 import { isArrow } from "./shape-kind";
-import { lineColor, shades, type Style, type StrokePattern, type StrokeWidth } from "./style";
+import { lineColor, shades, strokePixels, type Style, type StrokePattern } from "./style";
 import { svgElement, type SvgElement } from "./svg";
 import { drawOrder } from "./tree";
 import type { HorizontalAlignment } from "./symbols/symbol";
@@ -22,9 +22,6 @@ export type RenderOptions = {
 export const onScreen: RenderOptions = { placeholders: true };
 
 export const forExport: RenderOptions = { placeholders: false };
-
-// The width of a Shape's lines, in Sketch units.
-const strokePixels: Readonly<Record<StrokeWidth, number>> = { thin: 2, thick: 4 };
 
 // A dash and the gap after it, in stroke widths. Lines have round ends, which reach half a stroke width past each end
 // of a dash, so each dash shows a stroke width longer than set here, and each gap a stroke width shorter. A dash of 0
@@ -169,11 +166,6 @@ function renderShape(shape: ShapeToRender, measure: TextMeasurer, options: Rende
   ]);
 }
 
-// How long, in Sketch units, an arrowhead is along the line, for each stroke width. It is half as wide across it.
-function arrowheadLength(width: StrokeWidth): number {
-  return 8 + 2 * strokePixels[width];
-}
-
 // The head at `end` of the line through `points`, solid even on a dashed line, with round corners like the line's. The
 // line runs on under it to the end, and the head's own stroke covers the line's round cap there.
 function renderArrowhead({ heads, points, style }: ArrowToRender, end: EndName): readonly SvgElement[] {
@@ -195,28 +187,36 @@ function renderArrowhead({ heads, points, style }: ArrowToRender, end: EndName):
   ];
 }
 
-// The white the Sketch is drawn on.
-const sketchBackground = "#ffffff";
+// How far, in Sketch units, the region an Arrow's line is clipped to reaches past the line, enough for any stroke and
+// its round ends.
+const clipMargin = 10;
 
-// An Arrow's Label, its lines centred, on a background of the Sketch's own white, so the line doesn't run through the
-// text. A Label that shows nothing has no background either. While the Label is being edited, its text field shows the
-// text, but the background stays, so the line doesn't run through the field either.
-function renderArrowLabel({ label, style }: ArrowToRender, textHidden: boolean): readonly SvgElement[] {
-  if (!label.background) return [];
+// The Arrow's line, with a gap where its Label is, so the line doesn't run through the text. The gap is left out of
+// the line, rather than covered, so whatever is behind the Arrow, such as a Container's fill, shows through it. While
+// the Label is being edited, the gap stays, so the line doesn't run through its text field either.
+function renderArrowLine({ id, style, points, label }: ArrowToRender): readonly SvgElement[] {
+  const lines = renderLines(polyline(points), style);
+  if (!label.gap) return lines;
+  // Only an Arrow with an ID has a Label, as one being drawn has none yet.
+  const clipId = `label-gap-${id ?? ""}`;
   return [
-    svgElement("rect", { "data-label-background": "", ...label.background, fill: sketchBackground }),
-    ...(textHidden ? [] : renderLabel(label, "center", style)),
+    svgElement("clipPath", { id: clipId }, [
+      svgElement("path", { d: pathData(regionWithHole(points, label.gap, clipMargin)), "clip-rule": "evenodd" }),
+    ]),
+    svgElement("g", { "clip-path": `url(#${clipId})` }, lines),
   ];
 }
 
-// An Arrow drawn as its line, in the Arrow's lines' style, with a head at each end that has one, and then its Label.
+// An Arrow drawn as its line, in the Arrow's lines' style, with a head at each end that has one, and then its Label,
+// unless that is being edited.
 function renderArrow(arrow: ArrowToRender, options: RenderOptions): SvgElement {
-  const { id, style, routing, points } = arrow;
+  const { id, style, routing, label } = arrow;
+  const labelHidden = id !== undefined && id === options.hiddenLabel;
   return svgElement("g", { ...(id === undefined ? {} : { "data-shape": id }), "data-routing": routing }, [
-    ...renderLines(polyline(points), style),
+    ...renderArrowLine(arrow),
     ...renderArrowhead(arrow, "start"),
     ...renderArrowhead(arrow, "end"),
-    ...renderArrowLabel(arrow, id !== undefined && id === options.hiddenLabel),
+    ...(labelHidden ? [] : renderLabel(label, "center", style)),
   ]);
 }
 

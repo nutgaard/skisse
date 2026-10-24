@@ -127,14 +127,15 @@ export type ArrowView = {
 };
 
 /**
- * An Arrow's Label: its text, how far along the path it sits as a share of its length, the point there, and where its
- * background is, unless it shows nothing.
+ * An Arrow's Label: its text, how far along the path it was put as a share of its length, the point where it is shown,
+ * and the gap around it in the line, unless it shows nothing. It is shown at its share, unless that would take it too
+ * close to an end.
  */
 export type ArrowLabelView = {
   readonly text: string;
   readonly along: number;
   readonly at: Point;
-  readonly background?: Bounds;
+  readonly gap?: Bounds;
 };
 
 function endView(end: ArrowEnd, point: Point): ArrowEndView {
@@ -165,8 +166,8 @@ export function arrows(state: EditorState): readonly ArrowView[] {
               path: resolvedArrow.path,
               label: {
                 ...arrow.label,
-                at: labelPoint(resolvedArrow, arrow.label),
-                background: layoutArrowLabel(arrow, resolvedArrow, state.deps.measureText).background,
+                at: labelPoint(arrow, resolvedArrow, state.deps.measureText),
+                gap: layoutArrowLabel(arrow, resolvedArrow, state.deps.measureText).gap,
               },
             },
           ]

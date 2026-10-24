@@ -29,6 +29,12 @@ function boundArrow(): EditorState {
   return drawArrow(twoRectangles(), { x: 195, y: 130 }, { x: 305, y: 140 });
 }
 
+// A floating Arrow, shape-1, from (150,135) to (350,135), long enough for a short Label halfway along, at (250,135), to
+// keep clear of its ends. It is selected.
+function longArrow(): EditorState {
+  return drawArrow(newEditor(), { x: 150, y: 135 }, { x: 350, y: 135 });
+}
+
 // shape-1 at (100,100)–(200,180) and shape-2 at (300,200)–(400,280), with an elbow Arrow, shape-3, from shape-1's
 // right Port at (200,140) right to (250,140), down to (250,240) and right to shape-2's left Port at (300,240): 200
 // long in all. It is selected.
@@ -130,19 +136,19 @@ describe("editing an Arrow's Label", () => {
   });
 });
 
-// The elements drawn for shape-3, in the order drawn.
-function arrowElements(state: EditorState): readonly SvgElement[] {
+// The elements drawn for the Arrow `id`, in the order drawn.
+function arrowElements(state: EditorState, id = "shape-3"): readonly SvgElement[] {
   const descendants = (element: SvgElement): readonly SvgElement[] =>
     element.children.flatMap((child) => (typeof child === "string" ? [] : [child, ...descendants(child)]));
-  const group = descendants(rendering(state)).find(({ attributes }) => attributes["data-shape"] === "shape-3");
+  const group = descendants(rendering(state)).find(({ attributes }) => attributes["data-shape"] === id);
   return group ? descendants(group) : [];
 }
 
 describe("drawing an Arrow's Label", () => {
   test("draws each line centred on its place, in the Arrow's colour and font size", () => {
-    const state = withLabel(apply(boundArrow(), { type: "changeStyle", style: { strokeColor: "blue" } }), "HTTPS");
+    const state = withLabel(apply(longArrow(), { type: "changeStyle", style: { strokeColor: "blue" } }), "HTTPS");
 
-    const texts = arrowElements(state).filter(({ tag }) => tag === "text");
+    const texts = arrowElements(state, "shape-1").filter(({ tag }) => tag === "text");
 
     expect(texts).toHaveLength(1);
     expect(texts[0]).toMatchObject({
@@ -151,39 +157,40 @@ describe("drawing an Arrow's Label", () => {
     });
   });
 
-  test("draws a white background behind the text, above the line and its heads, so they don't run through it", () => {
-    const elements = arrowElements(withLabel(boundArrow(), "HTTPS"));
-    const background = elements.findIndex(({ attributes }) => attributes["data-label-background"] !== undefined);
-    const box = elements[background]?.attributes;
+  test("leaves the line out around the text, so it doesn't run through it, but covers nothing behind it", () => {
+    const elements = arrowElements(withLabel(longArrow(), "HTTPS"), "shape-1");
+    const clip = elements.find(({ tag }) => tag === "clipPath");
+    const clipped = elements.find(({ attributes }) => attributes["clip-path"] !== undefined);
+    const [hole] = clip?.children ?? [];
 
-    expect(box).toMatchObject({ fill: "#ffffff" });
-    // Around the line of text, from (225,122.5) to (275,147.5).
-    expect(Number(box?.x)).toBeLessThanOrEqual(225);
-    expect(Number(box?.y)).toBeLessThanOrEqual(122.5);
-    expect(Number(box?.x) + Number(box?.width)).toBeGreaterThanOrEqual(275);
-    expect(Number(box?.y) + Number(box?.height)).toBeGreaterThanOrEqual(147.5);
-    expect(elements.slice(0, background).map(({ tag }) => tag)).toEqual(["path", "path"]);
-    expect(elements.slice(background + 1).map(({ tag }) => tag)).toEqual(["text"]);
+    expect(clipped?.attributes["clip-path"]).toBe(`url(#${clip?.attributes.id})`);
+    expect(clipped?.children.map((child) => typeof child !== "string" && child.tag)).toEqual(["path"]);
+    // The gap around the line of text, from (221,118.5) to (279,151.5), cut out of a region around the whole line.
+    expect(typeof hole !== "string" && hole?.attributes).toMatchObject({ "clip-rule": "evenodd" });
+    expect(typeof hole !== "string" && String(hole?.attributes.d)).toContain("M 221 118.5 L 279 118.5 L 279 151.5 L 221 151.5 Z");
+    expect(elements.some(({ tag }) => tag === "rect")).toBe(false);
   });
 
   test("draws nothing for an empty Label", () => {
     expect(arrowElements(boundArrow()).map(({ tag }) => tag)).toEqual(["path", "path"]);
   });
 
-  test("leaves out the text of the Label being edited, as its text field shows it instead, but keeps the background", () => {
+  test("leaves out the text of the Label being edited, as its text field shows it instead, but keeps the gap", () => {
     const editing = typeLabel(press(withLabel(boundArrow(), "HTTPS"), "Enter"), "HTTPS and more");
+    const tags = arrowElements(editing).map(({ tag }) => tag);
 
-    expect(arrowElements(editing).map(({ tag }) => tag)).toEqual(["path", "path", "rect"]);
+    expect(tags).not.toContain("text");
+    expect(tags).toContain("clipPath");
   });
 
-  test("tells where the Label's background is, so the selection can leave it out", () => {
-    expect(onlyArrow(withLabel(boundArrow(), "HTTPS")).label.background).toEqual({
+  test("tells where the gap in the line around the Label is, so the selection can leave it out", () => {
+    expect(onlyArrow(withLabel(longArrow(), "HTTPS")).label.gap).toEqual({
       x: 221,
       y: 118.5,
       width: 58,
       height: 33,
     });
-    expect(onlyArrow(boundArrow()).label.background).toBeUndefined();
+    expect(onlyArrow(boundArrow()).label.gap).toBeUndefined();
   });
 
   test("the export draws the Label as on screen", () => {
@@ -206,27 +213,50 @@ const onLabelBesideLine = { x: 270, y: 180 };
 
 describe("dragging an Arrow's Label", () => {
   test("along the path stores how far along it is, as a share of the path's length", () => {
-    const state = drag(labelledElbow(), onLabel, { x: 265, y: 215 });
+    const state = drag(labelledElbow(), onLabel, { x: 265, y: 210 });
 
-    expect(onlyArrow(state).label).toMatchObject({ text: "HTTPS", along: 0.625, at: { x: 250, y: 215 } });
+    expect(onlyArrow(state).label).toMatchObject({ text: "HTTPS", along: 0.6, at: { x: 250, y: 210 } });
   });
 
   test("moves it as far along as the pointer went, wherever on the Label it was grabbed", () => {
-    const state = drag(labelledElbow(), onLabelBesideLine, { x: 270, y: 200 });
+    const state = drag(labelledElbow(), onLabelBesideLine, { x: 270, y: 190 });
 
-    expect(onlyArrow(state).label).toMatchObject({ along: 0.6, at: { x: 250, y: 210 } });
+    expect(onlyArrow(state).label).toMatchObject({ along: 0.55, at: { x: 250, y: 200 } });
   });
 
-  test("past the end stops it at the end", () => {
+  // The gap around the Label is 58 wide and 33 high. It stays clear of each end by as far as the head there reaches
+  // back along the line, 12 for an arrow, and 12 more.
+
+  test("past the end stops it short of the end, clear of the arrow there and the Shape it points at", () => {
     const state = drag(labelledElbow(), onLabel, { x: 415, y: 400 });
 
-    expect(onlyArrow(state).label).toMatchObject({ along: 1, at: { x: 300, y: 240 } });
+    // The gap's corner at (279,227.5) is 24 from the end at (300,240).
+    expect(onlyArrow(state).label).toMatchObject({ along: 0.605, at: { x: 250, y: 211 } });
   });
 
-  test("past the start stops it at the start", () => {
+  test("past the start stops it short of the start, which has no head", () => {
     const state = drag(labelledElbow(), onLabel, { x: 115, y: 100 });
 
-    expect(onlyArrow(state).label).toMatchObject({ along: 0, at: { x: 200, y: 140 } });
+    // The gap's left side at 212 is 12 from the start at (200,140).
+    expect(onlyArrow(state).label).toMatchObject({ along: 0.205, at: { x: 241, y: 140 } });
+  });
+
+  test("past the end stops it further short of a longer head", () => {
+    const diamond = apply(labelledElbow(), { type: "changeArrowhead", end: "end", arrowhead: "diamond" });
+
+    const state = drag(diamond, onLabel, { x: 415, y: 400 });
+
+    // The gap's corner at (279,210.5) is 36 from the end, as a diamond reaches 24 back along the line.
+    expect(onlyArrow(state).label).toMatchObject({ along: 0.52, at: { x: 250, y: 194 } });
+  });
+
+  test("on an Arrow too short to keep the Label clear of both ends keeps it in the middle", () => {
+    // A floating Arrow from (100,100) to (160,100).
+    const short = withLabel(drawArrow(newEditor(), { x: 100, y: 100 }, { x: 160, y: 100 }), "HTTPS");
+
+    const state = drag(short, { x: 130, y: 110 }, { x: 160, y: 110 });
+
+    expect(onlyArrow(state).label).toMatchObject({ along: 0.5, at: { x: 130, y: 100 } });
   });
 
   test("away from the line keeps it on the line, at the point nearest the pointer", () => {
@@ -240,14 +270,14 @@ describe("dragging an Arrow's Label", () => {
       labelledElbow(),
       selectTool("select"),
       pointerDown(onLabel),
-      pointerMove({ x: 265, y: 215 }),
+      pointerMove({ x: 265, y: 210 }),
     );
 
     expect(currentInteraction(state)).toEqual({ kind: "draggingArrowLabel", arrowId: "shape-3" });
   });
 
   test("is one undo step", () => {
-    const state = apply(drag(labelledElbow(), onLabel, { x: 265, y: 215 }), undoInput);
+    const state = apply(drag(labelledElbow(), onLabel, { x: 265, y: 210 }), undoInput);
 
     expect(onlyArrow(state).label).toMatchObject({ text: "HTTPS", along: 0.5 });
   });
@@ -257,7 +287,7 @@ describe("dragging an Arrow's Label", () => {
       labelledElbow(),
       selectTool("select"),
       pointerDown(onLabel),
-      pointerMove({ x: 265, y: 215 }),
+      pointerMove({ x: 265, y: 210 }),
     );
 
     const state = apply(dragging, keyDown("Escape"));
@@ -304,27 +334,28 @@ describe("dragging an Arrow's Label", () => {
   });
 
   test("the export is cropped to the Label too, where it reaches past the line", () => {
-    // A floating Arrow from (100,100) to (300,100), with its Label 270 wide centred at (200,100).
+    // A floating Arrow from (100,100) to (300,100), with its Label 270 wide centred at (200,100), as it is too wide to
+    // keep clear of the ends anywhere.
     const state = withLabel(drawArrow(newEditor(), { x: 100, y: 100 }, { x: 300, y: 100 }), "a".repeat(27));
 
     const svg = exportSvg(sketch(state), fixedWidthTextMeasurer);
 
-    // The Label's background, from (61,83.5) to (339,116.5), with a margin of 20 around it.
+    // The gap around the Label, from (61,83.5) to (339,116.5), with a margin of 20 around it.
     expect(svg).toContain('viewBox="41 63.5 318 73"');
   });
 });
 
 describe("an Arrow's Label when the Arrow changes", () => {
-  // labelledElbow() with its Label dragged 0.625 of the way along.
+  // labelledElbow() with its Label dragged 0.6 of the way along.
   function draggedAlong(): EditorState {
-    return drag(labelledElbow(), onLabel, { x: 265, y: 215 });
+    return drag(labelledElbow(), onLabel, { x: 265, y: 210 });
   }
 
   test("stays at the same share of the path when a bound Shape moves", () => {
     // shape-2 moves down to (300,300)–(400,380), so the path runs down to (250,340), and is 300 long.
     const state = drag(draggedAlong(), { x: 380, y: 260 }, { x: 380, y: 360 });
 
-    expect(onlyArrow(state).label).toMatchObject({ along: 0.625, at: { x: 250, y: 277.5 } });
+    expect(onlyArrow(state).label).toMatchObject({ along: 0.6, at: { x: 250, y: 270 } });
   });
 
   test("stays at the same share of the path when an Arrow with both ends floating is moved", () => {
@@ -337,13 +368,26 @@ describe("an Arrow's Label when the Arrow changes", () => {
     expect(onlyArrow(state).label).toMatchObject({ along: 0.25, at: { x: 150, y: 160 } });
   });
 
-  test("a floating Arrow dragged with snapping on snaps by its line, not by its Label", () => {
-    // A floating Arrow from (103,104) to (503,104), with a Label 100 wide dragged a tenth of the way along, to
-    // (143,104), so its background reaches left past the Arrow's start, to 89.
-    const drawn = withLabel(drawArrow(newEditor(), { x: 103, y: 104 }, { x: 503, y: 104 }), "a".repeat(10));
-    const labelled = drag(drawn, { x: 303, y: 104 }, { x: 143, y: 104 });
+  test("is shown clear of an end that comes too close, and back at its share once there is room again", () => {
+    // A floating Arrow from (100,100) to (300,100), with its Label dragged to 0.7 of the way along, to (240,100), its
+    // gap 31 short of the end.
+    const drawn = withLabel(drawArrow(newEditor(), { x: 100, y: 100 }, { x: 300, y: 100 }), "HTTPS");
+    const labelled = drag(drawn, { x: 200, y: 110 }, { x: 240, y: 110 });
 
-    const state = drag(labelled, { x: 400, y: 104 }, { x: 400, y: 154 }, { alt: true });
+    const shortened = drag(labelled, { x: 300, y: 100 }, { x: 270, y: 100 });
+    const lengthened = drag(shortened, { x: 270, y: 100 }, { x: 300, y: 100 });
+
+    // At 0.7 of the way along, at (219,100), its gap would be 22 short of the end, where 24 is needed.
+    expect(onlyArrow(shortened).label).toMatchObject({ along: 0.7, at: { x: 217, y: 100 } });
+    expect(onlyArrow(lengthened).label).toMatchObject({ along: 0.7, at: { x: 240, y: 100 } });
+  });
+
+  test("a floating Arrow dragged with snapping on snaps by its line, not by its Label", () => {
+    // A floating Arrow from (103,104) down to (103,404), with a Label 100 wide halfway along, whose gap reaches left of
+    // the line to 49.
+    const labelled = withLabel(drawArrow(newEditor(), { x: 103, y: 104 }, { x: 103, y: 404 }), "a".repeat(10));
+
+    const state = drag(labelled, { x: 103, y: 150 }, { x: 103, y: 200 }, { alt: true });
 
     expect(onlyArrow(state).start.point).toEqual({ x: 100, y: 150 });
   });
@@ -351,6 +395,6 @@ describe("an Arrow's Label when the Arrow changes", () => {
   test("stays at the same share of the path when its Routing changes", () => {
     const state = apply(draggedAlong(), { type: "changeRouting", routing: "straight" });
 
-    expect(onlyArrow(state).label).toMatchObject({ along: 0.625, at: { x: 262.5, y: 202.5 } });
+    expect(onlyArrow(state).label).toMatchObject({ along: 0.6, at: { x: 260, y: 200 } });
   });
 });
