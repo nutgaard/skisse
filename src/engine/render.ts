@@ -115,12 +115,13 @@ export function shapesToRender(sketch: Sketch, shapes: readonly Shape[], measure
 // slightly wider or narrower than measured.
 const textAnchors: Readonly<Record<HorizontalAlignment, string>> = { left: "start", center: "middle", right: "end" };
 
-// One text element per line, leaving out blank lines, in the colour of the Shape's lines. Spaces are drawn as typed,
-// as they were measured, except those hanging at the end of a line.
+// One text element per line, leaving out blank lines, in the colour of the Shape's lines, with `outline` added, if any.
+// Spaces are drawn as typed, as they were measured, except those hanging at the end of a line.
 function renderLabel(
   { lines, fontPixels }: Pick<ShapeLayout, "lines" | "fontPixels">,
   horizontal: HorizontalAlignment,
   style: Style,
+  outline: SvgElement["attributes"] = {},
 ): readonly SvgElement[] {
   const share = shareOfSpace[horizontal];
   return lines.filter(({ text }) => text.trim() !== "").map(({ text, bounds }) =>
@@ -135,6 +136,7 @@ function renderLabel(
         "text-anchor": textAnchors[horizontal],
         "dominant-baseline": "central",
         "xml:space": "preserve",
+        ...outline,
       },
       [text.trimEnd()],
     ),
@@ -187,6 +189,15 @@ function renderArrowhead({ heads, points, style }: ArrowToRender, end: EndName):
   ];
 }
 
+// A thin white outline drawn under an Arrow's Label's text, so the text stays readable where it crosses a Shape's lines,
+// such as when the Arrow runs over a Container's edge.
+const labelOutline: SvgElement["attributes"] = {
+  stroke: "#ffffff",
+  "stroke-width": 2,
+  "stroke-linejoin": "round",
+  "paint-order": "stroke",
+};
+
 // How far, in Sketch units, the region an Arrow's line is clipped to reaches past the line, enough for any stroke and
 // its round ends.
 const clipMargin = 10;
@@ -216,7 +227,7 @@ function renderArrow(arrow: ArrowToRender, options: RenderOptions): SvgElement {
     ...renderArrowLine(arrow),
     ...renderArrowhead(arrow, "start"),
     ...renderArrowhead(arrow, "end"),
-    ...(labelHidden ? [] : renderLabel(label, "center", style)),
+    ...(labelHidden ? [] : renderLabel(label, "center", style, labelOutline)),
   ]);
 }
 

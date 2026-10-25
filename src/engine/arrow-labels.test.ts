@@ -157,6 +157,19 @@ describe("drawing an Arrow's Label", () => {
     });
   });
 
+  test("outlines the text thinly in white, under its fill, so it stays readable where it crosses a Shape's lines", () => {
+    const state = withLabel(longArrow(), "HTTPS");
+
+    const [text] = arrowElements(state, "shape-1").filter(({ tag }) => tag === "text");
+
+    expect(text?.attributes).toMatchObject({
+      stroke: "#ffffff",
+      "stroke-width": 2,
+      "stroke-linejoin": "round",
+      "paint-order": "stroke",
+    });
+  });
+
   test("leaves the line out around the text, so it doesn't run through it, but covers nothing behind it", () => {
     const elements = arrowElements(withLabel(longArrow(), "HTTPS"), "shape-1");
     const clip = elements.find(({ tag }) => tag === "clipPath");
