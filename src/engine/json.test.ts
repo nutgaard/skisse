@@ -66,8 +66,8 @@ describe("format versions", () => {
     ["without a format version", { format: "skisse/sketch", shapes: {} }],
     ["with a format version that isn't a whole number", { format: "skisse/sketch", version: 1.5, shapes: {} }],
     ["with a format version before the first", { format: "skisse/sketch", version: 0, shapes: {} }],
-  ])("a file %s is rejected", (_, document) => {
-    expect(importJson(JSON.stringify(document), migrations)).toEqual({
+  ])("a file %s is rejected", (_, file) => {
+    expect(importJson(JSON.stringify(file), migrations)).toEqual({
       error: "The file has no valid format version.",
     });
   });
@@ -91,9 +91,9 @@ type ShapeJson = Readonly<Record<string, unknown>>;
 
 // The diagram as a JSON file, but with `change` made to the Shape `id` in it.
 function changedShape(id: string, change: (shape: ShapeJson) => unknown): string {
-  const document = JSON.parse(exportJson(sketch(diagram()))) as { shapes: Record<string, ShapeJson> };
-  const changed = change(document.shapes[id] ?? {});
-  return JSON.stringify({ ...document, shapes: { ...document.shapes, [id]: changed } });
+  const file = JSON.parse(exportJson(sketch(diagram()))) as { shapes: Record<string, ShapeJson> };
+  const changed = change(file.shapes[id] ?? {});
+  return JSON.stringify({ ...file, shapes: { ...file.shapes, [id]: changed } });
 }
 
 describe("importing a Sketch with Shapes that are not as Skisse writes them", () => {
@@ -113,10 +113,16 @@ describe("importing a Sketch with Shapes that are not as Skisse writes them", ()
       "bounds.x should be a number",
     ],
     [
+      "a Shape too far away",
+      "shape-2",
+      (shape) => ({ ...shape, bounds: { x: 1e300, y: 100, width: 100, height: 80 } }),
+      "bounds.x should be a number from -1000000000 to 1000000000",
+    ],
+    [
       "a Shape with no width",
       "shape-2",
       (shape) => ({ ...shape, bounds: { x: 100, y: 100, width: 0, height: 80 } }),
-      "bounds.width should be a number above 0",
+      "bounds.width should be above 0",
     ],
     [
       "a Shape with a Label of the wrong type",
@@ -155,16 +161,16 @@ describe("importing a Sketch with Shapes that are not as Skisse writes them", ()
       error: `Shape "${id}" in the file is invalid: ${problem}.`,
     });
   });
-});
 
-test("a Shape with a number too large to be written back is rejected", () => {
-  const exported = exportJson(sketch(diagram()));
-  // shape-2 is the only Shape 100 wide.
-  const text = exported.replace('"width": 100,', '"width": 1e999,');
+  test("a Shape with a number so large it reads as infinite is rejected", () => {
+    const exported = exportJson(sketch(diagram()));
+    // shape-2 is the only Shape 100 wide.
+    const text = exported.replace('"width": 100,', '"width": 1e999,');
 
-  expect(text).not.toBe(exported);
-  expect(importJson(text)).toEqual({
-    error: 'Shape "shape-2" in the file is invalid: bounds.width should be a number above 0.',
+    expect(text).not.toBe(exported);
+    expect(importJson(text)).toEqual({
+      error: 'Shape "shape-2" in the file is invalid: bounds.width should be a number from -1000000000 to 1000000000.',
+    });
   });
 });
 

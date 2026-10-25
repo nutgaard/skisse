@@ -50,7 +50,7 @@ function RenameField({
   );
 }
 
-// The name a Sketch imported from the file `fileName` gets: the file's name without its extension, unless that is blank.
+// The name of a Sketch imported from the file `fileName`: the file's name without its extension, unless that's blank.
 function importedName(fileName: string): string | undefined {
   const name = fileName.replace(/\.json$/i, "").trim();
   return name === "" ? undefined : name;
@@ -80,7 +80,8 @@ export function SketchList({ entries, openId, onCreate, onImport, onOpen, onRena
     input.value = "";
     if (!file) return;
     setImportError(undefined);
-    const imported = importJson(await file.text());
+    const text = await file.text().catch(() => undefined);
+    const imported = text === undefined ? { error: "The file couldn't be read." } : importJson(text);
     if ("error" in imported) setImportError(imported.error);
     else onImport(imported.sketch, importedName(file.name));
   };

@@ -77,18 +77,20 @@ const string = checkThat(
   () => "should be text",
 );
 
-// JSON has no infinite numbers, but too large a one reads as one, which can't be written back.
+// The furthest from 0 a number in a Sketch can be, far beyond any real one. A larger one, or one so large it reads as
+// infinite, could overflow when the editor adds numbers up, and an infinite one can't be written back to JSON.
+const largestNumber = 1e9;
+
 function isNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
+  return typeof value === "number" && Math.abs(value) <= largestNumber;
 }
 
-const number = checkThat(isNumber, () => "should be a number");
-
-// The width or height of a Shape.
-const size = checkThat(
-  (value) => isNumber(value) && value > 0,
-  () => "should be a number above 0",
+const number = checkThat(isNumber, (value) =>
+  typeof value === "number" ? `should be a number from ${-largestNumber} to ${largestNumber}` : "should be a number",
 );
+
+// Such as the width or height of a Shape.
+const positive: Check = (value) => number(value) ?? ((value as number) > 0 ? undefined : wrong("should be above 0"));
 
 function between(min: number, max: number): Check {
   return checkThat(
@@ -141,7 +143,7 @@ const shapeFields = { id: string, parent: optional(string), z: number, style };
 const symbolShape = object({
   symbol,
   ...shapeFields,
-  bounds: object({ x: number, y: number, width: size, height: size }),
+  bounds: object({ x: number, y: number, width: positive, height: positive }),
   label: object({
     text: string,
     alignment: object({ horizontal: oneOf(horizontalAlignments), vertical: oneOf(verticalAlignments) }),
