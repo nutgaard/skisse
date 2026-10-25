@@ -40,6 +40,13 @@ describe("JSON export and import", () => {
     expect(importJson(text)).toEqual({ sketch: sketch(diagram()), viewport: undefined });
   });
 
+  test("a zoom and pan imports without fields a viewport doesn't have", () => {
+    const withExtra = { x: 1, y: 2, zoom: 3, by: "me" };
+    const text = JSON.stringify({ format: "skisse/sketch", version: 1, shapes: {}, viewport: withExtra });
+
+    expect(importJson(text)).toEqual({ sketch: { shapes: {} }, viewport: { x: 1, y: 2, zoom: 3 } });
+  });
+
   test.each([
     ["a zoom and pan that isn't an object", 42, "it should be an object"],
     ["a pan of the wrong type", { x: "left", y: 0, zoom: 1 }, "x should be a number"],

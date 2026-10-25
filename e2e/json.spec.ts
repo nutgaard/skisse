@@ -17,6 +17,10 @@ async function importFile(page: Page, name: string, text: string | Buffer) {
   await (await chooser).setFiles({ name, mimeType: "application/json", buffer: Buffer.from(text) });
 }
 
+function zoomButton(page: Page) {
+  return page.getByRole("button", { name: "Reset zoom to 100%" });
+}
+
 function sketchNames(page: Page) {
   return page.getByRole("region", { name: "Sketch list" }).locator(".sketch-open");
 }
@@ -53,17 +57,17 @@ test("an exported Sketch imports at the zoom and pan it was exported at", async 
   const download = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export JSON" }).click();
   const exported = await download;
-  await page.getByRole("button", { name: "Reset zoom to 100%" }).click();
+  await zoomButton(page).click();
 
   await page.getByRole("button", { name: "Sketches" }).click();
   await importFile(page, exported.suggestedFilename(), await readFile(await exported.path()));
 
   await expect(sketchNames(page)).toHaveText(["Sketch 1", "Sketch 1 (2)"]);
-  await expect(page.getByRole("button", { name: "Reset zoom to 100%" })).toHaveText("71%");
+  await expect(zoomButton(page)).toHaveText("71%");
   expect(await page.locator('[data-symbol="rectangle"] path').first().boundingBox()).toEqual(exportedAt);
 
   await page.reload();
-  await expect(page.getByRole("button", { name: "Reset zoom to 100%" })).toHaveText("71%");
+  await expect(zoomButton(page)).toHaveText("71%");
 });
 
 test("a file that can't be imported shows why, and imports nothing", async ({ page }) => {

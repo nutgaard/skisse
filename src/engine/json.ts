@@ -267,7 +267,9 @@ function contentOf(file: JsonFile): JsonImport {
   if ("error" in imported) return imported;
   const problem = zoomAndPan(file.viewport);
   if (problem) return { error: `The zoom and pan in the file are invalid: ${problemText(problem)}.` };
-  return { ...imported, viewport: file.viewport as Viewport | undefined };
+  // Only the fields a viewport has, so nothing else in the file is kept with it.
+  const viewport = file.viewport as Viewport | undefined;
+  return { ...imported, viewport: viewport && { x: viewport.x, y: viewport.y, zoom: viewport.zoom } };
 }
 
 function parse(text: string): unknown {
@@ -279,8 +281,9 @@ function parse(text: string): unknown {
 }
 
 /**
- * The Sketch, and the zoom and pan it was exported at, in the text of a JSON file, migrated from the format version it is in to the current one, or why it
- * can't be imported. Tests can pass `chain` to take the place of the real migrations.
+ * The Sketch, and the zoom and pan it was exported at, in the text of a JSON file, migrated from the format version it
+ * is in to the current one, or why it can't be imported. Tests can pass `chain` to take the place of the real
+ * migrations.
  */
 export function importJson(text: string, chain: readonly Migration[] = migrations): JsonImport {
   const file = parse(text);
