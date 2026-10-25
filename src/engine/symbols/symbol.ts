@@ -2,11 +2,15 @@ import type { Bounds, Point } from "../geometry";
 import type { Path } from "../path";
 import type { Size } from "../viewport";
 
+export const horizontalAlignments = ["left", "center", "right"] as const;
+
 /** Where a Label's lines sit across its Label area. */
-export type HorizontalAlignment = "left" | "center" | "right";
+export type HorizontalAlignment = (typeof horizontalAlignments)[number];
+
+export const verticalAlignments = ["top", "middle", "bottom"] as const;
 
 /** Where a Label's lines sit, together, from top to bottom of its Label area. */
-export type VerticalAlignment = "top" | "middle" | "bottom";
+export type VerticalAlignment = (typeof verticalAlignments)[number];
 
 /** Where a Label sits in its Label area, in each direction. */
 export type LabelAlignment = { readonly horizontal: HorizontalAlignment; readonly vertical: VerticalAlignment };

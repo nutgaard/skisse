@@ -8,6 +8,7 @@ import {
   clipboardText,
   createEditor,
   currentInteraction,
+  exportJson,
   exportSvg,
   gridSize,
   labelLayout,
@@ -41,7 +42,7 @@ import {
   type WheelInput,
 } from "../engine";
 import { useAutosave } from "./autosave";
-import { downloadPng, downloadSvg } from "./download";
+import { downloadJson, downloadPng, downloadSvg } from "./download";
 import { keyInput, modifiersOf } from "./inputs";
 import { LabelEditor } from "./LabelEditor";
 import { StylePanel } from "./StylePanel";
@@ -466,6 +467,9 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
           onClick={() => exportedSvg && void downloadPng(exportedSvg, name)}
         >
           Export PNG
+        </button>
+        <button type="button" onClick={() => downloadJson(exportJson(finishedSketch), name)}>
+          Export JSON
         </button>
       </div>
     </>

@@ -11,6 +11,10 @@ function download(blob: Blob, fileName: string) {
   setTimeout(() => URL.revokeObjectURL(url));
 }
 
+export function downloadJson(json: string, name: string) {
+  download(new Blob([json], { type: "application/json" }), `${name}.json`);
+}
+
 export function downloadSvg(svg: string, name: string) {
   download(new Blob([svg], { type: "image/svg+xml" }), `${name}.svg`);
 }

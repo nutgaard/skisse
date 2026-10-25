@@ -1,10 +1,13 @@
-import { useRef, useState, type KeyboardEvent } from "react";
+import { useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { importJson, type Sketch } from "../engine";
 import type { SketchEntry, SketchId } from "../store/sketch-store";
 
 type SketchListProps = {
   readonly entries: readonly SketchEntry[];
   readonly openId: SketchId;
   readonly onCreate: () => void;
+  /** Gets a Sketch imported from a file, and the file's name without its extension, unless that is blank. */
+  readonly onImport: (sketch: Sketch, name: string | undefined) => void;
   readonly onOpen: (id: SketchId) => void;
   readonly onRename: (id: SketchId, name: string) => void;
   readonly onDelete: (id: SketchId) => void;
@@ -47,9 +50,18 @@ function RenameField({
   );
 }
 
-export function SketchList({ entries, openId, onCreate, onOpen, onRename, onDelete }: SketchListProps) {
+// The name a Sketch imported from the file `fileName` gets: the file's name without its extension, unless that is blank.
+function importedName(fileName: string): string | undefined {
+  const name = fileName.replace(/\.json$/i, "").trim();
+  return name === "" ? undefined : name;
+}
+
+export function SketchList({ entries, openId, onCreate, onImport, onOpen, onRename, onDelete }: SketchListProps) {
   const [expanded, setExpanded] = useState(false);
   const [renaming, setRenaming] = useState<SketchId | undefined>(undefined);
+  // Why the last file chosen for import wasn't imported, until another one is chosen or the list is closed.
+  const [importError, setImportError] = useState<string | undefined>(undefined);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const openName = entries.find(({ id }) => id === openId)?.name;
 
   const finishRenaming = (id: SketchId) => (name: string | undefined) => {
@@ -61,19 +73,53 @@ export function SketchList({ entries, openId, onCreate, onOpen, onRename, onDele
     if (window.confirm(`Delete "${name}"? This can't be undone.`)) onDelete(id);
   };
 
+  const importFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const input = event.currentTarget;
+    const file = input.files?.[0];
+    // Cleared, so choosing the same file again imports it again.
+    input.value = "";
+    if (!file) return;
+    setImportError(undefined);
+    const imported = importJson(await file.text());
+    if ("error" in imported) setImportError(imported.error);
+    else onImport(imported.sketch, importedName(file.name));
+  };
+
+  const toggle = () => {
+    setExpanded(!expanded);
+    setImportError(undefined);
+  };
+
   return (
     <div className="sketches">
       <div className="sketches-bar">
-        <button type="button" aria-expanded={expanded} onClick={() => setExpanded(!expanded)}>
+        <button type="button" aria-expanded={expanded} onClick={toggle}>
           Sketches
         </button>
         <span className="sketch-name">{openName}</span>
       </div>
       {expanded && (
         <div className="sketch-list" role="region" aria-label="Sketch list">
-          <button type="button" onClick={onCreate}>
-            New sketch
-          </button>
+          <div className="sketch-list-actions">
+            <button type="button" onClick={onCreate}>
+              New sketch
+            </button>
+            <button type="button" onClick={() => fileInputRef.current?.click()}>
+              Import sketch
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={(event) => void importFile(event)}
+            />
+          </div>
+          {importError && (
+            <p role="alert" className="sketch-import-error">
+              {importError}
+            </p>
+          )}
           <ul>
             {entries.map((entry) => (
               <li key={entry.id} aria-current={entry.id === openId}>
