@@ -56,6 +56,14 @@ export function containsBounds(outer: Bounds, inner: Bounds): boolean {
   return contains(outer, inner) && contains(outer, { x: inner.x + inner.width, y: inner.y + inner.height });
 }
 
+export function samePoint(a: Point, b: Point): boolean {
+  return a.x === b.x && a.y === b.y;
+}
+
+export function sameBounds(a: Bounds, b: Bounds): boolean {
+  return a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height;
+}
+
 export function translate(bounds: Bounds, offset: Point): Bounds {
   return {
     ...bounds,

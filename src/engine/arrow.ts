@@ -288,6 +288,12 @@ export function arrowsBoundTo(sketch: Sketch, ids: readonly ShapeId[]): readonly
     .map(({ id }) => id);
 }
 
+/** The end floating where it is now, or as it is when it floats already or the Shape it is bound to is missing. */
+export function floatedInPlace(sketch: Sketch, end: ArrowEnd, measure: TextMeasurer): ArrowEnd {
+  const at = end.kind === "floating" ? undefined : endPoint(sketch, end, measure);
+  return at ? { kind: "floating", at } : end;
+}
+
 /**
  * The Sketch with every Arrow end bound to one of `removed` floating where it is now, so the Arrows stay when those
  * Shapes go.
@@ -295,8 +301,7 @@ export function arrowsBoundTo(sketch: Sketch, ids: readonly ShapeId[]): readonly
 export function unbindFrom(sketch: Sketch, removed: readonly ShapeId[], measure: TextMeasurer): Sketch {
   const unbind = (end: ArrowEnd): ArrowEnd => {
     const shape = boundTo(end);
-    const at = shape !== undefined && removed.includes(shape) ? endPoint(sketch, end, measure) : undefined;
-    return at ? { kind: "floating", at } : end;
+    return shape !== undefined && removed.includes(shape) ? floatedInPlace(sketch, end, measure) : end;
   };
   return {
     ...sketch,

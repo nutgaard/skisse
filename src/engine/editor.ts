@@ -19,6 +19,7 @@ import {
   type ResolvedArrow,
   type Routing,
 } from "./arrow";
+import { clipboardFromText, copyShapes, type Clipboard } from "./clipboard";
 import { offsetDraggedBy, type Axis } from "./elbow";
 import {
   boundsBetween,
@@ -28,6 +29,8 @@ import {
   containsBounds,
   distance,
   enclosingBounds,
+  sameBounds,
+  samePoint,
   sideOf,
   spanAtLeast,
   translate,
@@ -109,7 +112,9 @@ export type Input =
   // Either direction alone keeps each Shape's alignment in the other.
   | { readonly type: "changeLabelAlignment"; readonly alignment: Partial<LabelAlignment> }
   | { readonly type: "changeRouting"; readonly routing: Routing }
-  | { readonly type: "changeArrowhead"; readonly end: EndName; readonly arrowhead: Arrowhead };
+  | { readonly type: "changeArrowhead"; readonly end: EndName; readonly arrowhead: Arrowhead }
+  // The text on the system clipboard, pasted. Text that isn't Shapes copied from Skisse is ignored.
+  | { readonly type: "paste"; readonly text: string };
 
 export type TextMeasurer = (text: string, fontSize: number) => number;
 
@@ -289,29 +294,28 @@ export const emptySketch: Sketch = { shapes: {} };
 // default for the rest. Those saved before Containers have every Shape at the top level, stacked in the order saved,
 // and a JSON Sketch has no parent at the top level at all. Arrows came after all of these. Those saved before Arrows
 // had heads and Labels get the default heads and an empty Label halfway along.
-function completeShapes(sketch: Sketch): Sketch {
-  const complete = (
-    shape: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds">,
-    index: number,
-  ): SymbolShape => ({
-    ...newShape(shape.symbol, shape.bounds, defaultStyle),
+// Shapes pasted from the clipboard are completed the same way, as only what it takes to place them is checked there, so
+// an Arrow can come without a style too. `index` is the Shape's place in the order saved or copied.
+function completeShape(shape: Shape, index: number): Shape {
+  if (isArrow(shape)) {
+    const arrow: Omit<Arrow, "heads" | "label" | "style"> & Partial<Pick<Arrow, "heads" | "label" | "style">> = shape;
+    return { heads: defaultHeads, label: newArrowLabel, ...arrow, style: { ...defaultStyle, ...arrow.style } };
+  }
+  const partial: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds"> = shape;
+  return {
+    ...newShape(partial.symbol, partial.bounds, defaultStyle),
     parent: undefined,
     z: index,
-    ...shape,
-    style: { ...defaultStyle, ...shape.style },
-  });
-  const completeArrow = (arrow: Omit<Arrow, "heads" | "label"> & Partial<Pick<Arrow, "heads" | "label">>): Arrow => ({
-    heads: defaultHeads,
-    label: newArrowLabel,
-    ...arrow,
-  });
+    ...partial,
+    style: { ...defaultStyle, ...partial.style },
+  };
+}
+
+function completeShapes(sketch: Sketch): Sketch {
   return {
     ...sketch,
     shapes: Object.fromEntries(
-      Object.entries(sketch.shapes).map(([id, shape], index) => [
-        id,
-        isArrow(shape) ? completeArrow(shape) : complete(shape, index),
-      ]),
+      Object.entries(sketch.shapes).map(([id, shape], index) => [id, completeShape(shape, index)]),
     ),
   };
 }
@@ -1308,6 +1312,92 @@ function deleteSelection(state: EditorState): EditorState {
   return removeShapes(state, state.selection);
 }
 
+// A new ID for each copied Shape, by its ID where it was copied from, and the sequence number after the last one.
+function newIds(state: EditorState, copied: readonly Shape[]): { ids: Record<ShapeId, ShapeId>; next: number } {
+  return copied.reduce(
+    ({ ids, next }, shape) => {
+      const sequence = freeIdSequence(state, next);
+      return { ids: { ...ids, [shape.id]: state.deps.generateId(sequence) }, next: sequence + 1 };
+    },
+    { ids: {}, next: state.nextIdSequence },
+  );
+}
+
+// Whether `a` hides `b`: both made from the same Symbol with the same Bounds, or both Arrows with both ends floating at
+// the same points.
+function hides(a: Shape, b: Shape): boolean {
+  if (isSymbolShape(a)) return isSymbolShape(b) && a.symbol === b.symbol && sameBounds(a.bounds, b.bounds);
+  const sameFloating = (end: ArrowEnd, other: ArrowEnd) =>
+    end.kind === "floating" && other.kind === "floating" && samePoint(end.at, other.at);
+  return isArrow(b) && sameFloating(a.start, b.start) && sameFloating(a.end, b.end);
+}
+
+// Pasted Shapes land one grid step down and right from where they were copied, so the copies show beside the
+// originals. While the outermost of them that move themselves would all land on Shapes that they hide, such as when
+// the same Shapes are pasted again, they go another grid step further along.
+function pasteOffset(state: EditorState, outermost: readonly Shape[], steps = 1): Point {
+  const offset = { x: gridSize * steps, y: gridSize * steps };
+  const landing = outermost.filter(movesItself).map((shape) => translateShape(shape, offset, false));
+  const others = Object.values(state.sketch.shapes);
+  const hidden = landing.length > 0 && landing.every((copy) => others.some((other) => hides(copy, other)));
+  return hidden ? pasteOffset(state, outermost, steps + 1) : offset;
+}
+
+// The copy of `shape` moved by `offset`, with the new IDs, but for its place among the other Shapes when it is
+// outermost. `undefined` for a Shape not given a new ID, or an Arrow bound to one, which copying never leaves.
+function pastedCopy(shape: Shape, ids: Readonly<Record<ShapeId, ShapeId>>, offset: Point): Shape | undefined {
+  const id = ids[shape.id];
+  if (id === undefined) return undefined;
+  const parent = shape.parent === undefined ? undefined : ids[shape.parent];
+  const moved = translateShape(shape, offset, true);
+  if (isSymbolShape(moved)) return { ...moved, id, parent };
+  const rebound = (end: ArrowEnd): ArrowEnd | undefined => {
+    if (end.kind === "floating") return end;
+    const copy = ids[end.shape];
+    return copy === undefined ? undefined : { ...end, shape: copy };
+  };
+  const start = rebound(moved.start);
+  const end = rebound(moved.end);
+  return start && end ? { ...moved, id, parent, start, end } : undefined;
+}
+
+// Pasted Shapes get new IDs, and the outermost of them become the selection. Those join the Container under them, as
+// a new Shape does, or for an Arrow, the Container holding both its ends, on top of the Shapes there. The Shapes inside
+// them keep their places in them.
+function paste(state: EditorState, clipboard: Clipboard): EditorState {
+  if (!isIdle(state)) return state;
+  const shapes = clipboard.shapes.map(completeShape);
+  const { ids, next } = newIds(state, shapes);
+  const outermost = shapes.filter((shape) => shape.parent === undefined || ids[shape.parent] === undefined);
+  const offset = pasteOffset(state, outermost);
+  const copies = shapes.map((shape) => pastedCopy(shape, ids, offset)).filter((shape) => shape !== undefined);
+  const outermostIds = outermost.map(({ id }) => ids[id]);
+  const isOutermost = (shape: Shape) => outermostIds.includes(shape.id);
+  const place = (sketch: Sketch, shape: Shape): Sketch => {
+    if (!isOutermost(shape)) return addShape(sketch, shape);
+    const parent = isArrow(shape) ? arrowParent(sketch, shape, state.deps.measureText) : containerForNew(state, shape);
+    return addShape(sketch, { ...shape, ...onTopIn(sketch, parent) });
+  };
+  // The outermost Arrows go last, so the Shapes they are bound to are in place to find their Container.
+  const outermostArrow = (shape: Shape) => isOutermost(shape) && isArrow(shape);
+  const sketch = [...copies.filter((shape) => !outermostArrow(shape)), ...copies.filter(outermostArrow)].reduce(
+    place,
+    state.sketch,
+  );
+  return {
+    ...state,
+    sketch,
+    selection: copies.filter(isOutermost).map(({ id }) => id),
+    nextIdSequence: next,
+  };
+}
+
+// Duplicating is copying and pasting, but without the system clipboard.
+function duplicateSelection(state: EditorState): EditorState {
+  const clipboard = copyShapes(state.sketch, state.selection, state.deps.measureText);
+  return clipboard ? paste(state, clipboard) : state;
+}
+
 // `]` brings the selection to the front and `[` sends it to the back, or with Cmd/Ctrl one step.
 const reorderKeys: Readonly<Record<string, { readonly all: Reorder; readonly step: Reorder }>> = {
   "]": { all: bringToFront, step: bringForward },
@@ -1366,6 +1456,7 @@ function keyDown(state: EditorState, input: KeyInput): EditorState {
     return { ...state, selection: Object.keys(state.sketch.shapes) };
   }
   if (command && input.key.toLowerCase() === "z") return input.modifiers.shift ? redo(state) : undo(state);
+  if (command && input.key.toLowerCase() === "d") return duplicateSelection(state);
   if (input.key === "Delete" || input.key === "Backspace") return deleteSelection(state);
   if (input.key === "Enter") return startEditingLabel(state, selectedAlone(state)?.id);
   const direction = nudgeDirections[input.key];
@@ -1483,6 +1574,10 @@ function applyInput(state: EditorState, input: Input): EditorState {
       return chooseRouting(state, input.routing);
     case "changeArrowhead":
       return chooseArrowhead(state, input.end, input.arrowhead);
+    case "paste": {
+      const clipboard = clipboardFromText(input.text);
+      return clipboard ? paste(state, clipboard) : state;
+    }
   }
 }
 
