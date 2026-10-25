@@ -5,6 +5,7 @@ import {
   arrows,
   canRedo,
   canUndo,
+  clipboardText,
   createEditor,
   currentInteraction,
   exportSvg,
@@ -97,8 +98,14 @@ function isStepReorder(event: KeyboardEvent) {
   return (event.metaKey || event.ctrlKey) && (event.key === "[" || event.key === "]");
 }
 
-// Keys typed into a text field, such as when renaming a Sketch or editing a Label, are not editor shortcuts.
-function isTyping(event: KeyboardEvent) {
+// Cmd/Ctrl+D duplicates the selection in the editor, so the browser must not also bookmark the page.
+function isDuplicate(event: KeyboardEvent) {
+  return (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "d";
+}
+
+// Keys typed into a text field, such as when renaming a Sketch or editing a Label, are not editor shortcuts. Nor are
+// copying and pasting there, which copy and paste its text.
+function isTyping(event: Event) {
   return event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
 }
 
@@ -214,6 +221,8 @@ type EditorProps = {
 
 export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, initialSketch));
+  // The state as last rendered, for listeners added once that need to read it, such as copying.
+  const stateRef = useRef(state);
   const svgRef = useRef<SVGSVGElement>(null);
   // The Sketch and the text field laid over it while a Label is edited, which scroll and pinch alike.
   const sketchAreaRef = useRef<HTMLDivElement>(null);
@@ -229,6 +238,10 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const exportedSvg = useMemo(() => exportSvg(finishedSketch, deps.measureText), [finishedSketch, deps]);
 
   useAutosave(finishedSketch, onSave);
+
+  useEffect(() => {
+    stateRef.current = state;
+  });
 
   const screenSize = (): Size => {
     const { width, height } = svgRef.current?.getBoundingClientRect() ?? { width: 0, height: 0 };
@@ -249,7 +262,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
         if (!pans(event)) return;
         event.preventDefault();
       }
-      if (isSelectAll(event) || isStepReorder(event) || editsLabel(event)) event.preventDefault();
+      if (isSelectAll(event) || isStepReorder(event) || isDuplicate(event) || editsLabel(event)) event.preventDefault();
       dispatch(keyInput("keyDown", event));
     };
     // Releases still reach the editor, so a modifier let go while typing doesn't stay held.
@@ -259,15 +272,32 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
     };
     // Keys let go while the window is in the background never reach it, so space must not stay held.
     const onBlur = () => dispatch(spaceReleased);
+    // Copying and pasting go through the system clipboard, so Shapes can be pasted into another Sketch, tab or window.
+    // With nothing selected, copying leaves the clipboard as it was.
+    const onCopy = (event: ClipboardEvent) => {
+      const text = isTyping(event) ? undefined : clipboardText(stateRef.current);
+      if (text === undefined || !event.clipboardData) return;
+      event.clipboardData.setData("text/plain", text);
+      event.preventDefault();
+    };
+    const onPaste = (event: ClipboardEvent) => {
+      if (isTyping(event) || !event.clipboardData) return;
+      event.preventDefault();
+      dispatch({ type: "paste", text: event.clipboardData.getData("text/plain") });
+    };
     window.addEventListener("focusin", onFocusIn);
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("blur", onBlur);
+    window.addEventListener("copy", onCopy);
+    window.addEventListener("paste", onPaste);
     return () => {
       window.removeEventListener("focusin", onFocusIn);
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("blur", onBlur);
+      window.removeEventListener("copy", onCopy);
+      window.removeEventListener("paste", onPaste);
     };
   }, []);
 

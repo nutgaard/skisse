@@ -29,6 +29,7 @@ export {
   arrows,
   canRedo,
   canUndo,
+  clipboardText,
   currentInteraction,
   labelLayout,
   middleSegmentHandle,

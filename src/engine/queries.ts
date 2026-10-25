@@ -7,6 +7,7 @@ import {
   type EndName,
   type Routing,
 } from "./arrow";
+import { clipboardToText, copyShapes } from "./clipboard";
 import {
   arrowBeingDrawn,
   creationBounds,
@@ -295,6 +296,12 @@ export function sketch(state: EditorState): Sketch {
 
 export function selection(state: EditorState): readonly ShapeId[] {
   return state.selection;
+}
+
+/** The selection as text to copy to the system clipboard, or `undefined` when nothing is selected. */
+export function clipboardText(state: EditorState): string | undefined {
+  const copied = copyShapes(state.sketch, state.selection, state.deps.measureText);
+  return copied && clipboardToText(copied);
 }
 
 export type HandleView = { readonly handle: ResizeHandle; readonly position: Point };
