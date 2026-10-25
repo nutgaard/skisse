@@ -1,8 +1,17 @@
 import type { ShapeId, Sketch, SymbolShape, TextMeasurer } from "./editor";
+import { arrowheadLength, arrowheadReach } from "./arrowhead";
 import { elbowRoute, type ElbowEnd, type ElbowOffset, type MiddleSegment } from "./elbow";
-import { contains, distance, type Bounds, type Point } from "./geometry";
-import { displayedBounds } from "./label";
-import { insidePath, nearestOnPath } from "./path";
+import {
+  contains,
+  distance,
+  distanceBetweenBounds,
+  distanceToBounds,
+  translate,
+  type Bounds,
+  type Point,
+} from "./geometry";
+import { arrowLabelLayout, displayedBounds, type ArrowLabelLayout } from "./label";
+import { insidePath, nearestOnPath, pointAlongPolyline, polylineLength } from "./path";
 import { shapeGeometry, type ShapeGeometry } from "./shape-geometry";
 import { isArrow, isSymbolShape } from "./shape-kind";
 import type { Style } from "./style";
@@ -24,6 +33,24 @@ export type ArrowEnd =
 /** Which end of an Arrow. */
 export type EndName = "start" | "end";
 
+/** The heads an Arrow end can have, in the order the style panel shows them. */
+export const arrowheads = ["none", "arrow", "openArrow", "diamond", "circle"] as const;
+
+/** What an Arrow end shows: nothing, or a head of some kind. */
+export type Arrowhead = (typeof arrowheads)[number];
+
+/** The head at each end of an Arrow. */
+export type EndHeads = Readonly<Record<EndName, Arrowhead>>;
+
+/** The heads of Arrows until others are chosen: none at the start, and an arrow at the end. */
+export const defaultHeads: EndHeads = { start: "none", end: "arrow" };
+
+/** An Arrow's Label: its text, and where it sits along the Arrow's path, as a share of the path's length. */
+export type ArrowLabel = { readonly text: string; readonly along: number };
+
+/** The Label of a new Arrow: empty, and halfway along. */
+export const newArrowLabel: ArrowLabel = { text: "", along: 0.5 };
+
 /** A Shape that isn't made from a Symbol: a line between two ends. */
 export type Arrow = {
   readonly id: ShapeId;
@@ -33,6 +60,8 @@ export type Arrow = {
   readonly routing: Routing;
   readonly start: ArrowEnd;
   readonly end: ArrowEnd;
+  readonly heads: EndHeads;
+  readonly label: ArrowLabel;
   // For an elbow Arrow, how far the user dragged its middle segment from where it would be on its own.
   readonly elbowOffset?: ElbowOffset;
 };
@@ -88,6 +117,8 @@ export type ResolvedArrow = {
   readonly middle?: MiddleSegment;
   /** Whether the path follows the Arrow's elbow offset. It doesn't when it has none, or once it would double back. */
   readonly followsOffset: boolean;
+  /** The Bounds, as displayed, of the Shapes the Arrow's ends are bound to. */
+  readonly boundBoxes: readonly Bounds[];
 };
 
 /** Where an Arrow is on the Sketch, or `undefined` when an end can't be placed. */
@@ -95,10 +126,75 @@ export function resolveArrow(sketch: Sketch, arrow: ArrowWithoutId, measure: Tex
   const start = elbowEnd(sketch, arrow.start, measure);
   const end = elbowEnd(sketch, arrow.end, measure);
   if (!start || !end) return undefined;
-  if (arrow.routing !== "elbow") {
-    return { start: start.point, end: end.point, path: [start.point, end.point], followsOffset: false };
-  }
-  return { start: start.point, end: end.point, ...elbowRoute(start, end, arrow.elbowOffset) };
+  const boundBoxes = [start.box, end.box].filter((box) => box !== undefined);
+  const placed = { start: start.point, end: end.point, boundBoxes };
+  if (arrow.routing !== "elbow") return { ...placed, path: [start.point, end.point], followsOffset: false };
+  return { ...placed, ...elbowRoute(start, end, arrow.elbowOffset) };
+}
+
+// How much of the line, in Sketch units, shows at least between the gap around an Arrow's Label and each end, past the
+// head there, and between the gap and the Shapes the ends are bound to, so the Label stays clear of the heads, the
+// Ports and the Shapes.
+const lineBesideLabel = 12;
+
+// How close the gap around the Arrow's Label may come to its `end`.
+function labelClearance(arrow: ArrowWithoutId, end: EndName): number {
+  return arrowheadReach(arrow.heads[end], arrowheadLength(arrow.style.strokeWidth)) + lineBesideLabel;
+}
+
+/**
+ * Where along the Arrow's path, as a share of its length, its Label is shown when it is put at `along`: there, or else
+ * at the nearest share where the gap around it keeps clear of both ends, their heads, and the Shapes they are bound to.
+ * `undefined` when there is no room for that anywhere, such as on an Arrow too short for the Label.
+ */
+export function clearAlong(
+  arrow: ArrowWithoutId,
+  resolved: ResolvedArrow,
+  along: number,
+  measure: TextMeasurer,
+): number | undefined {
+  const { gap } = arrowLabelLayout(arrow.label.text, arrow.style.fontSize, { x: 0, y: 0 }, measure);
+  const total = polylineLength(resolved.path);
+  if (!gap || total === 0) return along;
+  const fromStart = labelClearance(arrow, "start");
+  const fromEnd = labelClearance(arrow, "end");
+  // The gap reaches at least half its smaller side from the point it is centred on, so on a path shorter than this,
+  // it can't keep clear of both ends anywhere.
+  if (total < fromStart + fromEnd + Math.min(gap.width, gap.height)) return undefined;
+  const clear = (length: number) => {
+    const around = translate(gap, pointAlongPolyline(resolved.path, length / total) ?? resolved.start);
+    return (
+      distanceToBounds(around, resolved.start) >= fromStart &&
+      distanceToBounds(around, resolved.end) >= fromEnd &&
+      resolved.boundBoxes.every((box) => distanceBetweenBounds(around, box) >= lineBesideLabel)
+    );
+  };
+  // Nearest first: where it was put, and then one Sketch unit further either way at a time, stopping at the first clear
+  // place found.
+  const wanted = Math.max(0, Math.min(1, along)) * total;
+  const clearAt = (step: number) =>
+    (step === 0 ? [wanted] : [wanted - step, wanted + step]).find(
+      (length) => length >= 0 && length <= total && clear(length),
+    );
+  const step = Array.from({ length: Math.ceil(total) + 1 }, (_, index) => index).find(
+    (candidate) => clearAt(candidate) !== undefined,
+  );
+  const found = step === undefined ? undefined : clearAt(step);
+  return found === undefined ? undefined : found / total;
+}
+
+/**
+ * The Arrow's Label as displayed on its path as resolved: at its share, or as near to it as keeps it clear of the ends,
+ * or in the middle when nowhere does.
+ */
+export function layoutArrowLabel(
+  arrow: ArrowWithoutId,
+  resolved: ResolvedArrow,
+  measure: TextMeasurer,
+): ArrowLabelLayout {
+  const along = clearAlong(arrow, resolved, arrow.label.along, measure) ?? 0.5;
+  const at = pointAlongPolyline(resolved.path, along) ?? resolved.start;
+  return arrowLabelLayout(arrow.label.text, arrow.style.fontSize, at, measure);
 }
 
 // A Shape an end can bind to, as displayed.

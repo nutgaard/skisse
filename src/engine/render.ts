@@ -1,10 +1,12 @@
-import { resolveArrow, type ArrowWithoutId } from "./arrow";
+import { layoutArrowLabel, resolveArrow, type ArrowWithoutId, type EndName } from "./arrow";
+import { arrowheadAt, arrowheadLength } from "./arrowhead";
 import type { Shape, ShapeId, ShapeWithoutId, Sketch, TextMeasurer } from "./editor";
-import { labelFontFamily, shapeLayout, shareOfSpace, type ShapeLayout } from "./label";
-import { isClosed, pathData, pathPieces, pieceLength, polyline, type Path } from "./path";
+import type { Point } from "./geometry";
+import { labelFontFamily, shapeLayout, shareOfSpace, type ArrowLabelLayout, type ShapeLayout } from "./label";
+import { isClosed, pathData, pathPieces, pieceLength, polyline, regionWithHole, type Path } from "./path";
 import { shapeGeometry } from "./shape-geometry";
 import { isArrow } from "./shape-kind";
-import { lineColor, shades, type Style, type StrokePattern, type StrokeWidth } from "./style";
+import { lineColor, shades, strokePixels, type Style, type StrokePattern } from "./style";
 import { svgElement, type SvgElement } from "./svg";
 import { drawOrder } from "./tree";
 import type { HorizontalAlignment } from "./symbols/symbol";
@@ -15,14 +17,20 @@ export type RenderOptions = {
   readonly placeholders: boolean;
   /** A Shape whose Label is left out, as it is being edited and its text field shows it instead. */
   readonly hiddenLabel?: ShapeId;
+  /**
+   * How many pixels a Sketch unit is shown as, so what should look the same at any zoom, such as the outline around an
+   * Arrow's Label, can be drawn to suit.
+   */
+  readonly zoom: number;
 };
 
-export const onScreen: RenderOptions = { placeholders: true };
+/** Rendering on screen at `zoom`. */
+export function onScreen(zoom: number): RenderOptions {
+  return { placeholders: true, zoom };
+}
 
-export const forExport: RenderOptions = { placeholders: false };
-
-// The width of a Shape's lines, in Sketch units.
-const strokePixels: Readonly<Record<StrokeWidth, number>> = { thin: 2, thick: 4 };
+// An export is drawn at 100%.
+export const forExport: RenderOptions = { placeholders: false, zoom: 1 };
 
 // A dash and the gap after it, in stroke widths. Lines have round ends, which reach half a stroke width past each end
 // of a dash, so each dash shows a stroke width longer than set here, and each gap a stroke width shorter. A dash of 0
@@ -75,9 +83,11 @@ const placeholderStyle = {
 export type ShapeToRender = ShapeWithoutId & { readonly id?: ShapeId };
 
 /** An Arrow to render, with its path already resolved. An Arrow being drawn has no ID yet. */
-export type ArrowToRender = Pick<ArrowWithoutId, "style" | "routing"> & {
+export type ArrowToRender = Pick<ArrowWithoutId, "style" | "routing" | "heads"> & {
   readonly id?: ShapeId;
-  readonly path: Path;
+  /** The points its line runs through, from its start to its end. */
+  readonly points: readonly Point[];
+  readonly label: ArrowLabelLayout;
 };
 
 /** A Shape made from a Symbol or an Arrow, ready to render. */
@@ -90,9 +100,17 @@ export function arrowToRender(
   measure: TextMeasurer,
 ): readonly ArrowToRender[] {
   const resolvedArrow = resolveArrow(sketch, arrow, measure);
-  return resolvedArrow
-    ? [{ id: arrow.id, style: arrow.style, routing: arrow.routing, path: polyline(resolvedArrow.path) }]
-    : [];
+  if (!resolvedArrow) return [];
+  return [
+    {
+      id: arrow.id,
+      style: arrow.style,
+      routing: arrow.routing,
+      heads: arrow.heads,
+      points: resolvedArrow.path,
+      label: layoutArrowLabel(arrow, resolvedArrow, measure),
+    },
+  ];
 }
 
 /** The Shapes of `sketch` to render, in the order given, with each Arrow's path resolved. */
@@ -106,12 +124,13 @@ export function shapesToRender(sketch: Sketch, shapes: readonly Shape[], measure
 // slightly wider or narrower than measured.
 const textAnchors: Readonly<Record<HorizontalAlignment, string>> = { left: "start", center: "middle", right: "end" };
 
-// One text element per line, leaving out blank lines, in the colour of the Shape's lines. Spaces are drawn as typed,
-// as they were measured, except those hanging at the end of a line.
+// One text element per line, leaving out blank lines, in the colour of the Shape's lines, with `outline` added, if any.
+// Spaces are drawn as typed, as they were measured, except those hanging at the end of a line.
 function renderLabel(
-  { lines, fontPixels }: ShapeLayout,
+  { lines, fontPixels }: Pick<ShapeLayout, "lines" | "fontPixels">,
   horizontal: HorizontalAlignment,
   style: Style,
+  outline: SvgElement["attributes"] = {},
 ): readonly SvgElement[] {
   const share = shareOfSpace[horizontal];
   return lines.filter(({ text }) => text.trim() !== "").map(({ text, bounds }) =>
@@ -126,6 +145,7 @@ function renderLabel(
         "text-anchor": textAnchors[horizontal],
         "dominant-baseline": "central",
         "xml:space": "preserve",
+        ...outline,
       },
       [text.trimEnd()],
     ),
@@ -157,10 +177,71 @@ function renderShape(shape: ShapeToRender, measure: TextMeasurer, options: Rende
   ]);
 }
 
-// An Arrow drawn as its line, in the Arrow's lines' style.
-function renderArrow({ id, style, routing, path }: ArrowToRender): SvgElement {
+// The head at `end` of the line through `points`, solid even on a dashed line, with round corners like the line's. The
+// line runs on under it to the end, and the head's own stroke covers the line's round cap there.
+function renderArrowhead({ heads, points, style }: ArrowToRender, end: EndName): readonly SvgElement[] {
+  const toward = end === "end" ? points : points.toReversed();
+  const head = arrowheadAt(heads[end], toward, arrowheadLength(style.strokeWidth));
+  if (!head) return [];
+  const color = lineColor(style);
+  const attributes = {
+    "data-arrowhead": end,
+    stroke: color,
+    "stroke-width": strokePixels[style.strokeWidth],
+    "stroke-linejoin": "round",
+    "stroke-linecap": "round",
+  };
+  return [
+    head.kind === "circle"
+      ? svgElement("circle", { ...attributes, cx: head.center.x, cy: head.center.y, r: head.radius, fill: color })
+      : svgElement("path", { ...attributes, d: pathData(head.path), fill: head.filled ? color : "none" }),
+  ];
+}
+
+// How wide, in pixels, the white outline drawn under an Arrow's Label's text is, so the text stays readable where it
+// crosses a Shape's lines, such as when the Arrow runs over a Container's edge. Half of it shows around each letter, and
+// it is as thin at any zoom.
+const labelOutlinePixels = 2;
+
+function labelOutline({ zoom }: RenderOptions): SvgElement["attributes"] {
+  return {
+    stroke: "#ffffff",
+    "stroke-width": labelOutlinePixels / zoom,
+    "stroke-linejoin": "round",
+    "paint-order": "stroke",
+  };
+}
+
+// How far, in Sketch units, the region an Arrow's line is clipped to reaches past the line, enough for any stroke and
+// its round ends.
+const clipMargin = 10;
+
+// The Arrow's line, with a gap where its Label is, so the line doesn't run through the text. The gap is left out of
+// the line, rather than covered, so whatever is behind the Arrow, such as a Container's fill, shows through it. While
+// the Label is being edited, the gap stays, so the line doesn't run through its text field either.
+function renderArrowLine({ id, style, points, label }: ArrowToRender): readonly SvgElement[] {
+  const lines = renderLines(polyline(points), style);
+  if (!label.gap) return lines;
+  // Only an Arrow with an ID has a Label, as one being drawn has none yet.
+  const clipId = `label-gap-${id ?? ""}`;
+  return [
+    svgElement("clipPath", { id: clipId }, [
+      svgElement("path", { d: pathData(regionWithHole(points, label.gap, clipMargin)), "clip-rule": "evenodd" }),
+    ]),
+    svgElement("g", { "clip-path": `url(#${clipId})` }, lines),
+  ];
+}
+
+// An Arrow drawn as its line, in the Arrow's lines' style, with a head at each end that has one, and then its Label,
+// unless that is being edited.
+function renderArrow(arrow: ArrowToRender, options: RenderOptions): SvgElement {
+  const { id, style, routing, label } = arrow;
+  const labelHidden = id !== undefined && id === options.hiddenLabel;
   return svgElement("g", { ...(id === undefined ? {} : { "data-shape": id }), "data-routing": routing }, [
-    ...renderLines(path, style),
+    ...renderArrowLine(arrow),
+    ...renderArrowhead(arrow, "start"),
+    ...renderArrowhead(arrow, "end"),
+    ...(labelHidden ? [] : renderLabel(label, "center", style, labelOutline(options))),
   ]);
 }
 
@@ -174,7 +255,7 @@ export function renderShapes(
   return svgElement(
     "g",
     {},
-    shapes.map((shape) => ("routing" in shape ? renderArrow(shape) : renderShape(shape, measure, options))),
+    shapes.map((shape) => ("routing" in shape ? renderArrow(shape, options) : renderShape(shape, measure, options))),
   );
 }
 

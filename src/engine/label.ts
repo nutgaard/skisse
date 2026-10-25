@@ -1,5 +1,5 @@
 import type { ShapeWithoutId, TextMeasurer } from "./editor";
-import type { Bounds } from "./geometry";
+import { enclosingBounds, expandBounds, type Bounds, type Point } from "./geometry";
 import type { FontSize } from "./style";
 import { symbolDefinition } from "./symbols";
 import type { HorizontalAlignment, VerticalAlignment } from "./symbols/symbol";
@@ -183,4 +183,44 @@ export function shapeLayout(shape: ShapeWithoutId, measure: TextMeasurer): Shape
 /** The Shape's Bounds as displayed, grown to fit its Label. */
 export function displayedBounds(shape: ShapeWithoutId, measure: TextMeasurer): Bounds {
   return shapeLayout(shape, measure).bounds;
+}
+
+/** An Arrow's Label as displayed, centred on its point on the Arrow's path. */
+export type ArrowLabelLayout = {
+  /** The point the Label is centred on. */
+  readonly at: Point;
+  /** Where the lines go together, with room to spare on either side for a caret. At least one line high. */
+  readonly textBlock: Bounds;
+  readonly fontPixels: number;
+  readonly lineHeight: number;
+  readonly lines: readonly LabelLine[];
+  /**
+   * The gap left in the Arrow's line, so it doesn't run through the text: around the lines, with some space to spare.
+   * `undefined` when the Label shows nothing, such as when it is empty.
+   */
+  readonly gap: Bounds | undefined;
+};
+
+// Space, in Sketch units, between an Arrow's Label and the ends of the gap in its line.
+const gapPadding = 4;
+
+/**
+ * An Arrow's Label of `text` in `fontSize`, centred on `at`. It has no area to wrap in, so it has a line for each line
+ * typed, each centred.
+ */
+export function arrowLabelLayout(text: string, fontSize: FontSize, at: Point, measure: TextMeasurer): ArrowLabelLayout {
+  const pixels = fontPixels[fontSize];
+  const lineHeight = pixels * lineSpacing;
+  const typed = text === "" ? [] : text.split("\n");
+  const top = at.y - (Math.max(1, typed.length) * lineHeight) / 2;
+  const lines = typed.map((line, index) => {
+    const width = measure(line.trimEnd(), pixels);
+    return { text: line, bounds: { x: at.x - width / 2, y: top + index * lineHeight, width, height: lineHeight } };
+  });
+  // A font size to spare keeps the text field from wrapping a line drawn a little wider than it was measured.
+  const width = Math.max(0, ...lines.map(({ bounds }) => bounds.width)) + pixels;
+  const textBlock = { x: at.x - width / 2, y: top, width, height: Math.max(1, typed.length) * lineHeight };
+  const gap =
+    text.trim() === "" ? undefined : expandBounds(enclosingBounds(lines.map(({ bounds }) => bounds)), gapPadding);
+  return { at, textBlock, fontPixels: pixels, lineHeight, lines, gap };
 }

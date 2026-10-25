@@ -35,6 +35,9 @@ export const strokeWidths = ["thin", "thick"] as const;
 
 export type StrokeWidth = (typeof strokeWidths)[number];
 
+/** The width of a Shape's lines, in Sketch units. */
+export const strokePixels: Readonly<Record<StrokeWidth, number>> = { thin: 2, thick: 4 };
+
 /** The three font sizes a Label can have. */
 export const fontSizes = ["small", "medium", "large"] as const;
 

@@ -1,4 +1,12 @@
-import { arrowsBoundTo, type ArrowEnd, type EndName, type Routing } from "./arrow";
+import {
+  arrowsBoundTo,
+  layoutArrowLabel,
+  type ArrowEnd,
+  type Arrowhead,
+  type EndHeads,
+  type EndName,
+  type Routing,
+} from "./arrow";
 import {
   arrowBeingDrawn,
   creationBounds,
@@ -53,10 +61,26 @@ export type LabelView = {
   readonly lines: readonly LabelLine[];
 };
 
-/** The Label of a Shape, laid out as it is drawn. */
+/** The Label of a Shape or an Arrow, laid out as it is drawn. */
 export function labelLayout(state: EditorState, id: ShapeId): LabelView | undefined {
   const shape = state.sketch.shapes[id];
-  if (!shape || isArrow(shape)) return undefined;
+  if (!shape) return undefined;
+  if (isArrow(shape)) {
+    const resolvedArrow = resolved(state, shape);
+    if (!resolvedArrow) return undefined;
+    const { textBlock, fontPixels, lineHeight, lines } = layoutArrowLabel(shape, resolvedArrow, state.deps.measureText);
+    return {
+      text: shape.label.text,
+      alignment: { horizontal: "center", vertical: "middle" },
+      fontSize: shape.style.fontSize,
+      color: lineColor(shape.style),
+      fontPixels,
+      lineHeight,
+      area: textBlock,
+      textBlock,
+      lines,
+    };
+  }
   const { labelArea, textBlock, fontPixels, lineHeight, lines } = shapeLayout(shape, state.deps.measureText);
   return {
     text: shape.label.text,
@@ -95,8 +119,22 @@ export type ArrowView = {
   readonly routing: Routing;
   readonly start: ArrowEndView;
   readonly end: ArrowEndView;
+  readonly heads: EndHeads;
   /** The points the Arrow's line runs through, from its start to its end. */
   readonly path: readonly Point[];
+  readonly label: ArrowLabelView;
+};
+
+/**
+ * An Arrow's Label: its text, how far along the path it was put as a share of its length, the point where it is shown,
+ * and the gap around it in the line, unless it shows nothing. It is shown at its share, unless that would take it too
+ * close to an end.
+ */
+export type ArrowLabelView = {
+  readonly text: string;
+  readonly along: number;
+  readonly at: Point;
+  readonly gap?: Bounds;
 };
 
 function endView(end: ArrowEnd, point: Point): ArrowEndView {
@@ -116,14 +154,17 @@ export function arrows(state: EditorState): readonly ArrowView[] {
     .filter(isArrow)
     .flatMap((arrow) => {
       const resolvedArrow = resolved(state, arrow);
-      return resolvedArrow
+      const layout = resolvedArrow && layoutArrowLabel(arrow, resolvedArrow, state.deps.measureText);
+      return resolvedArrow && layout
         ? [
             {
               id: arrow.id,
               routing: arrow.routing,
               start: endView(arrow.start, resolvedArrow.start),
               end: endView(arrow.end, resolvedArrow.end),
+              heads: arrow.heads,
               path: resolvedArrow.path,
+              label: { ...arrow.label, at: layout.at, gap: layout.gap },
             },
           ]
         : [];
@@ -208,6 +249,24 @@ export function selectionRouting(state: EditorState): Routing | "mixed" | undefi
   return first && commonOrMixed(first, others, "routing");
 }
 
+/** The heads of Arrows as the style panel shows them, where each end can be mixed among the selected Arrows. */
+export type SelectionArrowheads = { readonly [End in EndName]: Arrowhead | "mixed" };
+
+/**
+ * The heads of the selected Arrows, each end `mixed` where they differ. With nothing selected, they are the heads new
+ * Arrows get, which choosing a head changes. `undefined` when only Shapes made from a Symbol are selected, as they have
+ * no heads.
+ */
+export function selectionArrowheads(state: EditorState): SelectionArrowheads | undefined {
+  if (state.selection.length === 0) return state.heads;
+  const [first, ...others] = state.selection.flatMap((id) => {
+    const shape = state.sketch.shapes[id];
+    return shape && isArrow(shape) ? [shape.heads] : [];
+  });
+  if (!first) return undefined;
+  return { start: commonOrMixed(first, others, "start"), end: commonOrMixed(first, others, "end") };
+}
+
 /** A Label alignment as the style panel shows it, where each direction can be mixed among the selected Shapes. */
 export type SelectionAlignment = {
   readonly [Direction in keyof LabelAlignment]: LabelAlignment[Direction] | "mixed";
@@ -273,6 +332,7 @@ export type InteractionView =
   | { readonly kind: "drawingArrow" }
   | { readonly kind: "draggingArrowEnd"; readonly arrowId: ShapeId; readonly end: EndName }
   | { readonly kind: "draggingElbowSegment"; readonly arrowId: ShapeId }
+  | { readonly kind: "draggingArrowLabel"; readonly arrowId: ShapeId }
   | { readonly kind: "panning" }
   | { readonly kind: "editingLabel"; readonly shapeId: ShapeId };
 
@@ -297,6 +357,8 @@ export function currentInteraction(state: EditorState): InteractionView {
       return { kind: "draggingArrowEnd", arrowId: interaction.arrowId, end: interaction.end };
     case "draggingElbowSegment":
       return { kind: "draggingElbowSegment", arrowId: interaction.arrowId };
+    case "draggingArrowLabel":
+      return { kind: "draggingArrowLabel", arrowId: interaction.arrowId };
     case "panning":
       return { kind: "panning" };
     case "editingLabel":
@@ -332,7 +394,7 @@ export function rendering(state: EditorState): SvgElement {
         : [];
   const placed = drawOrderLifting(state.sketch, liftedWhileDragging(state));
   return renderShapes([...shapesToRender(state.sketch, placed, measureText), ...beingDrawn], measureText, {
-    ...onScreen,
+    ...onScreen(state.viewport.zoom),
     hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,
   });
 }

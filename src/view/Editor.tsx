@@ -14,10 +14,12 @@ import {
   noModifiers,
   pansOnPress,
   pathData,
+  regionWithHole,
   rendering,
   resizeHandles,
   selection,
   selectionAlignment,
+  selectionArrowheads,
   selectionRouting,
   selectionStyle,
   shapes,
@@ -27,6 +29,7 @@ import {
   update,
   viewport,
   visiblePorts,
+  type ArrowView,
   type Dependencies,
   type KeyInput,
   type PointerInput,
@@ -151,6 +154,26 @@ function Grid({ viewport }: { readonly viewport: Viewport }) {
       {levels.map(({ kind }) => (
         <rect key={kind} width="100%" height="100%" fill={`url(#${id}-${kind})`} className="grid" />
       ))}
+    </>
+  );
+}
+
+/**
+ * The highlight along a selected Arrow's line, left out where the line has a gap for its Label, so it doesn't run
+ * through the text, just as the line doesn't.
+ */
+function ArrowSelection({ arrow, zoom }: { readonly arrow: ArrowView; readonly zoom: number }) {
+  const clipId = useId();
+  const points = arrow.path.map(({ x, y }) => `${x},${y}`).join(" ");
+  const { gap } = arrow.label;
+  if (!gap) return <polyline data-selected={arrow.id} points={points} className="arrow-selection" />;
+  // The region clipped to reaches past the line by more than the highlight is wide, which is in screen pixels.
+  return (
+    <>
+      <clipPath id={clipId}>
+        <path d={pathData(regionWithHole(arrow.path, gap, handleSize / zoom))} clipRule="evenodd" />
+      </clipPath>
+      <polyline data-selected={arrow.id} points={points} className="arrow-selection" clipPath={`url(#${clipId})`} />
     </>
   );
 }
@@ -318,13 +341,8 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
               ))}
             {arrows(state)
               .filter(({ id }) => selected.has(id))
-              .map(({ id, path }) => (
-                <polyline
-                  key={id}
-                  data-selected={id}
-                  points={path.map(({ x, y }) => `${x},${y}`).join(" ")}
-                  className="arrow-selection"
-                />
+              .map((arrow) => (
+                <ArrowSelection key={arrow.id} arrow={arrow} zoom={view.zoom} />
               ))}
             {ports?.ports.map((port, index) => (
               <circle
@@ -377,6 +395,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
         style={selectionStyle(state)}
         alignment={selectionAlignment(state)}
         routing={selectionRouting(state)}
+        heads={selectionArrowheads(state)}
         dispatch={dispatch}
       />
       <div ref={toolbarRef} className="toolbar" role="toolbar">
