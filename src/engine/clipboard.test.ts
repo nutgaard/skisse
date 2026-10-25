@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import type { EditorState } from "./editor";
-import { arrows, clipboardText, selection, shapeTree, sketch } from "./queries";
+import { arrows, clipboardText, selection, shapeStyle, shapeTree, sketch } from "./queries";
 import {
   apply,
   boundsById,
@@ -203,6 +203,43 @@ describe("pasting text that isn't Shapes copied from Skisse", () => {
       "JSON with the marker and an Arrow without ends",
       JSON.stringify({ format: "skisse/shapes", shapes: [{ id: "shape-1", routing: "straight" }] }),
     ],
+    [
+      "JSON with the marker and an end bound without saying how",
+      JSON.stringify({
+        format: "skisse/shapes",
+        shapes: [
+          { id: "shape-1", symbol: "rectangle", bounds: { x: 0, y: 0, width: 100, height: 80 } },
+          { id: "shape-2", routing: "straight", start: { shape: "shape-1" }, end: { kind: "floating", at: { x: 0, y: 0 } } },
+        ],
+      }),
+    ],
+    [
+      "JSON with the marker and an Arrow bound to an Arrow",
+      JSON.stringify({
+        format: "skisse/shapes",
+        shapes: [
+          { id: "shape-1", routing: "straight", start: { kind: "floating", at: { x: 0, y: 0 } }, end: { kind: "floating", at: { x: 50, y: 0 } } },
+          { id: "shape-2", routing: "straight", start: { kind: "outline", shape: "shape-1", at: { x: 0, y: 0 } }, end: { kind: "floating", at: { x: 0, y: 0 } } },
+        ],
+      }),
+    ],
+    [
+      "JSON with the marker and a Shape inside itself",
+      JSON.stringify({
+        format: "skisse/shapes",
+        shapes: [{ id: "shape-1", parent: "shape-1", symbol: "rectangle", bounds: { x: 0, y: 0, width: 100, height: 80 } }],
+      }),
+    ],
+    [
+      "JSON with the marker and two Shapes with the same ID",
+      JSON.stringify({
+        format: "skisse/shapes",
+        shapes: [
+          { id: "shape-1", symbol: "rectangle", bounds: { x: 0, y: 0, width: 100, height: 80 } },
+          { id: "shape-1", symbol: "ellipse", bounds: { x: 200, y: 0, width: 100, height: 80 } },
+        ],
+      }),
+    ],
     ["broken JSON", "{"],
   ])("%s does nothing", (_, text) => {
     const before = wiredRectangles();
@@ -212,6 +249,20 @@ describe("pasting text that isn't Shapes copied from Skisse", () => {
     expect(sketch(state)).toBe(sketch(before));
     expect(selection(state)).toEqual(selection(before));
   });
+});
+
+test("an Arrow copied from an older Skisse without a style pastes with the default one", () => {
+  const text = JSON.stringify({
+    format: "skisse/shapes",
+    shapes: [
+      { id: "a", routing: "straight", start: { kind: "floating", at: { x: 0, y: 0 } }, end: { kind: "floating", at: { x: 50, y: 0 } } },
+    ],
+  });
+
+  const state = paste(newEditor(), text);
+
+  expect(arrows(state).map(({ id }) => id)).toEqual(["shape-1"]);
+  expect(shapeStyle(state, "shape-1")).toEqual(shapeStyle(drawArrow(newEditor(), { x: 0, y: 0 }, { x: 50, y: 0 }), "shape-1"));
 });
 
 describe("undoing a paste", () => {

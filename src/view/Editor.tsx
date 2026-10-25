@@ -273,10 +273,9 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
     // Keys let go while the window is in the background never reach it, so space must not stay held.
     const onBlur = () => dispatch(spaceReleased);
     // Copying and pasting go through the system clipboard, so Shapes can be pasted into another Sketch, tab or window.
-    // With nothing selected, copying leaves the clipboard as it was, and text selected on the page is copied as usual.
+    // With nothing selected, copying leaves the clipboard as it was.
     const onCopy = (event: ClipboardEvent) => {
-      const selectsText = document.getSelection()?.isCollapsed === false;
-      const text = isTyping(event) || selectsText ? undefined : clipboardText(stateRef.current);
+      const text = isTyping(event) ? undefined : clipboardText(stateRef.current);
       if (text === undefined || !event.clipboardData) return;
       event.clipboardData.setData("text/plain", text);
       event.preventDefault();

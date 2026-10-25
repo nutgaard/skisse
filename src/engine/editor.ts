@@ -30,6 +30,7 @@ import {
   distance,
   enclosingBounds,
   sameBounds,
+  samePoint,
   sideOf,
   spanAtLeast,
   translate,
@@ -297,8 +298,8 @@ export const emptySketch: Sketch = { shapes: {} };
 // saved or copied.
 function completeShape(shape: Shape, index: number): Shape {
   if (isArrow(shape)) {
-    const arrow: Omit<Arrow, "heads" | "label"> & Partial<Pick<Arrow, "heads" | "label">> = shape;
-    return { heads: defaultHeads, label: newArrowLabel, ...arrow };
+    const arrow: Omit<Arrow, "heads" | "label" | "style"> & Partial<Pick<Arrow, "heads" | "label" | "style">> = shape;
+    return { heads: defaultHeads, label: newArrowLabel, ...arrow, style: { ...defaultStyle, ...arrow.style } };
   }
   const partial: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds"> = shape;
   return {
@@ -1327,7 +1328,7 @@ function newIds(state: EditorState, copied: readonly Shape[]): { ids: Record<Sha
 function hides(a: Shape, b: Shape): boolean {
   if (isSymbolShape(a)) return isSymbolShape(b) && a.symbol === b.symbol && sameBounds(a.bounds, b.bounds);
   const sameFloating = (end: ArrowEnd, other: ArrowEnd) =>
-    end.kind === "floating" && other.kind === "floating" && distance(end.at, other.at) === 0;
+    end.kind === "floating" && other.kind === "floating" && samePoint(end.at, other.at);
   return isArrow(b) && sameFloating(a.start, b.start) && sameFloating(a.end, b.end);
 }
 
@@ -1343,7 +1344,7 @@ function pasteOffset(state: EditorState, outermost: readonly Shape[], steps = 1)
 }
 
 // The copy of `shape` moved by `offset`, with the new IDs, but for its place among the other Shapes when it is
-// outermost. `undefined` for an Arrow bound to a Shape that wasn't copied, which copying never gives.
+// outermost. `undefined` for a Shape not given a new ID, or an Arrow bound to one, which copying never leaves.
 function pastedCopy(shape: Shape, ids: Readonly<Record<ShapeId, ShapeId>>, offset: Point): Shape | undefined {
   const id = ids[shape.id];
   if (id === undefined) return undefined;
@@ -1365,12 +1366,13 @@ function pastedCopy(shape: Shape, ids: Readonly<Record<ShapeId, ShapeId>>, offse
 // them keep their places in them.
 function paste(state: EditorState, clipboard: Clipboard): EditorState {
   if (!isIdle(state)) return state;
-  const copied = clipboard.shapes.map(completeShape);
-  const { ids, next } = newIds(state, copied);
-  const outermost = copied.filter((shape) => shape.parent === undefined || ids[shape.parent] === undefined);
+  const shapes = clipboard.shapes.map(completeShape);
+  const { ids, next } = newIds(state, shapes);
+  const outermost = shapes.filter((shape) => shape.parent === undefined || ids[shape.parent] === undefined);
   const offset = pasteOffset(state, outermost);
-  const copies = copied.map((shape) => pastedCopy(shape, ids, offset)).filter((shape) => shape !== undefined);
-  const isOutermost = (shape: Shape) => shape.parent === undefined;
+  const copies = shapes.map((shape) => pastedCopy(shape, ids, offset)).filter((shape) => shape !== undefined);
+  const outermostIds = outermost.map(({ id }) => ids[id]);
+  const isOutermost = (shape: Shape) => outermostIds.includes(shape.id);
   const place = (sketch: Sketch, shape: Shape): Sketch => {
     if (!isOutermost(shape)) return addShape(sketch, shape);
     const parent = isArrow(shape) ? arrowParent(sketch, shape, state.deps.measureText) : containerForNew(state, shape);
@@ -1392,8 +1394,8 @@ function paste(state: EditorState, clipboard: Clipboard): EditorState {
 
 // Duplicating is copying and pasting, but without the system clipboard.
 function duplicateSelection(state: EditorState): EditorState {
-  const copied = copyShapes(state.sketch, state.selection, state.deps.measureText);
-  return copied ? paste(state, copied) : state;
+  const clipboard = copyShapes(state.sketch, state.selection, state.deps.measureText);
+  return clipboard ? paste(state, clipboard) : state;
 }
 
 // `]` brings the selection to the front and `[` sends it to the back, or with Cmd/Ctrl one step.
