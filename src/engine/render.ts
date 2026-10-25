@@ -17,11 +17,20 @@ export type RenderOptions = {
   readonly placeholders: boolean;
   /** A Shape whose Label is left out, as it is being edited and its text field shows it instead. */
   readonly hiddenLabel?: ShapeId;
+  /**
+   * How many pixels a Sketch unit is shown as, so what should look the same at any zoom, such as the outline around an
+   * Arrow's Label, can be drawn to suit.
+   */
+  readonly zoom: number;
 };
 
-export const onScreen: RenderOptions = { placeholders: true };
+/** Rendering on screen at `zoom`. */
+export function onScreen(zoom: number): RenderOptions {
+  return { placeholders: true, zoom };
+}
 
-export const forExport: RenderOptions = { placeholders: false };
+// An export is drawn at 100%.
+export const forExport: RenderOptions = { placeholders: false, zoom: 1 };
 
 // A dash and the gap after it, in stroke widths. Lines have round ends, which reach half a stroke width past each end
 // of a dash, so each dash shows a stroke width longer than set here, and each gap a stroke width shorter. A dash of 0
@@ -189,14 +198,19 @@ function renderArrowhead({ heads, points, style }: ArrowToRender, end: EndName):
   ];
 }
 
-// A thin white outline drawn under an Arrow's Label's text, so the text stays readable where it crosses a Shape's lines,
-// such as when the Arrow runs over a Container's edge.
-const labelOutline: SvgElement["attributes"] = {
-  stroke: "#ffffff",
-  "stroke-width": 2,
-  "stroke-linejoin": "round",
-  "paint-order": "stroke",
-};
+// How wide, in pixels, the white outline drawn under an Arrow's Label's text is, so the text stays readable where it
+// crosses a Shape's lines, such as when the Arrow runs over a Container's edge. Half of it shows around each letter, and
+// it is as thin at any zoom.
+const labelOutlinePixels = 2;
+
+function labelOutline({ zoom }: RenderOptions): SvgElement["attributes"] {
+  return {
+    stroke: "#ffffff",
+    "stroke-width": labelOutlinePixels / zoom,
+    "stroke-linejoin": "round",
+    "paint-order": "stroke",
+  };
+}
 
 // How far, in Sketch units, the region an Arrow's line is clipped to reaches past the line, enough for any stroke and
 // its round ends.
@@ -227,7 +241,7 @@ function renderArrow(arrow: ArrowToRender, options: RenderOptions): SvgElement {
     ...renderArrowLine(arrow),
     ...renderArrowhead(arrow, "start"),
     ...renderArrowhead(arrow, "end"),
-    ...(labelHidden ? [] : renderLabel(label, "center", style, labelOutline)),
+    ...(labelHidden ? [] : renderLabel(label, "center", style, labelOutline(options))),
   ]);
 }
 

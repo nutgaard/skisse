@@ -14,6 +14,7 @@ import {
   drawRectangle,
   keyDown,
   newEditor,
+  pinch,
   pointerDown,
   pointerMove,
   press,
@@ -168,6 +169,20 @@ describe("drawing an Arrow's Label", () => {
       "stroke-linejoin": "round",
       "paint-order": "stroke",
     });
+  });
+
+  test("keeps the outline as thin on screen at any zoom", () => {
+    const zoomedIn = apply(withLabel(longArrow(), "HTTPS"), pinch({ x: 0, y: 0 }, 4));
+
+    const [text] = arrowElements(zoomedIn, "shape-1").filter(({ tag }) => tag === "text");
+
+    expect(text?.attributes["stroke-width"]).toBe(0.5);
+  });
+
+  test("outlines the text in the export as on screen at 100%", () => {
+    const zoomedIn = apply(withLabel(longArrow(), "HTTPS"), pinch({ x: 0, y: 0 }, 4));
+
+    expect(exportSvg(sketch(zoomedIn), fixedWidthTextMeasurer)).toContain('stroke="#ffffff" stroke-width="2"');
   });
 
   test("leaves the line out around the text, so it doesn't run through it, but covers nothing behind it", () => {

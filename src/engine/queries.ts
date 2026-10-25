@@ -394,7 +394,7 @@ export function rendering(state: EditorState): SvgElement {
         : [];
   const placed = drawOrderLifting(state.sketch, liftedWhileDragging(state));
   return renderShapes([...shapesToRender(state.sketch, placed, measureText), ...beingDrawn], measureText, {
-    ...onScreen,
+    ...onScreen(state.viewport.zoom),
     hiddenLabel: interaction.kind === "editingLabel" ? interaction.shapeId : undefined,
   });
 }
