@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { Arrow } from "./arrow";
 import type { Sketch } from "./editor";
-import { arrows, canRedo, canUndo, labelLayout, rendering, shapeStyle, shapeTree, sketch } from "./queries";
+import { arrows, canRedo, canUndo, labelLayout, rendering, shapeStyle, shapeTree, sketch, viewport } from "./queries";
 import {
   apply,
   boundsById,
@@ -29,6 +29,13 @@ describe("loading a Sketch", () => {
 
     expect(canUndo(loaded)).toBe(false);
     expect(canRedo(loaded)).toBe(false);
+  });
+
+  test("opens at the given viewport, with nothing to undo", () => {
+    const loaded = newEditor(sketch(twoRectangles()), { x: -40, y: 25, zoom: 2 });
+
+    expect(viewport(loaded)).toEqual({ x: -40, y: 25, zoom: 2 });
+    expect(canUndo(loaded)).toBe(false);
   });
 
   test("a Shape drawn after loading gets an ID of its own", () => {

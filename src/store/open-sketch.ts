@@ -1,7 +1,8 @@
-import { emptySketch, type Sketch } from "../engine";
+import { emptySketch, type Sketch, type Viewport } from "../engine";
 import type { SketchId, SketchStore } from "./sketch-store";
 
-export type OpenSketch = { readonly id: SketchId; readonly sketch: Sketch };
+/** An open Sketch, and where it was shown when last open, if it was. */
+export type OpenSketch = { readonly id: SketchId; readonly sketch: Sketch; readonly viewport?: Viewport };
 
 function remember(store: SketchStore, opened: OpenSketch): OpenSketch {
   store.rememberOpened(opened.id);
@@ -24,7 +25,7 @@ export function openFirst(store: SketchStore, candidates: readonly (SketchId | u
     .filter((id) => id !== undefined)
     .map((id) => ({ id, sketch: store.load(id) }))
     .find((candidate): candidate is OpenSketch => candidate.sketch !== undefined);
-  return found ? remember(store, found) : openNew(store);
+  return found ? remember(store, { ...found, viewport: store.loadViewport(found.id) }) : openNew(store);
 }
 
 function allIds(store: SketchStore): readonly SketchId[] {

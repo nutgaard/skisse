@@ -217,11 +217,14 @@ type EditorProps = {
   readonly name: string;
   /** The Sketch to open. A different Sketch needs a new Editor, so its undo history starts afresh. */
   readonly initialSketch: Sketch;
+  /** Where the Sketch was shown when last open, or `undefined` to show it at 100% from its origin. */
+  readonly initialViewport: Viewport | undefined;
   readonly onSave: (sketch: Sketch) => void;
+  readonly onSaveViewport: (viewport: Viewport) => void;
 };
 
-export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
-  const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, initialSketch));
+export function Editor({ deps, name, initialSketch, initialViewport, onSave, onSaveViewport }: EditorProps) {
+  const [state, dispatch] = useReducer(update, undefined, () => createEditor(deps, initialSketch, initialViewport));
   // The state as last rendered, for listeners added once that need to read it, such as copying.
   const stateRef = useRef(state);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -239,6 +242,7 @@ export function Editor({ deps, name, initialSketch, onSave }: EditorProps) {
   const exportedSvg = useMemo(() => exportSvg(finishedSketch, deps.measureText), [finishedSketch, deps]);
 
   useAutosave(finishedSketch, onSave);
+  useAutosave(view, onSaveViewport);
 
   useEffect(() => {
     stateRef.current = state;

@@ -1,4 +1,4 @@
-import type { Sketch } from "../engine";
+import type { Sketch, Viewport } from "../engine";
 
 export type SketchId = string;
 
@@ -18,6 +18,11 @@ export type SketchStore = {
   /** Saves over an existing Sketch. A deleted Sketch stays deleted, so a late save can't bring it back. */
   readonly save: (id: SketchId, sketch: Sketch) => void;
   readonly rename: (id: SketchId, name: string) => void;
+  /** Where the Sketch was shown when last open. It is kept apart from the Sketch, so it is never undone or exported. */
+  readonly loadViewport: (id: SketchId) => Viewport | undefined;
+  /** Like `save`, ignored for a deleted Sketch. */
+  readonly saveViewport: (id: SketchId, viewport: Viewport) => void;
+  /** Deletes the Sketch and its viewport. */
   readonly delete: (id: SketchId) => void;
   /** The Sketch opened last, so it can be opened again after a reload. */
   readonly lastOpened: () => SketchId | undefined;

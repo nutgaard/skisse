@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import type { Dependencies, Sketch } from "../engine";
+import type { Dependencies, Sketch, Viewport } from "../engine";
 import { deleteSketch, openAsNew, openFirst, openNew, type OpenSketch } from "../store/open-sketch";
 import type { SketchStore } from "../store/sketch-store";
 import { Editor } from "./Editor";
@@ -24,10 +24,19 @@ export function App({ deps, store, openAtStart }: AppProps) {
   };
 
   const onSave = useCallback((sketch: Sketch) => store.save(openId, sketch), [store, openId]);
+  const onSaveViewport = useCallback((viewport: Viewport) => store.saveViewport(openId, viewport), [store, openId]);
 
   return (
     <>
-      <Editor key={openId} deps={deps} name={openName} initialSketch={current.sketch} onSave={onSave} />
+      <Editor
+        key={openId}
+        deps={deps}
+        name={openName}
+        initialSketch={current.sketch}
+        initialViewport={current.viewport}
+        onSave={onSave}
+        onSaveViewport={onSaveViewport}
+      />
       <SketchList
         entries={entries}
         openId={openId}

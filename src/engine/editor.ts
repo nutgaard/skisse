@@ -321,11 +321,15 @@ function completeShapes(sketch: Sketch): Sketch {
 }
 
 /**
- * A fresh editor on the `saved` Sketch, a new empty one by default. Nothing is selected and there is nothing to undo.
- * Sketches saved before Arrows belonged to Containers have every Arrow at the top level, and each joins the Container
- * it belongs to.
+ * A fresh editor on the `saved` Sketch, a new empty one by default, shown at `shown`, by default 100% from the
+ * Sketch's origin. Nothing is selected and there is nothing to undo. Sketches saved before Arrows belonged to
+ * Containers have every Arrow at the top level, and each joins the Container it belongs to.
  */
-export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): EditorState {
+export function createEditor(
+  deps: Dependencies,
+  saved: Sketch = emptySketch,
+  shown: viewport.Viewport = viewport.initialViewport,
+): EditorState {
   const sketch = settleArrows(completeShapes(saved), deps.measureText);
   return {
     deps,
@@ -336,7 +340,7 @@ export function createEditor(deps: Dependencies, saved: Sketch = emptySketch): E
     heads: defaultHeads,
     selection: [],
     interaction: idle,
-    viewport: viewport.initialViewport,
+    viewport: shown,
     spaceHeld: false,
     pointer: undefined,
     nextIdSequence: 1,

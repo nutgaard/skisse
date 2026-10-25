@@ -1,9 +1,12 @@
-import type { Sketch } from "../engine";
+import type { Sketch, Viewport } from "../engine";
 import type { SketchEntry, SketchId, SketchStore } from "./sketch-store";
 
 const listKey = "skisse:sketches";
 function sketchKey(id: SketchId) {
   return `skisse:sketch:${id}`;
+}
+function viewportKey(id: SketchId) {
+  return `skisse:viewport:${id}`;
 }
 const lastOpenedKey = "skisse:last-opened";
 
@@ -15,6 +18,17 @@ function isObject(value: unknown): value is Record<string, unknown> {
 // counts as not there instead of breaking the app at start.
 function isSketch(value: unknown): value is Sketch {
   return isObject(value) && isObject(value.shapes);
+}
+
+function isViewport(value: unknown): value is Viewport {
+  return (
+    isObject(value) &&
+    Number.isFinite(value.x) &&
+    Number.isFinite(value.y) &&
+    typeof value.zoom === "number" &&
+    Number.isFinite(value.zoom) &&
+    value.zoom > 0
+  );
 }
 
 function isEntryList(value: unknown): value is readonly SketchEntry[] {
@@ -68,9 +82,14 @@ export function browserSketchStore(): SketchStore {
       if (exists(id)) write(sketchKey(id), sketch);
     },
     rename: (id, name) => write(listKey, list().map((entry) => (entry.id === id ? { ...entry, name } : entry))),
+    loadViewport: (id) => (exists(id) ? read(viewportKey(id), isViewport) : undefined),
+    saveViewport: (id, viewport) => {
+      if (exists(id)) write(viewportKey(id), viewport);
+    },
     delete: (id) => {
       write(listKey, list().filter((entry) => entry.id !== id));
       localStorage.removeItem(sketchKey(id));
+      localStorage.removeItem(viewportKey(id));
     },
     lastOpened: () => localStorage.getItem(lastOpenedKey) ?? undefined,
     rememberOpened: (id) => localStorage.setItem(lastOpenedKey, id),
