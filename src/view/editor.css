@@ -305,6 +305,22 @@ body,
   border-radius: 8px;
 }
 
+.sketch-list-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.sketch-import-error {
+  align-self: stretch;
+  margin: 0;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: #c92a2a;
+  background: #fff5f5;
+  border-radius: 6px;
+  overflow-wrap: anywhere;
+}
+
 .sketch-list ul {
   align-self: stretch;
   margin: 0;

@@ -15,6 +15,8 @@ export type {
 } from "./editor";
 export { exportSvg } from "./export";
 export { gridSize } from "./grid";
+export { exportJson, importJson } from "./json";
+export type { JsonImport } from "./json";
 export { labelFontFamily } from "./label";
 export type { LabelLine } from "./label";
 export { pathData, regionWithHole } from "./path";

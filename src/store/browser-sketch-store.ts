@@ -44,15 +44,21 @@ function newName(entries: readonly SketchEntry[], number = entries.length + 1): 
   return entries.some(({ name }) => name === `Sketch ${number}`) ? newName(entries, number + 1) : `Sketch ${number}`;
 }
 
+// `name`, or if a Sketch in the list has it already, "name (2)", "name (3)" and so on.
+function freeName(entries: readonly SketchEntry[], name: string, number = 1): string {
+  const candidate = number === 1 ? name : `${name} (${number})`;
+  return entries.some((entry) => entry.name === candidate) ? freeName(entries, name, number + 1) : candidate;
+}
+
 /** A Sketch store on top of the browser's local storage. */
 export function browserSketchStore(): SketchStore {
   const list = (): readonly SketchEntry[] => read(listKey, isEntryList) ?? [];
   const exists = (id: SketchId) => list().some((entry) => entry.id === id);
   return {
     list,
-    create: (sketch) => {
+    create: (sketch, name) => {
       const entries = list();
-      const entry: SketchEntry = { id: crypto.randomUUID(), name: newName(entries) };
+      const entry: SketchEntry = { id: crypto.randomUUID(), name: name === undefined ? newName(entries) : freeName(entries, name) };
       write(sketchKey(entry.id), sketch);
       write(listKey, [...entries, entry]);
       return entry;

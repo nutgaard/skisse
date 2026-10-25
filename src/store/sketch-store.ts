@@ -9,8 +9,11 @@ export type SketchEntry = { readonly id: SketchId; readonly name: string };
 export type SketchStore = {
   /** Every Sketch, oldest first. */
   readonly list: () => readonly SketchEntry[];
-  /** Adds `sketch` as a new entry with a name of its own. */
-  readonly create: (sketch: Sketch) => SketchEntry;
+  /**
+   * Adds `sketch` as a new entry named `name`, told apart by a number when another Sketch has that name already. Without
+   * a name, it gets one of its own.
+   */
+  readonly create: (sketch: Sketch, name?: string) => SketchEntry;
   readonly load: (id: SketchId) => Sketch | undefined;
   /** Saves over an existing Sketch. A deleted Sketch stays deleted, so a late save can't bring it back. */
   readonly save: (id: SketchId, sketch: Sketch) => void;

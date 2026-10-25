@@ -1,6 +1,6 @@
 import { useCallback, useState } from "react";
 import type { Dependencies, Sketch } from "../engine";
-import { deleteSketch, openFirst, openNew, type OpenSketch } from "../store/open-sketch";
+import { deleteSketch, openAsNew, openFirst, openNew, type OpenSketch } from "../store/open-sketch";
 import type { SketchStore } from "../store/sketch-store";
 import { Editor } from "./Editor";
 import { SketchList } from "./SketchList";
@@ -32,6 +32,7 @@ export function App({ deps, store, openAtStart }: AppProps) {
         entries={entries}
         openId={openId}
         onCreate={() => show(openNew(store))}
+        onImport={(sketch, name) => show(openAsNew(store, sketch, name))}
         onOpen={(id) => {
           if (id !== openId) show(openFirst(store, [id]));
         }}

@@ -6,8 +6,10 @@ import type { Bounds, Point } from "./geometry";
  */
 export type ElbowEnd = { readonly point: Point; readonly out?: Point; readonly box?: Bounds };
 
+export const axes = ["x", "y"] as const;
+
 /** The axis the middle segment of an elbow path is moved along: x for an upright segment, y for a level one. */
-export type Axis = "x" | "y";
+export type Axis = (typeof axes)[number];
 
 /** How far the user dragged the middle segment of an elbow path from where it would be on its own. */
 export type ElbowOffset = { readonly axis: Axis; readonly by: number };

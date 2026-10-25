@@ -8,9 +8,14 @@ function remember(store: SketchStore, opened: OpenSketch): OpenSketch {
   return opened;
 }
 
+/** Opens `sketch`, such as one imported from a file, as a new entry named `name`, or with a name of its own. */
+export function openAsNew(store: SketchStore, sketch: Sketch, name?: string): OpenSketch {
+  return remember(store, { id: store.create(sketch, name).id, sketch });
+}
+
 /** Opens a new empty Sketch. */
 export function openNew(store: SketchStore): OpenSketch {
-  return remember(store, { id: store.create(emptySketch).id, sketch: emptySketch });
+  return openAsNew(store, emptySketch);
 }
 
 /** Opens the first of `candidates` that is still in the store, or a new empty Sketch if none is. */

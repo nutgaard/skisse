@@ -17,8 +17,10 @@ import { isArrow, isSymbolShape } from "./shape-kind";
 import type { Style } from "./style";
 import { drawOrder } from "./tree";
 
+export const routings = ["straight", "elbow", "curved"] as const;
+
 /** How an Arrow's path runs between its ends. `curved` is kept for later, and drawn straight until then. */
-export type Routing = "straight" | "elbow" | "curved";
+export type Routing = (typeof routings)[number];
 
 /** Where an Arrow end is. A bound end follows its Shape when the Shape moves or is resized. */
 export type ArrowEnd =
