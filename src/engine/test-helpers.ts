@@ -17,8 +17,8 @@ import type { SymbolId } from "./symbols";
 import type { Tool } from "./tools";
 import type { Size, Viewport } from "./viewport";
 
-export function newEditor(sketch?: Sketch, shown?: Viewport): EditorState {
-  return createEditor({ measureText: fixedWidthTextMeasurer, generateId: sequentialIds }, sketch, shown);
+export function newEditor(sketch?: Sketch, initialViewport?: Viewport): EditorState {
+  return createEditor({ measureText: fixedWidthTextMeasurer, generateId: sequentialIds }, sketch, initialViewport);
 }
 
 export function apply(state: EditorState, ...inputs: readonly Input[]): EditorState {

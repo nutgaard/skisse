@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 
-// How long, in milliseconds, a value, such as the Sketch, must stay unchanged before it is saved.
+// How long, in milliseconds, a value must stay unchanged before it is saved.
 const autosaveDelay = 300;
 
 // Saves `current` shortly after each change, and straight away when the Editor closes or the page is left, so a change
