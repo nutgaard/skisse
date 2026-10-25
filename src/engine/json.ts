@@ -10,20 +10,18 @@ import { horizontalAlignments, verticalAlignments } from "./symbols/symbol";
 // Marks a file as a Skisse Sketch, so any other JSON is never taken for one.
 const format = "skisse/sketch";
 
-/** A JSON file's top-level object. */
-type JsonDocument = Readonly<Record<string, unknown>>;
+// The top-level object of a JSON file.
+type JsonFile = Readonly<Record<string, unknown>>;
 
 /** Turns a JSON file in one format version into one in the next. */
-export type Migration = (document: JsonDocument) => JsonDocument;
+export type Migration = (file: JsonFile) => JsonFile;
 
-/**
- * The migration from each format version to the next, oldest first. The first version is 1, and the current one comes
- * after the last migration. A change to the format adds a migration here, so files written before it still import.
- */
+// The migration from each format version to the next, oldest first. The first version is 1, and the current one comes
+// after the last migration. A change to the format adds a migration here, so files written before it still import.
 const migrations: readonly Migration[] = [];
 
-function latestVersion(migrations: readonly Migration[]): number {
-  return migrations.length + 1;
+function latestVersion(chain: readonly Migration[]): number {
+  return chain.length + 1;
 }
 
 /** What importing a JSON file gives: the Sketch in it, or why it can't be imported, to show to the user. */
@@ -39,13 +37,13 @@ function isObject(value: unknown): value is Readonly<Record<string, unknown>> {
 }
 
 // What is wrong with a value read from a file: the field inside it that is wrong, if any, and what is wrong with that.
-type Problem = { readonly field: readonly string[]; readonly problem: string };
+type Problem = { readonly field: readonly string[]; readonly message: string };
 
 // Gives what is wrong with a value read from a file, or `undefined` when nothing is.
 type Check = (value: unknown) => Problem | undefined;
 
-function wrong(problem: string): Problem {
-  return { field: [], problem };
+function wrong(message: string): Problem {
+  return { field: [], message };
 }
 
 // The problem as one with the field `name` of the value it is in.
@@ -61,11 +59,11 @@ function quoted(value: unknown): string {
   return JSON.stringify(value);
 }
 
-// Checks that a value is there and passes `test`, or else has the problem `problem` gives for it.
-function check(test: (value: unknown) => boolean, problem: (value: unknown) => string): Check {
+// Checks that a value is there and passes `test`, or else is wrong as `message` says for it.
+function checkThat(test: (value: unknown) => boolean, message: (value: unknown) => string): Check {
   return (value) => {
     if (value === undefined) return wrong("is missing");
-    return test(value) ? undefined : wrong(problem(value));
+    return test(value) ? undefined : wrong(message(value));
   };
 }
 
@@ -74,25 +72,33 @@ function optional(check: Check): Check {
   return (value) => (value === undefined ? undefined : check(value));
 }
 
-const string = check(
+const string = checkThat(
   (value) => typeof value === "string",
   () => "should be text",
 );
 
-const number = check(
-  (value) => typeof value === "number",
-  () => "should be a number",
+// JSON has no infinite numbers, but too large a one reads as one, which can't be written back.
+function isNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+const number = checkThat(isNumber, () => "should be a number");
+
+// The width or height of a Shape.
+const size = checkThat(
+  (value) => isNumber(value) && value > 0,
+  () => "should be a number above 0",
 );
 
 function between(min: number, max: number): Check {
-  return check(
-    (value) => typeof value === "number" && value >= min && value <= max,
+  return checkThat(
+    (value) => isNumber(value) && value >= min && value <= max,
     () => `should be a number from ${min} to ${max}`,
   );
 }
 
 function oneOf(values: readonly unknown[]): Check {
-  return check(
+  return checkThat(
     (value) => values.includes(value),
     (value) => `${quoted(value)} should be one of ${values.map(quoted).join(", ")}`,
   );
@@ -113,7 +119,7 @@ function kinds(checks: Readonly<Record<string, Check>>): Check {
   return (value) => kind(value) ?? checks[(value as { kind: string }).kind]?.(value);
 }
 
-const symbol = check(
+const symbol = checkThat(
   (value) => (symbolIds as readonly unknown[]).includes(value),
   (value) => (typeof value === "string" ? `${quoted(value)} isn't a known Symbol` : "should be text"),
 );
@@ -135,7 +141,7 @@ const shapeFields = { id: string, parent: optional(string), z: number, style };
 const symbolShape = object({
   symbol,
   ...shapeFields,
-  bounds: object({ x: number, y: number, width: number, height: number }),
+  bounds: object({ x: number, y: number, width: size, height: size }),
   label: object({
     text: string,
     alignment: object({ horizontal: oneOf(horizontalAlignments), vertical: oneOf(verticalAlignments) }),
@@ -177,7 +183,7 @@ function parentMisfit(shapes: Shapes, shape: Shape): Problem | undefined {
   const { parent } = shape;
   if (parent === undefined) return undefined;
   const container = shapeIn(shapes, parent);
-  const problem =
+  const message =
     container === undefined
       ? `${quoted(parent)} isn't a Shape in the file`
       : isArrow(container) || !symbolDefinition(container.symbol).canBeContainer
@@ -185,7 +191,7 @@ function parentMisfit(shapes: Shapes, shape: Shape): Problem | undefined {
         : reaches(shapes, parent, shape.id, Object.keys(shapes).length)
           ? `${quoted(parent)} is inside it`
           : undefined;
-  return problem === undefined ? undefined : inField("parent", wrong(problem));
+  return message === undefined ? undefined : inField("parent", wrong(message));
 }
 
 // What is wrong with the Shape an Arrow end is bound to, if it is bound at all.
@@ -214,8 +220,8 @@ function misfit(shapes: Shapes, id: ShapeId, shape: Shape): Problem | undefined 
   return parentMisfit(shapes, shape) ?? endMisfit(shapes, shape);
 }
 
-function shapeError(id: ShapeId, { field, problem }: Problem): string {
-  return `Shape ${quoted(id)} in the file is invalid: ${field.length === 0 ? "it" : field.join(".")} ${problem}.`;
+function shapeError(id: ShapeId, { field, message }: Problem): string {
+  return `Shape ${quoted(id)} in the file is invalid: ${field.length === 0 ? "it" : field.join(".")} ${message}.`;
 }
 
 // The Sketch, if the Shapes are as Skisse writes them in the current format version, or else what is wrong with them.
@@ -247,10 +253,10 @@ function parse(text: string): unknown {
  * can't be imported. Tests can pass `chain` to take the place of the real migrations.
  */
 export function importJson(text: string, chain: readonly Migration[] = migrations): JsonImport {
-  const document = parse(text);
-  if (document === undefined) return { error: "The file isn't valid JSON." };
-  if (!isObject(document) || document.format !== format) return { error: "The file isn't a Skisse Sketch." };
-  const { version } = document;
+  const file = parse(text);
+  if (file === undefined) return { error: "The file isn't valid JSON." };
+  if (!isObject(file) || file.format !== format) return { error: "The file isn't a Skisse Sketch." };
+  const { version } = file;
   if (typeof version !== "number" || !Number.isInteger(version) || version < 1) {
     return { error: "The file has no valid format version." };
   }
@@ -259,6 +265,6 @@ export function importJson(text: string, chain: readonly Migration[] = migration
     const newer = `The file is in format version ${version}, from a newer Skisse than this one`;
     return { error: `${newer}, which reads up to version ${latest}. Reload the page to update Skisse.` };
   }
-  const migrated = chain.slice(version - 1).reduce((migrating, migrate) => migrate(migrating), document);
+  const migrated = chain.slice(version - 1).reduce((migrating, migrate) => migrate(migrating), file);
   return sketchOf(migrated.shapes);
 }

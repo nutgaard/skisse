@@ -26,11 +26,11 @@ describe("format versions", () => {
   // Made-up earlier format versions, each with the migration to the next: the first kept Shapes as a list under
   // `elements`, the second keyed them by ID under `elements`, and the third, the current one here, is the real one.
   const migrations: readonly Migration[] = [
-    (document) => ({
-      ...document,
-      elements: Object.fromEntries((document.elements as { id: string }[]).map((shape) => [shape.id, shape])),
+    (file) => ({
+      ...file,
+      elements: Object.fromEntries((file.elements as { id: string }[]).map((shape) => [shape.id, shape])),
     }),
-    ({ elements, ...document }) => ({ ...document, shapes: elements }),
+    ({ elements, ...file }) => ({ ...file, shapes: elements }),
   ];
   const exported = sketch(twoRectangles());
 
@@ -109,8 +109,14 @@ describe("importing a Sketch with Shapes that are not as Skisse writes them", ()
     [
       "a Shape with Bounds of the wrong type",
       "shape-2",
-      (shape) => ({ ...shape, bounds: { x: 100, y: 100, width: "wide", height: 80 } }),
-      "bounds.width should be a number",
+      (shape) => ({ ...shape, bounds: { x: "left", y: 100, width: 100, height: 80 } }),
+      "bounds.x should be a number",
+    ],
+    [
+      "a Shape with no width",
+      "shape-2",
+      (shape) => ({ ...shape, bounds: { x: 100, y: 100, width: 0, height: 80 } }),
+      "bounds.width should be a number above 0",
     ],
     [
       "a Shape with a Label of the wrong type",
@@ -148,6 +154,17 @@ describe("importing a Sketch with Shapes that are not as Skisse writes them", ()
     expect(importJson(changedShape(id, change))).toEqual({
       error: `Shape "${id}" in the file is invalid: ${problem}.`,
     });
+  });
+});
+
+test("a Shape with a number too large to be written back is rejected", () => {
+  const exported = exportJson(sketch(diagram()));
+  // shape-2 is the only Shape 100 wide.
+  const text = exported.replace('"width": 100,', '"width": 1e999,');
+
+  expect(text).not.toBe(exported);
+  expect(importJson(text)).toEqual({
+    error: 'Shape "shape-2" in the file is invalid: bounds.width should be a number above 0.',
   });
 });
 
