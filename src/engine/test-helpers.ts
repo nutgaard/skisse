@@ -15,10 +15,10 @@ import { fixedWidthTextMeasurer, sequentialIds } from "./fakes";
 import { selection, shapes, type ShapeTree } from "./queries";
 import type { SymbolId } from "./symbols";
 import type { Tool } from "./tools";
-import type { Size } from "./viewport";
+import type { Size, Viewport } from "./viewport";
 
-export function newEditor(sketch?: Sketch): EditorState {
-  return createEditor({ measureText: fixedWidthTextMeasurer, generateId: sequentialIds }, sketch);
+export function newEditor(sketch?: Sketch, initialViewport?: Viewport): EditorState {
+  return createEditor({ measureText: fixedWidthTextMeasurer, generateId: sequentialIds }, sketch, initialViewport);
 }
 
 export function apply(state: EditorState, ...inputs: readonly Input[]): EditorState {

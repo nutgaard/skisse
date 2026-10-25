@@ -1,5 +1,5 @@
 import { useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
-import { importJson, type Sketch } from "../engine";
+import { importJson, type ImportedSketch } from "../engine";
 import type { SketchEntry, SketchId } from "../store/sketch-store";
 
 type SketchListProps = {
@@ -7,7 +7,7 @@ type SketchListProps = {
   readonly openId: SketchId;
   readonly onCreate: () => void;
   /** Gets a Sketch imported from a file, and the file's name without its extension, unless that is blank. */
-  readonly onImport: (sketch: Sketch, name: string | undefined) => void;
+  readonly onImport: (imported: ImportedSketch, name: string | undefined) => void;
   readonly onOpen: (id: SketchId) => void;
   readonly onRename: (id: SketchId, name: string) => void;
   readonly onDelete: (id: SketchId) => void;
@@ -83,7 +83,7 @@ export function SketchList({ entries, openId, onCreate, onImport, onOpen, onRena
     const text = await file.text().catch(() => undefined);
     const imported = text === undefined ? { error: "The file couldn't be read." } : importJson(text);
     if ("error" in imported) setImportError(imported.error);
-    else onImport(imported.sketch, importedName(file.name));
+    else onImport(imported, importedName(file.name));
   };
 
   const toggle = () => {

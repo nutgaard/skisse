@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef } from "react";
-import type { Sketch } from "../engine";
 
-// How long, in milliseconds, the Sketch must stay unchanged before it is saved.
+// How long, in milliseconds, a value must stay unchanged before it is saved.
 const autosaveDelay = 300;
 
-// Saves the Sketch shortly after each change, and straight away when the Editor closes or the page is left, so a
-// change made just before is never lost.
-export function useAutosave(current: Sketch, save: (sketch: Sketch) => void) {
+// Saves `current` shortly after each change, and straight away when the Editor closes or the page is left, so a change
+// made just before is never lost. A change is a new value, not the same one again.
+export function useAutosave<T>(current: T, save: (value: T) => void) {
   const saved = useRef(current);
-  const unsaved = useRef<Sketch | undefined>(undefined);
+  const unsaved = useRef<T | undefined>(undefined);
 
   const flush = useCallback(() => {
     if (unsaved.current === undefined) return;
