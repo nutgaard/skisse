@@ -29,6 +29,7 @@ import {
   containsBounds,
   distance,
   enclosingBounds,
+  sameBounds,
   sideOf,
   spanAtLeast,
   translate,
@@ -292,29 +293,28 @@ export const emptySketch: Sketch = { shapes: {} };
 // default for the rest. Those saved before Containers have every Shape at the top level, stacked in the order saved,
 // and a JSON Sketch has no parent at the top level at all. Arrows came after all of these. Those saved before Arrows
 // had heads and Labels get the default heads and an empty Label halfway along.
-function completeShapes(sketch: Sketch): Sketch {
-  const complete = (
-    shape: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds">,
-    index: number,
-  ): SymbolShape => ({
-    ...newShape(shape.symbol, shape.bounds, defaultStyle),
+// Shapes copied from an older version of Skisse are completed the same way. `index` is the Shape's place in the order
+// saved or copied.
+function completeShape(shape: Shape, index: number): Shape {
+  if (isArrow(shape)) {
+    const arrow: Omit<Arrow, "heads" | "label"> & Partial<Pick<Arrow, "heads" | "label">> = shape;
+    return { heads: defaultHeads, label: newArrowLabel, ...arrow };
+  }
+  const partial: Partial<SymbolShape> & Pick<SymbolShape, "id" | "symbol" | "bounds"> = shape;
+  return {
+    ...newShape(partial.symbol, partial.bounds, defaultStyle),
     parent: undefined,
     z: index,
-    ...shape,
-    style: { ...defaultStyle, ...shape.style },
-  });
-  const completeArrow = (arrow: Omit<Arrow, "heads" | "label"> & Partial<Pick<Arrow, "heads" | "label">>): Arrow => ({
-    heads: defaultHeads,
-    label: newArrowLabel,
-    ...arrow,
-  });
+    ...partial,
+    style: { ...defaultStyle, ...partial.style },
+  };
+}
+
+function completeShapes(sketch: Sketch): Sketch {
   return {
     ...sketch,
     shapes: Object.fromEntries(
-      Object.entries(sketch.shapes).map(([id, shape], index) => [
-        id,
-        isArrow(shape) ? completeArrow(shape) : complete(shape, index),
-      ]),
+      Object.entries(sketch.shapes).map(([id, shape], index) => [id, completeShape(shape, index)]),
     ),
   };
 }
@@ -1311,9 +1311,6 @@ function deleteSelection(state: EditorState): EditorState {
   return removeShapes(state, state.selection);
 }
 
-// How far pasted Shapes land from where they were copied, so the copies show beside the originals.
-const pasteOffset: Point = { x: gridSize, y: gridSize };
-
 // A new ID for each copied Shape, by its ID where it was copied from, and the sequence number after the last one.
 function newIds(state: EditorState, copied: readonly Shape[]): { ids: Record<ShapeId, ShapeId>; next: number } {
   return copied.reduce(
@@ -1325,46 +1322,70 @@ function newIds(state: EditorState, copied: readonly Shape[]): { ids: Record<Sha
   );
 }
 
-// The copy of `shape`, with the new IDs and offset to where it is pasted, but for its place among the other Shapes when
-// it was copied on its own. `undefined` for an Arrow bound to a Shape that wasn't copied, which copying never gives.
-function pastedCopy(shape: Shape, ids: Readonly<Record<ShapeId, ShapeId>>): Shape | undefined {
-  const id = ids[shape.id];
-  const parent = shape.parent === undefined ? undefined : ids[shape.parent];
-  if (id === undefined) return undefined;
-  if (isSymbolShape(shape)) return { ...shape, id, parent, bounds: translate(shape.bounds, pasteOffset) };
-  const pastedEnd = (end: ArrowEnd): ArrowEnd | undefined => {
-    if (end.kind === "floating") return translateEnd(end, pasteOffset);
-    const bound = ids[end.shape];
-    return bound === undefined ? undefined : { ...end, shape: bound };
-  };
-  const start = pastedEnd(shape.start);
-  const end = pastedEnd(shape.end);
-  return start && end ? { ...shape, id, parent, start, end } : undefined;
+// Whether `a` hides `b`: both made from the same Symbol with the same Bounds, or both Arrows with both ends floating at
+// the same points.
+function hides(a: Shape, b: Shape): boolean {
+  if (isSymbolShape(a)) return isSymbolShape(b) && a.symbol === b.symbol && sameBounds(a.bounds, b.bounds);
+  const sameFloating = (end: ArrowEnd, other: ArrowEnd) =>
+    end.kind === "floating" && other.kind === "floating" && distance(end.at, other.at) === 0;
+  return isArrow(b) && sameFloating(a.start, b.start) && sameFloating(a.end, b.end);
 }
 
-// Pasted Shapes get new IDs, land one grid step from where they were copied, and those copied on their own become the
-// selection. Those join the Container under them, as a new Shape does, and an Arrow the Container holding both its
-// ends, on top of the Shapes there. The Shapes inside them keep their places in them.
+// Pasted Shapes land one grid step down and right from where they were copied, so the copies show beside the
+// originals. While the outermost of them that move themselves would all land on Shapes that they hide, such as when
+// the same Shapes are pasted again, they go another grid step further along.
+function pasteOffset(state: EditorState, outermost: readonly Shape[], steps = 1): Point {
+  const offset = { x: gridSize * steps, y: gridSize * steps };
+  const landing = outermost.filter(movesItself).map((shape) => translateShape(shape, offset, false));
+  const others = Object.values(state.sketch.shapes);
+  const hidden = landing.length > 0 && landing.every((copy) => others.some((other) => hides(copy, other)));
+  return hidden ? pasteOffset(state, outermost, steps + 1) : offset;
+}
+
+// The copy of `shape` moved by `offset`, with the new IDs, but for its place among the other Shapes when it is
+// outermost. `undefined` for an Arrow bound to a Shape that wasn't copied, which copying never gives.
+function pastedCopy(shape: Shape, ids: Readonly<Record<ShapeId, ShapeId>>, offset: Point): Shape | undefined {
+  const id = ids[shape.id];
+  if (id === undefined) return undefined;
+  const parent = shape.parent === undefined ? undefined : ids[shape.parent];
+  const moved = translateShape(shape, offset, true);
+  if (isSymbolShape(moved)) return { ...moved, id, parent };
+  const rebound = (end: ArrowEnd): ArrowEnd | undefined => {
+    if (end.kind === "floating") return end;
+    const copy = ids[end.shape];
+    return copy === undefined ? undefined : { ...end, shape: copy };
+  };
+  const start = rebound(moved.start);
+  const end = rebound(moved.end);
+  return start && end ? { ...moved, id, parent, start, end } : undefined;
+}
+
+// Pasted Shapes get new IDs, and the outermost of them become the selection. Those join the Container under them, as
+// a new Shape does, or for an Arrow, the Container holding both its ends, on top of the Shapes there. The Shapes inside
+// them keep their places in them.
 function paste(state: EditorState, clipboard: Clipboard): EditorState {
   if (!isIdle(state)) return state;
-  const { ids, next } = newIds(state, clipboard.shapes);
-  const copies = clipboard.shapes.map((shape) => pastedCopy(shape, ids)).filter((shape) => shape !== undefined);
-  const onItsOwn = (shape: Shape) => shape.parent === undefined;
+  const copied = clipboard.shapes.map(completeShape);
+  const { ids, next } = newIds(state, copied);
+  const outermost = copied.filter((shape) => shape.parent === undefined || ids[shape.parent] === undefined);
+  const offset = pasteOffset(state, outermost);
+  const copies = copied.map((shape) => pastedCopy(shape, ids, offset)).filter((shape) => shape !== undefined);
+  const isOutermost = (shape: Shape) => shape.parent === undefined;
   const place = (sketch: Sketch, shape: Shape): Sketch => {
-    if (!onItsOwn(shape)) return addShape(sketch, shape);
+    if (!isOutermost(shape)) return addShape(sketch, shape);
     const parent = isArrow(shape) ? arrowParent(sketch, shape, state.deps.measureText) : containerForNew(state, shape);
     return addShape(sketch, { ...shape, ...onTopIn(sketch, parent) });
   };
-  // The Arrows copied on their own go last, so the Shapes they are bound to are in place to find their Container.
-  const lonelyArrow = (shape: Shape) => onItsOwn(shape) && isArrow(shape);
-  const sketch = [...copies.filter((shape) => !lonelyArrow(shape)), ...copies.filter(lonelyArrow)].reduce(
+  // The outermost Arrows go last, so the Shapes they are bound to are in place to find their Container.
+  const outermostArrow = (shape: Shape) => isOutermost(shape) && isArrow(shape);
+  const sketch = [...copies.filter((shape) => !outermostArrow(shape)), ...copies.filter(outermostArrow)].reduce(
     place,
     state.sketch,
   );
   return {
     ...state,
     sketch,
-    selection: copies.filter(onItsOwn).map(({ id }) => id),
+    selection: copies.filter(isOutermost).map(({ id }) => id),
     nextIdSequence: next,
   };
 }

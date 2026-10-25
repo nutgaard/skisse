@@ -7,11 +7,12 @@ import {
   type KeyInput,
   type Modifiers,
   type PointerInput,
+  type ShapeId,
   type Sketch,
 } from "./editor";
 import type { Point } from "./geometry";
 import { fixedWidthTextMeasurer, sequentialIds } from "./fakes";
-import { selection, shapes } from "./queries";
+import { selection, shapes, type ShapeTree } from "./queries";
 import type { SymbolId } from "./symbols";
 import type { Tool } from "./tools";
 import type { Size } from "./viewport";
@@ -149,6 +150,11 @@ export function twoRectangles(): EditorState {
     { x: 300, y: 100 },
     { x: 400, y: 180 },
   );
+}
+
+/** A Shape in the Shape tree, with the Shapes directly inside it. */
+export function shape(id: ShapeId, ...children: readonly ShapeTree[]): ShapeTree {
+  return { id, children };
 }
 
 export function boundsById(state: EditorState) {

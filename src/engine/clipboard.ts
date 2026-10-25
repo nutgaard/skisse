@@ -1,12 +1,14 @@
-import { boundTo, endPoint, type Arrow, type ArrowEnd } from "./arrow";
+import { boundTo, floatedInPlace, type Arrow } from "./arrow";
 import type { Shape, ShapeId, Sketch, TextMeasurer } from "./editor";
+import type { Bounds, Point } from "./geometry";
 import { isArrow } from "./shape-kind";
 import { symbolIds } from "./symbols";
 import { withDescendants } from "./tree";
 
 /**
  * Shapes copied from a Sketch, to paste into this or another one. Each keeps its ID from there, which the Shapes inside
- * it and the Arrows bound to it refer to. A Shape whose parent is not among them was copied on its own.
+ * it and the Arrows bound to it refer to. A Shape whose parent is not among them is outermost: it was copied itself,
+ * rather than along with its Container.
  */
 export type Clipboard = { readonly shapes: readonly Shape[] };
 
@@ -21,11 +23,7 @@ function detached(sketch: Sketch, arrow: Arrow, copied: readonly ShapeId[], meas
     return shape === undefined || copied.includes(shape);
   });
   if (keepsBindings) return arrow;
-  const float = (end: ArrowEnd): ArrowEnd => {
-    const at = endPoint(sketch, end, measure);
-    return at ? { kind: "floating", at } : end;
-  };
-  return { ...arrow, start: float(arrow.start), end: float(arrow.end) };
+  return { ...arrow, start: floatedInPlace(sketch, arrow.start, measure), end: floatedInPlace(sketch, arrow.end, measure) };
 }
 
 /**
@@ -50,13 +48,26 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-// Only a rough check that the text holds Shapes, as Skisse writes them: an Arrow, or a Shape made from a known Symbol.
+function isPoint(value: unknown): value is Point {
+  return isObject(value) && typeof value.x === "number" && typeof value.y === "number";
+}
+
+function isBounds(value: unknown): value is Bounds {
+  return isObject(value) && [value.x, value.y, value.width, value.height].every((n) => typeof n === "number");
+}
+
+function isEnd(value: unknown): boolean {
+  return isObject(value) && (value.kind === "floating" ? isPoint(value.at) : typeof value.shape === "string");
+}
+
+// Only a rough check that the text holds Shapes as Skisse writes them, with what it takes to place them: an Arrow with
+// its ends, or a Shape made from a known Symbol with its Bounds. What else they lack, such as a style, gets the default,
+// as for a Sketch saved before Shapes had it.
 function isShape(value: unknown): value is Shape {
-  return (
-    isObject(value) &&
-    typeof value.id === "string" &&
-    ("routing" in value || symbolIds.some((symbol) => symbol === value.symbol))
-  );
+  if (!isObject(value) || typeof value.id !== "string") return false;
+  return "routing" in value
+    ? isEnd(value.start) && isEnd(value.end)
+    : symbolIds.some((symbol) => symbol === value.symbol) && isBounds(value.bounds);
 }
 
 /** The Shapes in text from the system clipboard, or `undefined` when it isn't Shapes copied from Skisse. */

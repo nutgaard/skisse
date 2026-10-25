@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
-import type { EditorState, ShapeId } from "./editor";
-import { arrows, clipboardText, selection, shapeTree, sketch, type ShapeTree } from "./queries";
+import type { EditorState } from "./editor";
+import { arrows, clipboardText, selection, shapeTree, sketch } from "./queries";
 import {
   apply,
   boundsById,
@@ -10,6 +10,7 @@ import {
   newEditor,
   press,
   redoInput,
+  shape,
   twoRectangles,
   undoInput,
 } from "./test-helpers";
@@ -23,11 +24,6 @@ function copy(state: EditorState): string {
 
 function paste(state: EditorState, text: string): EditorState {
   return apply(state, { type: "paste", text });
-}
-
-// A Shape in the Shape tree, with the Shapes directly inside it.
-function shape(id: ShapeId, ...children: readonly ShapeTree[]): ShapeTree {
-  return { id, children };
 }
 
 function selectAll(state: EditorState): EditorState {
@@ -91,6 +87,29 @@ describe("copying and pasting", () => {
       "shape-4": { x: 310, y: 110, width: 100, height: 80 },
     });
     expect(selection(state)).toEqual(["shape-3", "shape-4"]);
+  });
+
+  test("pasting the same Shapes again lands each paste one grid step further along, so none hides another", () => {
+    const one = click(twoRectangles(), { x: 150, y: 140 });
+    const copied = copy(one);
+
+    const state = paste(paste(one, copied), copied);
+
+    expect(boundsById(state)).toEqual(
+      expect.objectContaining({
+        "shape-3": { x: 110, y: 110, width: 100, height: 80 },
+        "shape-4": { x: 120, y: 120, width: 100, height: 80 },
+      }),
+    );
+  });
+
+  test("pasting an Arrow alone again lands it one grid step further along", () => {
+    const arrowOnly = click(wiredRectangles(), { x: 250, y: 135 });
+    const copied = copy(arrowOnly);
+
+    const state = paste(paste(arrowOnly, copied), copied);
+
+    expect(arrows(state).find(({ id }) => id === "shape-5")?.start).toEqual({ point: { x: 220, y: 150 } });
   });
 
   test("Shapes pasted into another Sketch keep the Arrows between them bound to the copies", () => {
@@ -176,6 +195,14 @@ describe("pasting text that isn't Shapes copied from Skisse", () => {
     ["plain text", "Orders service"],
     ["JSON without the Skisse marker", JSON.stringify({ shapes: [] })],
     ["JSON with the marker but no Shapes", JSON.stringify({ format: "skisse/shapes", shapes: "none" })],
+    [
+      "JSON with the marker and a Shape without Bounds",
+      JSON.stringify({ format: "skisse/shapes", shapes: [{ id: "shape-1", symbol: "rectangle" }] }),
+    ],
+    [
+      "JSON with the marker and an Arrow without ends",
+      JSON.stringify({ format: "skisse/shapes", shapes: [{ id: "shape-1", routing: "straight" }] }),
+    ],
     ["broken JSON", "{"],
   ])("%s does nothing", (_, text) => {
     const before = wiredRectangles();

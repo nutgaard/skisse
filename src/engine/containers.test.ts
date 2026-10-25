@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import type { EditorState, ShapeId } from "./editor";
 import type { Point } from "./geometry";
-import { arrows, rendering, selection, shapeTree, type ShapeTree } from "./queries";
+import { arrows, rendering, selection, shapeTree } from "./queries";
 import { svgText } from "./svg";
 import {
   apply,
@@ -17,12 +17,8 @@ import {
   pointerMove,
   press,
   selectTool,
+  shape,
 } from "./test-helpers";
-
-// A Shape in the Shape tree, with the Shapes directly inside it.
-function shape(id: ShapeId, ...children: readonly ShapeTree[]): ShapeTree {
-  return { id, children };
-}
 
 function undo(state: EditorState): EditorState {
   return press(state, "z", { meta: true });
