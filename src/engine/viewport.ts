@@ -15,9 +15,9 @@ export function toSketch(viewport: Viewport, screen: Point): Point {
   };
 }
 
-const minimumZoom = 0.1;
+export const minimumZoom = 0.1;
 
-const maximumZoom = 8;
+export const maximumZoom = 8;
 
 function limitZoom(zoom: number): number {
   return Math.max(minimumZoom, Math.min(maximumZoom, zoom));

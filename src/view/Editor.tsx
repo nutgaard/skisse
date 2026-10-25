@@ -472,7 +472,7 @@ export function Editor({ deps, name, initialSketch, initialViewport, onSave, onS
         >
           Export PNG
         </button>
-        <button type="button" onClick={() => downloadJson(exportJson(finishedSketch), name)}>
+        <button type="button" onClick={() => downloadJson(exportJson(finishedSketch, view), name)}>
           Export JSON
         </button>
       </div>

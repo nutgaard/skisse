@@ -1,8 +1,18 @@
 import { describe, expect, test } from "vitest";
 import type { EditorState } from "./editor";
 import { exportJson, importJson, type Migration } from "./json";
-import { sketch } from "./queries";
-import { apply, drawArrow, drawLabelled, drawRectangle, newEditor, press, twoRectangles } from "./test-helpers";
+import { sketch, viewport } from "./queries";
+import {
+  apply,
+  drawArrow,
+  drawLabelled,
+  drawRectangle,
+  newEditor,
+  pinch,
+  press,
+  twoRectangles,
+  wheel,
+} from "./test-helpers";
 
 // A Container labelled Backend with a rectangle, shape-2, inside it, and an Arrow, shape-4, from the rectangle's right
 // Port to the left Port of a styled cloud, shape-3, outside the Container.
@@ -15,10 +25,29 @@ function diagram(): EditorState {
 }
 
 describe("JSON export and import", () => {
-  test("a Sketch exported and imported again is the same Sketch", () => {
-    const exported = sketch(diagram());
+  test("a Sketch exported and imported again is the same Sketch, at the same zoom and pan", () => {
+    const zoomedAndPanned = apply(diagram(), pinch({ x: 200, y: 100 }, 2), wheel({ x: 0, y: 0 }, { x: 40, y: -60 }));
 
-    expect(importJson(exportJson(exported))).toEqual({ sketch: exported });
+    expect(importJson(exportJson(sketch(zoomedAndPanned), viewport(zoomedAndPanned)))).toEqual({
+      sketch: sketch(zoomedAndPanned),
+      viewport: viewport(zoomedAndPanned),
+    });
+  });
+
+  test("a file without a zoom and pan imports without one", () => {
+    const text = JSON.stringify({ format: "skisse/sketch", version: 1, shapes: sketch(diagram()).shapes });
+
+    expect(importJson(text)).toEqual({ sketch: sketch(diagram()), viewport: undefined });
+  });
+
+  test.each([
+    ["a zoom and pan that isn't an object", 42, "it should be an object"],
+    ["a pan of the wrong type", { x: "left", y: 0, zoom: 1 }, "x should be a number"],
+    ["a zoom beyond the zoom limits", { x: 0, y: 0, zoom: 100 }, "zoom should be a number from 0.1 to 8"],
+  ])("a file with %s is rejected", (_, view, problem) => {
+    const text = JSON.stringify({ format: "skisse/sketch", version: 1, shapes: {}, viewport: view });
+
+    expect(importJson(text)).toEqual({ error: `The zoom and pan in the file are invalid: ${problem}.` });
   });
 });
 
@@ -91,7 +120,7 @@ type ShapeJson = Readonly<Record<string, unknown>>;
 
 // The diagram as a JSON file, but with `change` made to the Shape `id` in it.
 function changedShape(id: string, change: (shape: ShapeJson) => unknown): string {
-  const file = JSON.parse(exportJson(sketch(diagram()))) as { shapes: Record<string, ShapeJson> };
+  const file = JSON.parse(exportJson(sketch(diagram()), viewport(diagram()))) as { shapes: Record<string, ShapeJson> };
   const changed = change(file.shapes[id] ?? {});
   return JSON.stringify({ ...file, shapes: { ...file.shapes, [id]: changed } });
 }
@@ -163,7 +192,7 @@ describe("importing a Sketch with Shapes that are not as Skisse writes them", ()
   });
 
   test("a Shape with a number so large it reads as infinite is rejected", () => {
-    const exported = exportJson(sketch(diagram()));
+    const exported = exportJson(sketch(diagram()), viewport(diagram()));
     // shape-2 is the only Shape 100 wide.
     const text = exported.replace('"width": 100,', '"width": 1e999,');
 

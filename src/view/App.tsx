@@ -41,7 +41,7 @@ export function App({ deps, store, openAtStart }: AppProps) {
         entries={entries}
         openId={openId}
         onCreate={() => show(openNew(store))}
-        onImport={(sketch, name) => show(openAsNew(store, sketch, name))}
+        onImport={(imported, name) => show(openAsNew(store, imported, name))}
         onOpen={(id) => {
           if (id !== openId) show(openFirst(store, [id]));
         }}

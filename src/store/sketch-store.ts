@@ -18,7 +18,10 @@ export type SketchStore = {
   /** Saves over an existing Sketch. A deleted Sketch stays deleted, so a late save can't bring it back. */
   readonly save: (id: SketchId, sketch: Sketch) => void;
   readonly rename: (id: SketchId, name: string) => void;
-  /** Where the Sketch was shown when last open. It is kept apart from the Sketch, so it is never undone or exported. */
+  /**
+   * Where the Sketch was shown when last open, or for one imported from a file, where it was shown when exported. It
+   * is kept apart from the Sketch, so it is never undone.
+   */
   readonly loadViewport: (id: SketchId) => Viewport | undefined;
   /** Like `save`, ignored for a deleted Sketch. */
   readonly saveViewport: (id: SketchId, viewport: Viewport) => void;

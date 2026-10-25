@@ -6,6 +6,7 @@ import { isArrow } from "./shape-kind";
 import { fills, fontSizes, palette, strokePatterns, strokeWidths } from "./style";
 import { symbolDefinition, symbolIds } from "./symbols";
 import { horizontalAlignments, verticalAlignments } from "./symbols/symbol";
+import { maximumZoom, minimumZoom, type Viewport } from "./viewport";
 
 // Marks a file as a Skisse Sketch, so any other JSON is never taken for one.
 const format = "skisse/sketch";
@@ -24,12 +25,18 @@ function latestVersion(chain: readonly Migration[]): number {
   return chain.length + 1;
 }
 
-/** What importing a JSON file gives: the Sketch in it, or why it can't be imported, to show to the user. */
-export type JsonImport = { readonly sketch: Sketch } | { readonly error: string };
+/** A Sketch read from a JSON file, and the zoom and pan it was exported at, if the file has them. */
+export type ImportedSketch = { readonly sketch: Sketch; readonly viewport: Viewport | undefined };
 
-/** The Sketch as the text of a JSON file, marked with the format version it is written in. */
-export function exportJson(sketch: Sketch): string {
-  return JSON.stringify({ format, version: latestVersion(migrations), shapes: sketch.shapes }, undefined, 2);
+/** What importing a JSON file gives: the Sketch in it, or why it can't be imported, to show to the user. */
+export type JsonImport = ImportedSketch | { readonly error: string };
+
+/**
+ * The Sketch, shown at `viewport`, as the text of a JSON file, marked with the format version it is written in. The
+ * zoom and pan let the Sketch open as it was when imported, but are not part of the Sketch.
+ */
+export function exportJson(sketch: Sketch, viewport: Viewport): string {
+  return JSON.stringify({ format, version: latestVersion(migrations), viewport, shapes: sketch.shapes }, undefined, 2);
 }
 
 function isObject(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -171,6 +178,9 @@ const arrow = object({
   elbowOffset: optional(object({ axis: oneOf(axes), by: number })),
 });
 
+// Left out of files written before Sketches were exported with their zoom and pan.
+const zoomAndPan = optional(object({ x: number, y: number, zoom: between(minimumZoom, maximumZoom) }));
+
 // An Arrow is told apart by its Routing, as `isArrow` does.
 const shape: Check = (value) => (isObject(value) && "routing" in value ? arrow(value) : symbolShape(value));
 
@@ -227,12 +237,16 @@ function misfit(shapes: Shapes, id: ShapeId, shape: Shape): Problem | undefined 
   return parentMisfit(shapes, shape) ?? endMisfit(shapes, shape);
 }
 
-function shapeError(id: ShapeId, { field, message }: Problem): string {
-  return `Shape ${quoted(id)} in the file is invalid: ${field.length === 0 ? "it" : field.join(".")} ${message}.`;
+function problemText({ field, message }: Problem): string {
+  return `${field.length === 0 ? "it" : field.join(".")} ${message}`;
+}
+
+function shapeError(id: ShapeId, problem: Problem): string {
+  return `Shape ${quoted(id)} in the file is invalid: ${problemText(problem)}.`;
 }
 
 // The Sketch, if the Shapes are as Skisse writes them in the current format version, or else what is wrong with them.
-function sketchOf(shapes: unknown): JsonImport {
+function sketchOf(shapes: unknown): { readonly sketch: Sketch } | { readonly error: string } {
   if (!isObject(shapes)) return { error: "The file has no Shapes." };
   const entries = Object.entries(shapes);
   const malformed = entries
@@ -247,6 +261,15 @@ function sketchOf(shapes: unknown): JsonImport {
   return { sketch: { shapes: checked } };
 }
 
+// The Sketch and its zoom and pan in a file in the current format version, or else what is wrong with them.
+function contentOf(file: JsonFile): JsonImport {
+  const imported = sketchOf(file.shapes);
+  if ("error" in imported) return imported;
+  const problem = zoomAndPan(file.viewport);
+  if (problem) return { error: `The zoom and pan in the file are invalid: ${problemText(problem)}.` };
+  return { ...imported, viewport: file.viewport as Viewport | undefined };
+}
+
 function parse(text: string): unknown {
   try {
     return JSON.parse(text);
@@ -256,7 +279,7 @@ function parse(text: string): unknown {
 }
 
 /**
- * The Sketch in the text of a JSON file, migrated from the format version it is in to the current one, or why it
+ * The Sketch, and the zoom and pan it was exported at, in the text of a JSON file, migrated from the format version it is in to the current one, or why it
  * can't be imported. Tests can pass `chain` to take the place of the real migrations.
  */
 export function importJson(text: string, chain: readonly Migration[] = migrations): JsonImport {
@@ -273,5 +296,5 @@ export function importJson(text: string, chain: readonly Migration[] = migration
     return { error: `${newer}, which reads up to version ${latest}. Reload the page to update Skisse.` };
   }
   const migrated = chain.slice(version - 1).reduce((migrating, migrate) => migrate(migrating), file);
-  return sketchOf(migrated.shapes);
+  return contentOf(migrated);
 }

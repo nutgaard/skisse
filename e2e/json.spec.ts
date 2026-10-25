@@ -41,6 +41,31 @@ test("an exported Sketch imports as a new Sketch, and the one it came from is le
   await expect(page.locator('[data-symbol="rectangle"] text')).toHaveText(["Orders", "Users"]);
 });
 
+test("an exported Sketch imports at the zoom and pan it was exported at", async ({ page }) => {
+  await page.goto("./");
+  await drawRectangle(page, 500, 300, "Orders");
+  await page.mouse.move(700, 400);
+  await page.keyboard.down("Control");
+  await page.mouse.wheel(0, 50);
+  await page.keyboard.up("Control");
+  await page.mouse.wheel(40, 60);
+  const exportedAt = await page.locator('[data-symbol="rectangle"] path').first().boundingBox();
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export JSON" }).click();
+  const exported = await download;
+  await page.getByRole("button", { name: "Reset zoom to 100%" }).click();
+
+  await page.getByRole("button", { name: "Sketches" }).click();
+  await importFile(page, exported.suggestedFilename(), await readFile(await exported.path()));
+
+  await expect(sketchNames(page)).toHaveText(["Sketch 1", "Sketch 1 (2)"]);
+  await expect(page.getByRole("button", { name: "Reset zoom to 100%" })).toHaveText("71%");
+  expect(await page.locator('[data-symbol="rectangle"] path').first().boundingBox()).toEqual(exportedAt);
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Reset zoom to 100%" })).toHaveText("71%");
+});
+
 test("a file that can't be imported shows why, and imports nothing", async ({ page }) => {
   await page.goto("./");
   await drawRectangle(page, 200, 150, "Orders");
