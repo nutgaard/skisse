@@ -1,7 +1,7 @@
 import { boundTo, floatedInPlace, type Arrow, type ArrowEnd } from "./arrow";
 import type { Shape, ShapeId, Sketch, TextMeasurer } from "./editor";
 import type { Bounds, Point } from "./geometry";
-import { isArrow } from "./shape-kind";
+import { isArrow, isSymbolShape } from "./shape-kind";
 import { symbolIds } from "./symbols";
 import { withDescendants } from "./tree";
 
@@ -86,7 +86,7 @@ function fitsTogether(shapes: readonly Shape[]): boolean {
   const byId = new Map(shapes.map((shape) => [shape.id, shape]));
   const isSymbolShapeAmong = (id: ShapeId) => {
     const shape = byId.get(id);
-    return shape !== undefined && !isArrow(shape);
+    return shape !== undefined && isSymbolShape(shape);
   };
   const boundWithin = (end: ArrowEnd) => {
     const shape = boundTo(end);

@@ -251,7 +251,7 @@ describe("pasting text that isn't Shapes copied from Skisse", () => {
   });
 });
 
-test("an Arrow copied from an older Skisse without a style pastes with the default one", () => {
+test("an Arrow on the clipboard without a style pastes with the default one", () => {
   const text = JSON.stringify({
     format: "skisse/shapes",
     shapes: [

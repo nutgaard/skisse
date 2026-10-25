@@ -294,8 +294,8 @@ export const emptySketch: Sketch = { shapes: {} };
 // default for the rest. Those saved before Containers have every Shape at the top level, stacked in the order saved,
 // and a JSON Sketch has no parent at the top level at all. Arrows came after all of these. Those saved before Arrows
 // had heads and Labels get the default heads and an empty Label halfway along.
-// Shapes copied from an older version of Skisse are completed the same way. `index` is the Shape's place in the order
-// saved or copied.
+// Shapes pasted from the clipboard are completed the same way, as only what it takes to place them is checked there, so
+// an Arrow can come without a style too. `index` is the Shape's place in the order saved or copied.
 function completeShape(shape: Shape, index: number): Shape {
   if (isArrow(shape)) {
     const arrow: Omit<Arrow, "heads" | "label" | "style"> & Partial<Pick<Arrow, "heads" | "label" | "style">> = shape;
