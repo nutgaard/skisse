@@ -122,7 +122,7 @@ describe("importing a Sketch with Shapes that are not as Skisse writes them", ()
       "a Shape with no width",
       "shape-2",
       (shape) => ({ ...shape, bounds: { x: 100, y: 100, width: 0, height: 80 } }),
-      "bounds.width should be above 0",
+      "bounds.width should be above 0 and at most 1000000000",
     ],
     [
       "a Shape with a Label of the wrong type",
@@ -169,7 +169,7 @@ describe("importing a Sketch with Shapes that are not as Skisse writes them", ()
 
     expect(text).not.toBe(exported);
     expect(importJson(text)).toEqual({
-      error: 'Shape "shape-2" in the file is invalid: bounds.width should be a number from -1000000000 to 1000000000.',
+      error: 'Shape "shape-2" in the file is invalid: bounds.width should be above 0 and at most 1000000000.',
     });
   });
 });

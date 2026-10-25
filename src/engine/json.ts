@@ -79,18 +79,23 @@ const string = checkThat(
 
 // The furthest from 0 a number in a Sketch can be, far beyond any real one. A larger one, or one so large it reads as
 // infinite, could overflow when the editor adds numbers up, and an infinite one can't be written back to JSON.
-const largestNumber = 1e9;
+const furthestFromZero = 1e9;
 
 function isNumber(value: unknown): value is number {
-  return typeof value === "number" && Math.abs(value) <= largestNumber;
+  return typeof value === "number" && Math.abs(value) <= furthestFromZero;
 }
 
 const number = checkThat(isNumber, (value) =>
-  typeof value === "number" ? `should be a number from ${-largestNumber} to ${largestNumber}` : "should be a number",
+  typeof value === "number"
+    ? `should be a number from ${-furthestFromZero} to ${furthestFromZero}`
+    : "should be a number",
 );
 
-// Such as the width or height of a Shape.
-const positive: Check = (value) => number(value) ?? ((value as number) > 0 ? undefined : wrong("should be above 0"));
+// A number above 0, such as the width or height of a Shape.
+const positive = checkThat(
+  (value) => isNumber(value) && value > 0,
+  (value) => (typeof value === "number" ? `should be above 0 and at most ${furthestFromZero}` : "should be a number"),
+);
 
 function between(min: number, max: number): Check {
   return checkThat(
